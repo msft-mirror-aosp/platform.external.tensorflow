@@ -417,9 +417,18 @@ class SparseSplitHandler(InequalitySplitHandler):
     return (are_splits_ready, partition_ids, gains, split_infos)
 
 
-@function.Defun(dtypes.bool, dtypes.bool, dtypes.float32, dtypes.float32,
-                dtypes.int32, dtypes.float32, dtypes.float32, dtypes.float32,
-                dtypes.float32, dtypes.float32)
+@function.Defun(
+    dtypes.bool,
+    dtypes.bool,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.int32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    noinline=True)
 def dense_make_stats_update(is_active, are_buckets_ready, float_column,
                             quantile_buckets, example_partition_ids, gradients,
                             hessians, weights, empty_gradients, empty_hessians):
@@ -436,7 +445,7 @@ def dense_make_stats_update(is_active, are_buckets_ready, float_column,
     quantized_feature = quantile_ops.quantiles([float_column], [],
                                                [quantile_buckets], [], [])
     quantized_feature = math_ops.cast(quantized_feature[0], dtypes.int64)
-    quantized_feature = array_ops.squeeze(quantized_feature)
+    quantized_feature = array_ops.squeeze(quantized_feature, axis=0)
     return (example_partition_ids, quantized_feature, gradients, hessians)
 
   def not_ready_inputs_fn():
@@ -452,9 +461,20 @@ def dense_make_stats_update(is_active, are_buckets_ready, float_column,
           gradients, hessians)
 
 
-@function.Defun(dtypes.bool, dtypes.bool, dtypes.int64, dtypes.float32,
-                dtypes.int64, dtypes.float32, dtypes.int32, dtypes.float32,
-                dtypes.float32, dtypes.float32, dtypes.float32, dtypes.float32)
+@function.Defun(
+    dtypes.bool,
+    dtypes.bool,
+    dtypes.int64,
+    dtypes.float32,
+    dtypes.int64,
+    dtypes.float32,
+    dtypes.int32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    dtypes.float32,
+    noinline=True)
 def sparse_make_stats_update(
     is_active, are_buckets_ready, sparse_column_indices, sparse_column_values,
     sparse_column_shape, quantile_buckets, example_partition_ids, gradients,
@@ -468,7 +488,7 @@ def sparse_make_stats_update(
                                                [sparse_column_indices])
 
     quantized_feature = math_ops.cast(quantized_feature[1], dtypes.int64)
-    quantized_feature = array_ops.squeeze(quantized_feature)
+    quantized_feature = array_ops.squeeze(quantized_feature, axis=0)
 
     example_indices, _ = array_ops.split(
         sparse_column_indices, num_or_size_splits=2, axis=1)

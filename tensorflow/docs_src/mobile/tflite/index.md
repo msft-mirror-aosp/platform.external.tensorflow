@@ -11,7 +11,7 @@ optimizing the kernels for mobile apps, pre-fused activations, and quantized
 kernels that allow smaller and faster (fixed-point math) models.
 
 Most of our TensorFlow Lite documentation is [on
-Github](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/lite)
+GitHub](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/lite)
 for the time being.
 
 ## What does TensorFlow Lite contain?
@@ -95,7 +95,7 @@ following:
 
     All of the following models are guaranteed to work out of the box:
 
-    - Inception V3, a popular model for detecting the the dominant objects
+    - Inception V3, a popular model for detecting the dominant objects
       present in an image.
 
     - [MobileNets](https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.md),
@@ -155,7 +155,9 @@ retraining for both floating point and quantized inference.
 
 The following diagram shows the architectural design of TensorFlow Lite:
 
-<img src = "/images/tflite-architecture.jpg">
+<img src="/images/tflite-architecture.jpg"
+     alt="TensorFlow Lite architecture diagram"
+     style="max-width:600px;">
 
 Starting with a trained TensorFlow model on disk, you'll convert that model to
 the TensorFlow Lite file format (`.tflite`) using the TensorFlow Lite

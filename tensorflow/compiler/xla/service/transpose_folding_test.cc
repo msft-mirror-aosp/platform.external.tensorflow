@@ -19,7 +19,7 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
-#include "tensorflow/compiler/xla/client/computation_builder.h"
+#include "tensorflow/compiler/xla/client/xla_client/xla_builder.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/gpu/ir_emission_utils.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -64,14 +64,17 @@ TEST_F(TransposeFoldingTest, FoldDotTranspose) {
   HloInstruction* transpose_y =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {3, 2}), y, {1, 0}));
-  HloInstruction* dot = builder.AddInstruction(HloInstruction::CreateBinary(
-      ShapeUtil::MakeShape(F32, {2, 2}), /*opcode=*/HloOpcode::kDot,
-      /*lhs=*/x, /*rhs=*/transpose_y));
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  HloInstruction* dot = builder.AddInstruction(
+      HloInstruction::CreateDot(ShapeUtil::MakeShape(F32, {2, 2}), /*lhs=*/x,
+                                /*rhs=*/transpose_y, dot_dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(dot));
-  FoldTranspose(&module);
+      module->AddEntryComputation(builder.Build(dot));
+  FoldTranspose(module.get());
 
   // Instructions after folding: x, y, and the fusion.
   std::unordered_set<HloInstruction*> instruction_set(
@@ -104,14 +107,17 @@ TEST_F(TransposeFoldingTest, FoldDotTransposeConstant) {
   HloInstruction* transpose1 =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {2, 3}), const1, {1, 0}));
-  HloInstruction* dot = builder.AddInstruction(HloInstruction::CreateBinary(
-      ShapeUtil::MakeShape(F32, {1, 3}), /*opcode=*/HloOpcode::kDot,
-      /*lhs=*/transpose0, /*rhs=*/transpose1));
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  HloInstruction* dot = builder.AddInstruction(HloInstruction::CreateDot(
+      ShapeUtil::MakeShape(F32, {1, 3}),
+      /*lhs=*/transpose0, /*rhs=*/transpose1, dot_dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(dot));
-  FoldTranspose(&module);
+      module->AddEntryComputation(builder.Build(dot));
+  FoldTranspose(module.get());
 
   for (auto* instruction : entry_computation->instructions()) {
     if (instruction->opcode() == HloOpcode::kFusion) {
@@ -143,10 +149,10 @@ TEST_F(TransposeFoldingTest, FuseDotWithConstantOperands) {
   HloInstruction* mul = builder.AddInstruction(HloInstruction::CreateBinary(
       add->shape(), HloOpcode::kMultiply, add, sub));
 
-  HloModule module("fuse_with_constant_operands");
+  auto module = CreateNewModule("fuse_with_constant_operands");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(mul));
-  HloInstruction* call = module.OutlineExpressionFromComputation(
+      module->AddEntryComputation(builder.Build(mul));
+  HloInstruction* call = module->OutlineExpressionFromComputation(
       {add, sub, mul}, "", entry_computation);
   EXPECT_EQ(call, entry_computation->root_instruction());
   HloComputation* callee_computation = call->to_apply();
@@ -169,18 +175,21 @@ TEST_F(TransposeFoldingTest, FoldDotTransposeInWhile) {
   HloInstruction* transpose_y =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {3, 2}), y, {1, 0}));
-  HloInstruction* dot = builder.AddInstruction(HloInstruction::CreateBinary(
-      ShapeUtil::MakeShape(F32, {2, 2}), /*opcode=*/HloOpcode::kDot,
-      /*lhs=*/x, /*rhs=*/transpose_y));
+  DotDimensionNumbers dot_dnums;
+  dot_dnums.add_lhs_contracting_dimensions(1);
+  dot_dnums.add_rhs_contracting_dimensions(0);
+  HloInstruction* dot = builder.AddInstruction(
+      HloInstruction::CreateDot(ShapeUtil::MakeShape(F32, {2, 2}), /*lhs=*/x,
+                                /*rhs=*/transpose_y, dot_dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(dot));
+      module->AddEntryComputation(builder.Build(dot));
 
-  HloInstruction* call = module.OutlineExpressionFromComputation(
+  HloInstruction* call = module->OutlineExpressionFromComputation(
       {transpose_y, dot}, "outlined", entry_computation);
 
-  FoldTranspose(&module);
+  FoldTranspose(module.get());
 
   // Instructions after folding: x, y, and the fusion.
   std::unordered_set<HloInstruction*> instruction_set(
@@ -213,7 +222,7 @@ TEST_F(TransposeFoldingTest, FoldConvDimSwapTransposeRhs) {
   HloInstruction* transpose_y =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {2, 3, 1, 1}), y, {1, 0, 2, 3}));
-  auto dnums = ComputationBuilder::CreateDefaultConvDimensionNumbers();
+  auto dnums = XlaBuilder::CreateDefaultConvDimensionNumbers();
   Window window;
   for (int i = 0; i < 2; ++i) {
     WindowDimension* dim = window.add_dimensions();
@@ -231,10 +240,10 @@ TEST_F(TransposeFoldingTest, FoldConvDimSwapTransposeRhs) {
   HloInstruction* conv = builder.AddInstruction(HloInstruction::CreateConvolve(
       conv_shape.ValueOrDie(), x, transpose_y, window, dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(conv));
-  FoldTranspose(&module);
+      module->AddEntryComputation(builder.Build(conv));
+  FoldTranspose(module.get());
 
   // Instructions after folding: x, y, and the convolution.
   std::unordered_set<HloInstruction*> instruction_set(
@@ -266,7 +275,7 @@ TEST_F(TransposeFoldingTest, FoldConvComplexTransposeRhs) {
   HloInstruction* transpose_y =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {2, 3, 1, 1}), y, {1, 3, 0, 2}));
-  auto dnums = ComputationBuilder::CreateDefaultConvDimensionNumbers();
+  auto dnums = XlaBuilder::CreateDefaultConvDimensionNumbers();
   Window window;
   for (int i = 0; i < 2; ++i) {
     WindowDimension* dim = window.add_dimensions();
@@ -284,10 +293,10 @@ TEST_F(TransposeFoldingTest, FoldConvComplexTransposeRhs) {
   HloInstruction* conv = builder.AddInstruction(HloInstruction::CreateConvolve(
       conv_shape.ValueOrDie(), x, transpose_y, window, dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(conv));
-  FoldTranspose(&module);
+      module->AddEntryComputation(builder.Build(conv));
+  FoldTranspose(module.get());
 
   // Instructions after folding: x, y, and the convolution.
   std::unordered_set<HloInstruction*> instruction_set(
@@ -325,7 +334,7 @@ TEST_F(TransposeFoldingTest, FoldConvTransposeLhs) {
   HloInstruction* transpose_x =
       builder.AddInstruction(HloInstruction::CreateTranspose(
           ShapeUtil::MakeShape(F32, {2, 3, 1, 1}), x, {1, 0, 2, 3}));
-  auto dnums = ComputationBuilder::CreateDefaultConvDimensionNumbers();
+  auto dnums = XlaBuilder::CreateDefaultConvDimensionNumbers();
   Window window;
   for (int i = 0; i < 2; ++i) {
     WindowDimension* dim = window.add_dimensions();
@@ -342,10 +351,10 @@ TEST_F(TransposeFoldingTest, FoldConvTransposeLhs) {
   HloInstruction* conv = builder.AddInstruction(HloInstruction::CreateConvolve(
       conv_shape.ValueOrDie(), transpose_x, y, window, dnums));
 
-  HloModule module("test_module");
+  auto module = CreateNewModule("test_module");
   HloComputation* entry_computation =
-      module.AddEntryComputation(builder.Build(conv));
-  FoldTranspose(&module);
+      module->AddEntryComputation(builder.Build(conv));
+  FoldTranspose(module.get());
 
   // Instructions after folding: x, y, and the convolution.
   std::unordered_set<HloInstruction*> instruction_set(
@@ -368,6 +377,70 @@ TEST_F(TransposeFoldingTest, FoldConvTransposeLhs) {
   EXPECT_EQ(
       dnums.input_spatial_dimensions(1),
       new_conv->convolution_dimension_numbers().input_spatial_dimensions(1));
+  EXPECT_EQ(
+      dnums.output_spatial_dimensions(0),
+      new_conv->convolution_dimension_numbers().output_spatial_dimensions(0));
+  EXPECT_EQ(
+      dnums.output_spatial_dimensions(1),
+      new_conv->convolution_dimension_numbers().output_spatial_dimensions(1));
+}
+
+// Test that a transpose of every dimension in the activations gets folded into
+// convolution.
+TEST_F(TransposeFoldingTest, FoldConvComplexTransposeLhs) {
+  auto builder = HloComputation::Builder("entry_computation");
+  HloInstruction* x = builder.AddInstruction(HloInstruction::CreateParameter(
+      /*parameter_number=*/0, ShapeUtil::MakeShape(F32, {3, 2, 1, 1}),
+      /*name=*/"x"));
+  HloInstruction* y = builder.AddInstruction(HloInstruction::CreateParameter(
+      /*parameter_number=*/1, ShapeUtil::MakeShape(F32, {2, 3, 1, 1}),
+      /*name=*/"y"));
+  HloInstruction* transpose_x =
+      builder.AddInstruction(HloInstruction::CreateTranspose(
+          ShapeUtil::MakeShape(F32, {2, 3, 1, 1}), x, {1, 0, 3, 2}));
+  auto dnums = XlaBuilder::CreateDefaultConvDimensionNumbers();
+  Window window;
+  for (int i = 0; i < 2; ++i) {
+    WindowDimension* dim = window.add_dimensions();
+    dim->set_padding_low(0);
+    dim->set_padding_high(0);
+    dim->set_base_dilation(1);
+    dim->set_window_dilation(1);
+    dim->set_stride(1);
+    dim->set_size(y->shape().dimensions(dnums.kernel_spatial_dimensions(i)));
+  }
+  StatusOr<Shape> conv_shape = ShapeInference::InferConvolveShape(
+      transpose_x->shape(), y->shape(), window, dnums);
+  EXPECT_IS_OK(conv_shape);
+  HloInstruction* conv = builder.AddInstruction(HloInstruction::CreateConvolve(
+      conv_shape.ValueOrDie(), transpose_x, y, window, dnums));
+
+  auto module = CreateNewModule("test_module");
+  HloComputation* entry_computation =
+      module->AddEntryComputation(builder.Build(conv));
+  FoldTranspose(module.get());
+
+  // Instructions after folding: x, y, and the convolution.
+  std::unordered_set<HloInstruction*> instruction_set(
+      entry_computation->instructions().begin(),
+      entry_computation->instructions().end());
+  EXPECT_EQ(1, instruction_set.erase(x)) << "x is not in entry_computation.";
+  EXPECT_EQ(1, instruction_set.erase(y)) << "y is not in entry_computation.";
+  EXPECT_EQ(1, instruction_set.size())
+      << "entry_computation should contain exactly 3 instructions.";
+  HloInstruction* new_conv = *instruction_set.begin();
+  EXPECT_EQ(HloOpcode::kConvolution, new_conv->opcode());
+  EXPECT_EQ(dnums.input_feature_dimension(),
+            new_conv->convolution_dimension_numbers().input_batch_dimension());
+  EXPECT_EQ(
+      dnums.input_batch_dimension(),
+      new_conv->convolution_dimension_numbers().input_feature_dimension());
+  EXPECT_EQ(
+      dnums.input_spatial_dimensions(0),
+      new_conv->convolution_dimension_numbers().input_spatial_dimensions(1));
+  EXPECT_EQ(
+      dnums.input_spatial_dimensions(1),
+      new_conv->convolution_dimension_numbers().input_spatial_dimensions(0));
   EXPECT_EQ(
       dnums.output_spatial_dimensions(0),
       new_conv->convolution_dimension_numbers().output_spatial_dimensions(0));

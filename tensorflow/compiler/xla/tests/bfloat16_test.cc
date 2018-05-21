@@ -19,10 +19,9 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/array2d.h"
 #include "tensorflow/compiler/xla/array4d.h"
-#include "tensorflow/compiler/xla/client/computation.h"
-#include "tensorflow/compiler/xla/client/computation_builder.h"
 #include "tensorflow/compiler/xla/client/lib/arithmetic.h"
 #include "tensorflow/compiler/xla/client/local_client.h"
+#include "tensorflow/compiler/xla/client/xla_client/xla_builder.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/reference_util.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
@@ -52,7 +51,7 @@ class Bfloat16Test : public ClientLibraryTestBase {
 };
 
 XLA_TEST_F(Bfloat16Test, ScalarOperation) {
-  ComputationBuilder builder(client_, TestName());
+  XlaBuilder builder(TestName());
   auto x = builder.ConstantR0<bfloat16>(static_cast<bfloat16>(2.0f));
   auto y = builder.ConstantR0<bfloat16>(static_cast<bfloat16>(1.0f));
   builder.Add(x, y);
@@ -61,8 +60,17 @@ XLA_TEST_F(Bfloat16Test, ScalarOperation) {
                                 error_spec_);
 }
 
+XLA_TEST_F(Bfloat16Test, LogOperation) {
+  XlaBuilder builder(TestName());
+  auto x = builder.ConstantR0<bfloat16>(static_cast<bfloat16>(4.0f));
+  builder.Log(x);
+
+  ComputeAndCompareR0<bfloat16>(&builder, static_cast<bfloat16>(1.387f), {},
+                                error_spec_);
+}
+
 XLA_TEST_F(Bfloat16Test, NegateScalarF16) {
-  ComputationBuilder builder(client_, TestName());
+  XlaBuilder builder(TestName());
   builder.Neg(builder.ConstantR0<bfloat16>(static_cast<bfloat16>(2.1f)));
 
   ComputeAndCompareR0<bfloat16>(&builder, static_cast<bfloat16>(-2.1f), {},
@@ -71,7 +79,7 @@ XLA_TEST_F(Bfloat16Test, NegateScalarF16) {
 
 XLA_TEST_F(Bfloat16Test, BatchNormTraining) {
   const int kFeatureIndex = 2;
-  ComputationBuilder builder(client_, TestName());
+  XlaBuilder builder(TestName());
 
   auto operand = builder.ConstantR4FromArray4D<bfloat16>(
       {{{{static_cast<bfloat16>(1.f)}, {static_cast<bfloat16>(2.f)}},
@@ -88,10 +96,11 @@ XLA_TEST_F(Bfloat16Test, BatchNormTraining) {
   auto tuple = builder.BatchNormTraining(operand, scale, offset,
                                          /*epsilon=*/0.001, kFeatureIndex);
 
-  auto expected = *Literal::MakeTuple(
+  auto expected = Literal::MakeTuple(
       {Literal::CreateR4<bfloat16>(
-           {{{{static_cast<bfloat16>(-1.7f)}, {static_cast<bfloat16>(-2.04f)}},
-             {{static_cast<bfloat16>(0.105f)}, {static_cast<bfloat16>(0.65f)}}},
+           {{{{static_cast<bfloat16>(-1.6875f)},
+              {static_cast<bfloat16>(-2.04f)}},
+             {{static_cast<bfloat16>(0.105f)}, {static_cast<bfloat16>(0.66f)}}},
             {{{static_cast<bfloat16>(1.89f)}, {static_cast<bfloat16>(3.35f)}},
              {{static_cast<bfloat16>(3.7f)}, {static_cast<bfloat16>(6.04f)}}}})
            .get(),
@@ -102,12 +111,12 @@ XLA_TEST_F(Bfloat16Test, BatchNormTraining) {
            {static_cast<bfloat16>(5), static_cast<bfloat16>(5)})
            .get()});
 
-  ComputeAndCompareTuple(&builder, expected, {}, ErrorSpec(0.01));
+  ComputeAndCompareTuple(&builder, *expected, {}, ErrorSpec(0.01));
 }
 
 XLA_TEST_F(Bfloat16Test, BatchNormGrad) {
   const int kFeatureIndex = 2;
-  ComputationBuilder builder(client_, TestName());
+  XlaBuilder builder(TestName());
 
   auto operand = builder.ConstantR4FromArray4D<bfloat16>(
       Array4D<bfloat16>(2, 2, 2, 1, static_cast<bfloat16>(0.0f)));
@@ -130,7 +139,7 @@ XLA_TEST_F(Bfloat16Test, BatchNormGrad) {
   builder.BatchNormGrad(operand, scale, mean, var, grad_output,
                         /*epsilon=*/0.0, kFeatureIndex);
 
-  auto expected = *Literal::MakeTuple(
+  auto expected = Literal::MakeTuple(
       {Literal::CreateR4<bfloat16>(
            {{{{static_cast<bfloat16>(-3.f)}, {static_cast<bfloat16>(-3.f)}},
              {{static_cast<bfloat16>(-1.f)}, {static_cast<bfloat16>(-1.f)}}},
@@ -144,7 +153,7 @@ XLA_TEST_F(Bfloat16Test, BatchNormGrad) {
            {static_cast<bfloat16>(16), static_cast<bfloat16>(20)})
            .get()});
 
-  ComputeAndCompareTuple(&builder, expected, {}, ErrorSpec(0.01));
+  ComputeAndCompareTuple(&builder, *expected, {}, ErrorSpec(0.01));
 }
 
 }  // namespace

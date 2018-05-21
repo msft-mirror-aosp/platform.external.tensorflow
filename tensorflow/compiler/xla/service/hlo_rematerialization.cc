@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/map_util.h"
 #include "tensorflow/compiler/xla/primitive_util.h"
+#include "tensorflow/compiler/xla/service/buffer_value.h"
 #include "tensorflow/compiler/xla/service/flatten_call_graph.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
@@ -60,6 +61,7 @@ bool IsRematerializable(const HloInstruction* instruction) {
   switch (instruction->opcode()) {
     case HloOpcode::kCall:
     case HloOpcode::kConstant:
+    case HloOpcode::kConditional:
     case HloOpcode::kCrossReplicaSum:
     case HloOpcode::kCustomCall:
     case HloOpcode::kParameter:
@@ -566,7 +568,9 @@ Status MemoryUsageTracker::BeginInstruction(Item* item) {
   VLOG(3) << "  memory usage = " << memory_usage_;
   VLOG(10) << ToString();
 
-  DCHECK(Check());
+  if (VLOG_IS_ON(1)) {
+    DCHECK(Check());
+  }
   return Status::OK();
 }
 
@@ -603,8 +607,9 @@ Status MemoryUsageTracker::EndInstruction() {
   VLOG(3) << "  memory usage = " << memory_usage_;
   VLOG(10) << ToString();
 
-  DCHECK(Check());
-
+  if (VLOG_IS_ON(1)) {
+    DCHECK(Check());
+  }
   return Status::OK();
 }
 
@@ -1021,7 +1026,9 @@ StatusOr<bool> HloRematerialization::RematerializeComputation(
 
       HloInstruction* best = best_item->instruction;
       VLOG(1) << "Rematerializing instruction " << best->name() << " (saving "
-              << memory_tracker.MemoryReducedIfRematerialized(best_item) << ")";
+              << HumanReadableNumBytes(
+                     memory_tracker.MemoryReducedIfRematerialized(best_item))
+              << ")";
       changed = true;
       remat_count++;
 
@@ -1101,8 +1108,8 @@ StatusOr<bool> HloRematerialization::RematerializeComputation(
         net_instructions_added++;
       }
 
-      VLOG(3) << "memory_usage after rematerialization = "
-              << memory_tracker.memory_usage();
+      VLOG(1) << "memory_usage after rematerialization = "
+              << HumanReadableNumBytes(memory_tracker.memory_usage());
     }
 
     const CallSite* callsite = call_graph_node.GetCallSite(instruction);
@@ -1208,11 +1215,12 @@ StatusOr<bool> HloRematerialization::Run(
 
   XLA_VLOG_LINES(3, "Before HloRematerialization:\n" + module->ToString());
   // Create initial sequence of HLO instructions.
-  TF_ASSIGN_OR_RETURN(*sequence,
-                      CreateMemoryMinimizingSequence(
-                          *module, [this](const LogicalBuffer& buffer) {
-                            return size_function_(buffer.shape());
-                          }));
+  TF_ASSIGN_OR_RETURN(*sequence, CreateMemoryMinimizingSequence(
+                                     *module,
+                                     [this](const BufferValue& buffer) {
+                                       return size_function_(buffer.shape());
+                                     },
+                                     scheduler_algorithm_));
   // Compute peak memory usage of all computations in the module called in a
   // sequential context.
   call_graph_ = CallGraph::Build(module);
@@ -1313,9 +1321,10 @@ StatusOr<bool> HloRematerialization::Run(
 /* static */ StatusOr<bool> HloRematerialization::RematerializeAndSchedule(
     const HloRematerialization::ShapeSizeFunction& size_function,
     int64 memory_limit_bytes, HloModule* hlo_module,
+    MemorySchedulerAlgorithm scheduler_algorithm,
     SequentialHloOrdering::HloModuleSequence* sequence,
     RematerializationSizes* sizes) {
-  HloRematerialization remat(size_function);
+  HloRematerialization remat(scheduler_algorithm, size_function);
   return remat.Run(hlo_module, sequence, memory_limit_bytes, sizes);
 }
 

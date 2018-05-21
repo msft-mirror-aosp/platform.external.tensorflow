@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/core/grappler/costs/graph_properties.h"
 #include "tensorflow/cc/framework/scope.h"
 #include "tensorflow/cc/ops/standard_ops.h"
+#include "tensorflow/core/framework/graph_def_util.h"
 #include "tensorflow/core/framework/node_def_builder.h"
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/framework/tensor_testutil.h"
@@ -43,7 +44,10 @@ class GraphPropertiesTest : public ::testing::Test {
     TF_CHECK_OK(cluster_->Provision());
   }
 
-  void TearDown() override { cluster_.reset(); }
+  void TearDown() override {
+    TF_CHECK_OK(cluster_->Shutdown());
+    cluster_.reset();
+  }
 
  protected:
   // Returns a string form of <p>, suitable for comparing type and shape.
@@ -73,7 +77,7 @@ TEST_F(GraphPropertiesTest, StaticProperties) {
   CHECK(fake_input.NextItem(&item));
 
   GraphProperties properties(item);
-  Status s = properties.InferStatically();
+  Status s = properties.InferStatically(true);
   TF_CHECK_OK(s);
 
   for (const auto& node : item.graph.node()) {
@@ -106,6 +110,33 @@ TEST_F(GraphPropertiesTest, StaticProperties) {
       ::tensorflow::protobuf::TextFormat::PrintToString(out_props[0],
                                                         &out_prop_str);
       EXPECT_EQ(in_prop_str, out_prop_str);
+    }
+  }
+}
+
+TEST_F(GraphPropertiesTest, ClearProperties) {
+  TrivialTestGraphInputYielder fake_input(4, 1, 10, false,
+                                          cluster_->GetDeviceNames());
+  GrapplerItem item;
+  CHECK(fake_input.NextItem(&item));
+
+  GraphProperties properties(item);
+  Status s = properties.InferStatically(true);
+  TF_CHECK_OK(s);
+
+  for (const auto& node : item.graph.node()) {
+    if (node.op() == "RandomStandardNormal") {
+      EXPECT_EQ(1, properties.GetInputProperties(node.name()).size());
+      const auto props = properties.GetOutputProperties(node.name());
+      properties.ClearOutputProperties(node.name());
+      const auto cleared_props = properties.GetOutputProperties(node.name());
+      EXPECT_TRUE(cleared_props.empty());
+    } else if (node.op() == "AddN") {
+      const auto in_props = properties.GetInputProperties(node.name());
+      EXPECT_EQ(1, in_props.size());
+      properties.ClearInputProperties(node.name());
+      const auto cleared_props = properties.GetInputProperties(node.name());
+      EXPECT_TRUE(cleared_props.empty());
     }
   }
 }
@@ -179,7 +210,7 @@ TEST_F(GraphPropertiesTest, Variables) {
 
   {
     GraphProperties static_properties(item);
-    TF_CHECK_OK(static_properties.InferStatically());
+    TF_CHECK_OK(static_properties.InferStatically(false));
 
     const auto props = static_properties.GetOutputProperties("Var");
     EXPECT_EQ(1, props.size());
@@ -219,7 +250,7 @@ TEST_F(GraphPropertiesTest, VarHandles) {
                   .Finalize(item.graph.add_node()));
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   const auto props = properties.GetOutputProperties("VarRead");
   EXPECT_EQ(1, props.size());
@@ -251,20 +282,11 @@ TEST_F(GraphPropertiesTest, Queues) {
   auto dequeue2 =
       ops::QueueDequeue(root.WithOpName("Dequeue2"), q2, {DataType::DT_FLOAT});
 
-  // Create a queue that feeds itself.
-  auto q3 =
-      ops::RandomShuffleQueue(root.WithOpName("Queue3"), {DataType::DT_FLOAT});
-  auto dequeue3 =
-      ops::QueueDequeue(root.WithOpName("Dequeue3"), q3, {DataType::DT_FLOAT});
-  auto merge3 = ops::Merge(root.WithOpName("Merge3"), {dequeue3[0], square2});
-  auto enqueue3 =
-      ops::QueueEnqueue(root.WithOpName("Enqueue3"), q3, {merge3.output});
-
   auto q4 =
       ops::RandomShuffleQueue(root.WithOpName("Queue4"), {DataType::DT_FLOAT});
   auto enqueue4 = ops::QueueEnqueue(root.WithOpName("Enqueue4"), q4, {square2});
   auto enqueue4_2 =
-      ops::QueueEnqueue(root.WithOpName("Enqueue4_2"), q4, {dequeue3[0]});
+      ops::QueueEnqueue(root.WithOpName("Enqueue4_2"), q4, {dequeue2[0]});
   auto dequeue4 =
       ops::QueueDequeue(root.WithOpName("Dequeue4"), q4, {DataType::DT_FLOAT});
 
@@ -273,9 +295,9 @@ TEST_F(GraphPropertiesTest, Queues) {
       root.WithOpName("Queue5"),
       {DataType::DT_FLOAT, DataType::DT_DOUBLE, DataType::DT_FLOAT});
   Output rnd2 =
-      ops::RandomNormal(root.WithOpName("rnd"), {10}, DataType::DT_DOUBLE);
+      ops::RandomNormal(root.WithOpName("rnd2"), {10}, DataType::DT_DOUBLE);
   Output rnd3 =
-      ops::RandomNormal(root.WithOpName("rnd"), {1, 2, 3}, DataType::DT_FLOAT);
+      ops::RandomNormal(root.WithOpName("rnd3"), {1, 2, 3}, DataType::DT_FLOAT);
   auto enqueue5 =
       ops::QueueEnqueue(root.WithOpName("Enqueue5"), q5, {rnd, rnd2, rnd3});
   auto dequeue5 = ops::QueueDequeue(
@@ -286,7 +308,7 @@ TEST_F(GraphPropertiesTest, Queues) {
   TF_CHECK_OK(root.ToGraphDef(&item.graph));
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   const auto props1 = properties.GetOutputProperties("Dequeue1");
   ASSERT_EQ(1, props1.size());
@@ -295,10 +317,6 @@ TEST_F(GraphPropertiesTest, Queues) {
   const auto props2 = properties.GetOutputProperties("Dequeue2");
   ASSERT_EQ(1, props2.size());
   EXPECT_EQ("float: [3,7]", PropToString(props2[0]));
-
-  const auto props3 = properties.GetOutputProperties("Dequeue3");
-  ASSERT_EQ(1, props3.size());
-  EXPECT_EQ("float: [3,7]", PropToString(props3[0]));
 
   // The dequeue3 op shape is unknown. The square2 op shape is known. Verify
   // that we merge the 2 properly to determine the shape of the data coming out
@@ -335,7 +353,7 @@ TEST_F(GraphPropertiesTest, MergeWithoutLoops) {
                                  "merge_without_loops.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> nodes{"cond/Merge", "cond/concat", "cond/concat_1"};
   std::vector<string> expected_outputs{"float: [-1,-1,1]", "float: [2,1,1]",
@@ -377,7 +395,7 @@ TEST_F(GraphPropertiesTest, WhileLoop) {
                                  "while_loop.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> nodes{"while/Merge_1", "while/NextIteration_1",
                             "while/Exit_1"};
@@ -435,7 +453,7 @@ TEST_F(GraphPropertiesTest, NestedLoop) {
                                  "nested_loop.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> outer_nodes{"while/Merge_1", "while/NextIteration_1",
                                   "while/Exit_1"};
@@ -498,7 +516,7 @@ TEST_F(GraphPropertiesTest, LoopsAndQueues) {
                                  "loops_and_queues.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> outer_nodes{"while/Merge_1", "while/NextIteration_1",
                                   "while/Exit_1"};
@@ -556,7 +574,7 @@ TEST_F(GraphPropertiesTest, LoopsAndResourceVars) {
                                  "loops_and_resource_vars.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> outer_nodes{"while/Merge_1", "while/NextIteration_1",
                                   "while/Exit_1"};
@@ -608,7 +626,7 @@ TEST_F(GraphPropertiesTest, QueuesAndLoops) {
                                  "queues_and_loops.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   std::vector<string> nodes{"while/Merge_1", "while/NextIteration_1",
                             "while/Exit_1"};
@@ -657,7 +675,7 @@ TEST_F(GraphPropertiesTest, InferRestoreOpShape) {
   item.fetch.push_back("init_restore");
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   const auto restore_props = properties.GetOutputProperties("restore");
   const OpInfo::TensorProperties& restore_prop = restore_props[0];
@@ -704,7 +722,7 @@ TEST_F(GraphPropertiesTest, InferRestoreOpShape_WithTwoNodesShareSameOutput) {
   item.fetch.push_back("init2");
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
 
   const auto props = properties.GetOutputProperties("restore");
   const OpInfo::TensorProperties& prop = props[0];
@@ -725,21 +743,25 @@ TEST_F(GraphPropertiesTest, FunctionStaticShapeInference) {
       z = MyAdd(x, y)
       z = MyAdd(x, z)
   */
-  // Check that the shape of the second MyAdd node propagates
-  // correctly.
+  // Check that the shape inference code infers what it can.
   GrapplerItem item;
   string filename = io::JoinPath(testing::TensorFlowSrcRoot(), kTestDataPath,
                                  "simple_function.pbtxt");
   TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
-  const auto props = properties.GetOutputProperties("MyAdd_55e046a8_1");
-  const OpInfo::TensorProperties& prop = props[0];
-  EXPECT_EQ(DT_FLOAT, prop.dtype());
-  EXPECT_FALSE(prop.shape().unknown_rank());
-  EXPECT_EQ(2, prop.shape().dim_size());
-  EXPECT_EQ(1, prop.shape().dim(0).size());
-  EXPECT_EQ(2, prop.shape().dim(1).size());
+  TF_CHECK_OK(properties.InferStatically(false));
+  const auto out_props = properties.GetOutputProperties("MyAdd_55e046a8");
+  const OpInfo::TensorProperties& out_prop = out_props[0];
+  EXPECT_EQ(DT_FLOAT, out_prop.dtype());
+  EXPECT_TRUE(out_prop.shape().unknown_rank());
+
+  const auto in_props = properties.GetInputProperties("MyAdd_55e046a8");
+  const OpInfo::TensorProperties& in_prop = in_props[0];
+  EXPECT_EQ(DT_FLOAT, in_prop.dtype());
+  EXPECT_FALSE(in_prop.shape().unknown_rank());
+  EXPECT_EQ(2, in_prop.shape().dim_size());
+  EXPECT_EQ(1, in_prop.shape().dim(0).size());
+  EXPECT_EQ(2, in_prop.shape().dim(1).size());
 }
 
 TEST_F(GraphPropertiesTest, SymbolicShapes) {
@@ -766,7 +788,7 @@ TEST_F(GraphPropertiesTest, SymbolicShapes) {
   TF_CHECK_OK(s.ToGraphDef(&item.graph));
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
   const auto shape_a = properties.GetOutputProperties("a").at(0).shape();
   const auto shape_c = properties.GetOutputProperties("c").at(0).shape();
   EXPECT_EQ(2, shape_a.dim_size());
@@ -775,6 +797,10 @@ TEST_F(GraphPropertiesTest, SymbolicShapes) {
   EXPECT_EQ(shape_a.dim(0).size(), shape_c.dim(0).size());
   EXPECT_GE(-2, shape_a.dim(1).size());
   EXPECT_EQ(shape_a.dim(1).size(), shape_c.dim(1).size());
+
+  PartialTensorShape shape(shape_a);
+  EXPECT_FALSE(shape.IsFullyDefined());
+  EXPECT_FALSE(shape.unknown_rank());
 
   const auto shape_b = properties.GetOutputProperties("b").at(0).shape();
   const auto shape_d = properties.GetOutputProperties("d").at(0).shape();
@@ -822,7 +848,7 @@ TEST_F(GraphPropertiesTest, DoNotValidateColocationConstraints) {
   GraphProperties properties(item);
   // This function should return OK, since it doesn't validate the colocation
   // constraints internally.
-  TF_EXPECT_OK(properties.InferStatically());
+  TF_EXPECT_OK(properties.InferStatically(false));
 }
 
 TEST_F(GraphPropertiesTest, ShapeTracking) {
@@ -842,13 +868,88 @@ TEST_F(GraphPropertiesTest, ShapeTracking) {
   TF_CHECK_OK(s.ToGraphDef(&item.graph));
 
   GraphProperties properties(item);
-  TF_CHECK_OK(properties.InferStatically());
+  TF_CHECK_OK(properties.InferStatically(false));
   const auto shape_a = properties.GetOutputProperties("a").at(0).shape();
   const auto shape_b = properties.GetOutputProperties("b").at(0).shape();
   const auto shape_o1 = properties.GetOutputProperties("o1").at(0).shape();
   const auto shape_o2 = properties.GetOutputProperties("o2").at(0).shape();
   EXPECT_EQ(shape_a.DebugString(), shape_o1.DebugString());
   EXPECT_EQ(shape_b.DebugString(), shape_o2.DebugString());
+}
+
+TEST_F(GraphPropertiesTest, FedNodes) {
+  TrivialTestGraphInputYielder fake_input(4, 1, 10, false,
+                                          cluster_->GetDeviceNames());
+  GrapplerItem item;
+  CHECK(fake_input.NextItem(&item));
+
+  {
+    // Conservative shape analysis: the shape of fed ports should be unknown
+    GraphProperties properties(item);
+    Status s = properties.InferStatically(false);
+    TF_CHECK_OK(s);
+    for (const auto& node : item.graph.node()) {
+      if (node.op() == "Const") {
+        continue;
+      }
+      const auto in_props = properties.GetInputProperties(node.name());
+      EXPECT_EQ(1, in_props.size());
+      const OpInfo::TensorProperties& in_prop = in_props[0];
+      const auto out_props = properties.GetOutputProperties(node.name());
+      EXPECT_EQ(1, out_props.size());
+      const OpInfo::TensorProperties& out_prop = out_props[0];
+
+      if (node.name() == "x") {
+        // x is fed: its input should have a known shape, while its output
+        // doesn't
+        EXPECT_FALSE(in_prop.shape().unknown_rank());
+        EXPECT_EQ(1, in_prop.shape().dim_size());
+        EXPECT_EQ(2, in_prop.shape().dim(0).size());
+        EXPECT_TRUE(out_prop.shape().unknown_rank());
+      } else if (node.op() == "Square" || node.op() == "AddN") {
+        // These nodes are in the fanout of x: their shapes should be unknown.
+        EXPECT_TRUE(in_prop.shape().unknown_rank());
+        EXPECT_TRUE(out_prop.shape().unknown_rank());
+      }
+    }
+  }
+  {
+    // Optimistic shape analysis: the shape of fed ports should be derived from
+    // the shape of the fanin.
+    GraphProperties properties(item);
+    Status s = properties.InferStatically(true);
+    TF_CHECK_OK(s);
+    for (const auto& node : item.graph.node()) {
+      if (node.op() == "Square" || node.op() == "AddN") {
+        const auto in_props = properties.GetInputProperties(node.name());
+        EXPECT_EQ(1, in_props.size());
+        const OpInfo::TensorProperties& in_prop = in_props[0];
+        EXPECT_EQ(DT_FLOAT, in_prop.dtype());
+        EXPECT_FALSE(in_prop.shape().unknown_rank());
+        EXPECT_EQ(2, in_prop.shape().dim_size());
+        const auto out_props = properties.GetOutputProperties(node.name());
+        EXPECT_EQ(1, out_props.size());
+        const OpInfo::TensorProperties& out_prop = out_props[0];
+        EXPECT_EQ(in_prop.DebugString(), out_prop.DebugString());
+      }
+    }
+  }
+}
+
+TEST_F(GraphPropertiesTest, Performance) {
+  // Load a large graph with many nested loops to make sure we can infer shapes
+  // quickly.
+  GrapplerItem item;
+  string filename = io::JoinPath(testing::TensorFlowSrcRoot(), kTestDataPath,
+                                 "large_graph.pbtxt.html");
+  TF_CHECK_OK(ReadGraphDefFromFile(filename, &item.graph));
+  TF_CHECK_OK(AddDefaultAttrsToGraphDef(
+      &item.graph,
+      FunctionLibraryDefinition(OpRegistry::Global(), item.graph.library()), 0,
+      true));
+
+  GraphProperties properties(item);
+  TF_CHECK_OK(properties.InferStatically(false));
 }
 
 }  // namespace

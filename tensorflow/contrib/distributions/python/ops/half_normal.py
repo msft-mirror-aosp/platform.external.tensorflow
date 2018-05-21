@@ -84,6 +84,7 @@ class HalfNormal(distribution.Distribution):
   ```
 
   """
+
   def __init__(self,
                scale,
                validate_args=False,
@@ -105,7 +106,7 @@ class HalfNormal(distribution.Distribution):
       name: Python `str` name prefixed to Ops created by this class.
     """
     parameters = locals()
-    with ops.name_scope(name, values=[scale]):
+    with ops.name_scope(name, values=[scale]) as name:
       with ops.control_dependencies([check_ops.assert_positive(scale)] if
                                     validate_args else []):
         self._scale = array_ops.identity(scale, name="scale")
@@ -120,7 +121,7 @@ class HalfNormal(distribution.Distribution):
 
   @staticmethod
   def _param_shapes(sample_shape):
-    return {'scale': ops.convert_to_tensor(sample_shape, dtype=dtypes.int32)}
+    return {"scale": ops.convert_to_tensor(sample_shape, dtype=dtypes.int32)}
 
   @property
   def scale(self):

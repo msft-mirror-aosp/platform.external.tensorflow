@@ -34,6 +34,8 @@ add_library(lib_tf STATIC IMPORTED )
 set_target_properties(lib_tf PROPERTIES IMPORTED_LOCATION
         ${PREBUILT_DIR}/lib/libtensorflow-core.a)
 # Change to compile flags should be replicated into bazel build file
+# TODO: Consider options other than -O2 for binary size.
+#       e.g. -Os for gcc, and -Oz for clang.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DIS_SLIM_BUILD \
                      -std=c++11 -fno-rtti -fno-exceptions \
                      -O2 -Wno-narrowing -fomit-frame-pointer \
@@ -73,7 +75,6 @@ target_link_libraries(tensorflow_inference
 include_directories(
     ${PREBUILT_DIR}/proto
     ${PREBUILT_DIR}/protobuf/include
-    ${PREBUILT_DIR}/nsync/public
     ${TENSORFLOW_ROOT_DIR}/tensorflow/contrib/makefile/downloads/eigen
     ${TENSORFLOW_ROOT_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/..)

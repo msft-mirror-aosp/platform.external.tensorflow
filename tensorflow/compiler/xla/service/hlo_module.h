@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_SERVICE_HLO_MODULE_H_
 #define TENSORFLOW_COMPILER_XLA_SERVICE_HLO_MODULE_H_
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <random>
@@ -31,6 +32,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/name_uniquer.h"
 #include "tensorflow/compiler/xla/service/versioned_computation_handle.h"
 #include "tensorflow/compiler/xla/types.h"
+#include "tensorflow/core/lib/core/stringpiece.h"
 #include "tensorflow/core/lib/gtl/array_slice.h"
 #include "tensorflow/core/lib/gtl/iterator_range.h"
 #include "tensorflow/core/platform/logging.h"
@@ -54,7 +56,6 @@ class HloModule {
   // only be used for HloModules used outside of the XLA service (eg
   // tests). The versioned handle is used by the service in the compilation
   // cache. A default configuration is created for this module.
-  explicit HloModule(const string& name);
   explicit HloModule(const string& name, const HloModuleConfig& config);
 
   // Adds an entry computation to the module. A module can only have one entry
@@ -84,6 +85,10 @@ class HloModule {
   // Returns a deep copy of this module including all computations.
   std::unique_ptr<HloModule> Clone(const string& suffix = "clone") const;
 
+  // Performs a deep clone of the computation, by recursively cloning all
+  // the called computations as well.
+  HloComputation* DeepCloneComputation(HloComputation* computation);
+
   // Return a pointer to the entry computation of the module..
   const HloComputation* entry_computation() const {
     CHECK_NE(nullptr, entry_computation_);
@@ -94,8 +99,20 @@ class HloModule {
     return entry_computation_;
   }
 
-  ComputationLayout* mutable_entry_computation_layout() {
-    return config_.mutable_entry_computation_layout();
+  ComputationLayout* mutable_host_entry_computation_layout() {
+    return config_.mutable_host_entry_computation_layout();
+  }
+
+  const ComputationLayout& host_entry_computation_layout() const {
+    return config_.host_entry_computation_layout();
+  }
+
+  ComputationLayout* mutable_device_entry_computation_layout() {
+    return config_.mutable_device_entry_computation_layout();
+  }
+
+  const ComputationLayout& device_entry_computation_layout() const {
+    return config_.device_entry_computation_layout();
   }
 
   const VersionedComputationHandle& entry_computation_handle() const {
@@ -122,8 +139,15 @@ class HloModule {
             MakeUnwrappingIterator(computations_.end())};
   }
 
+  // Returns the computation in this module that has the name `name`.  Returns
+  // null if there is no such computation.
+  HloComputation* GetComputationWithName(tensorflow::StringPiece name);
+
   // Gets the number of computations in this module.
   int64 computation_count() const { return computations_.size(); }
+
+  // Gets the number of instructions in this module.
+  int64 instruction_count() const;
 
   // Compute and return a post order of all computations in the module. The sort
   // is defined like so: if computation A has an instruction which calls
@@ -143,7 +167,12 @@ class HloModule {
 
   const HloModuleConfig& config() const { return config_; }
 
-  string ToString(bool include_large_constants = false) const;
+  // Return a string representation of the module.
+  //
+  // (We express the default options using an overload rather than a default
+  // param because gdb ignores default params, but does resolve overloads.)
+  string ToString() const { return ToString(HloPrintOptions()); }
+  string ToString(const HloPrintOptions& options) const;
 
   // Convert an HloModule to or from a proto.
   HloModuleProto ToProto() const;
@@ -155,7 +184,7 @@ class HloModule {
   // Creates and returns an HloModuleConfig with an appropriate program shape
   // for the HLO module in the given proto.
   static StatusOr<HloModuleConfig> CreateModuleConfigFromProto(
-      const HloModuleProto& module);
+      const HloModuleProto& module, const DebugOptions& debug_options);
 
   // Outlines the given expression from the given computation.
   // instructions_to_outline contains the instructions that form the expression.
@@ -170,11 +199,6 @@ class HloModule {
   // Returns a randomly generated uint64.
   uint64 RandomNew64() const;
 
-  // Returns the unique name for a computation in this module.
-  string GetUniqueCompuationName(const string& prefix) {
-    return computation_name_uniquer_.GetUniqueName(prefix);
-  }
-
   // Returns the NameUniquer for uniquing instruction names in this module.
   NameUniquer& instruction_name_uniquer() { return instruction_name_uniquer_; }
 
@@ -188,6 +212,10 @@ class HloModule {
   // Returns the number of unique intruction ids given out.  All ids up to
   // this point are guaranteed to be in the range [0..NumUniqueInstructionIds())
   int NumUniqueInstructionIds() const { return next_unique_id_; }
+
+  // Returns an id that is unique to this module across all modules created over
+  // the lifetime of this process.
+  int unique_id() const { return unique_id_; }
 
  private:
   HloComputation* AddComputationInternal(
@@ -215,6 +243,11 @@ class HloModule {
   NameUniquer computation_name_uniquer_{/*separator=*/"."};
   NameUniquer instruction_name_uniquer_{/*separator=*/"."};
   int next_unique_id_ = 0;
+
+  // Used to keep track of the next unique module id that should be assigned.
+  static std::atomic<int> next_unique_module_id_;
+  // A unique id to label modules with.
+  int unique_id_;
 };
 
 }  // namespace xla

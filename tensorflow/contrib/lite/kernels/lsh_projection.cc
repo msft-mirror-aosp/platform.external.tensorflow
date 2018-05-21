@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// LSH Projection projects an input to a bit vector via locality senstive
+// LSH Projection projects an input to a bit vector via locality sensitive
 // hashing.
 //
 // Options:
@@ -64,7 +64,7 @@ limitations under the License.
 #include "tensorflow/contrib/lite/context.h"
 #include "tensorflow/contrib/lite/kernels/kernel_util.h"
 #include "tensorflow/contrib/lite/kernels/op_macros.h"
-#include <farmhash.h>
+#include "util/hash/farmhash.h"
 
 namespace tflite {
 namespace ops {
@@ -127,7 +127,7 @@ int RunningSignBit(const TfLiteTensor* input, const TfLiteTensor* weight,
     memcpy(key.get(), &seed, seed_size);
     memcpy(key.get() + seed_size, input_ptr, input_item_bytes);
 
-    int64_t hash_signature = ::util::Fingerprint64(key.get(), key_bytes);
+    int64_t hash_signature = farmhash::Fingerprint64(key.get(), key_bytes);
     double running_value = static_cast<double>(hash_signature);
     input_ptr += input_item_bytes;
     if (weight == nullptr) {
