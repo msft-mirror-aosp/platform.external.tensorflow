@@ -39,6 +39,7 @@ from tensorflow.python.ops import check_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import string_ops
+from tensorflow.python.ops import variables
 from tensorflow.python.ops.losses import losses
 from tensorflow.python.platform import test
 from tensorflow.python.saved_model import signature_constants
@@ -84,6 +85,98 @@ def _assert_no_hooks(test_case, spec):
 
 def _sigmoid(logits):
   return 1 / (1 + np.exp(-logits))
+
+
+class CreateEstimatorSpecTest(test.TestCase):
+
+  class _HeadWithTPUSupport(head_lib._Head):
+    """Head that overrides _create_tpu_estimator_spec."""
+
+    def name(self):
+      return 'HeadWithTPUSupport'
+
+    def logits_dimension(self):
+      return None
+
+    def create_loss(self, features, mode, logits, labels):
+      return None
+
+    def _create_tpu_estimator_spec(self, features, mode, logits, labels=None,
+                                   optimizer=None, train_op_fn=None,
+                                   regularization_losses=None):
+      return model_fn._TPUEstimatorSpec(
+          mode=model_fn.ModeKeys.EVAL,
+          loss=constant_op.constant(0.0, dtype=dtypes.float32))
+
+  class _HeadWithOutTPUSupport(head_lib._Head):
+    """Head that overrides create_estimator_spec."""
+
+    def name(self):
+      return 'HeadWithOutTPUSupport'
+
+    def logits_dimension(self):
+      return None
+
+    def create_loss(self, features, mode, logits, labels):
+      return None
+
+    def create_estimator_spec(self, features, mode, logits, labels=None,
+                              optimizer=None, train_op_fn=None,
+                              regularization_losses=None):
+      return model_fn.EstimatorSpec(
+          mode=model_fn.ModeKeys.EVAL,
+          loss=constant_op.constant(0.0, dtype=dtypes.float32))
+
+  class _InvalidHead(head_lib._Head):
+    """Head that overrides neither estimator_spec functions."""
+
+    def name(self):
+      return 'InvalidHead'
+
+    def logits_dimension(self):
+      return None
+
+    def create_loss(self, features, mode, logits, labels):
+      return None
+
+  def test_head_override_tpu_estimator_spec(self):
+    """Test for `_Head` that overrides _create_tpu_estimator_spec."""
+    head = self._HeadWithTPUSupport()
+
+    tpu_spec = head._create_tpu_estimator_spec(
+        features=None, mode=None, logits=None)
+    self.assertTrue(isinstance(tpu_spec, model_fn._TPUEstimatorSpec))
+    est_spec = head.create_estimator_spec(
+        features=None, mode=None, logits=None)
+    self.assertTrue(isinstance(est_spec, model_fn.EstimatorSpec))
+
+  def test_head_override_estimator_spec(self):
+    """Test for `_Head` that overrides create_estimator_spec."""
+    head = self._HeadWithOutTPUSupport()
+
+    with self.assertRaisesRegexp(
+        NotImplementedError,
+        'TPUEstimatorSpec not available for this model head.'):
+      _ = head._create_tpu_estimator_spec(
+          features=None, mode=None, logits=None)
+    est_spec = head.create_estimator_spec(
+        features=None, mode=None, logits=None)
+    self.assertTrue(isinstance(est_spec, model_fn.EstimatorSpec))
+
+  def test_invalid_head_class(self):
+    head = self._InvalidHead()
+
+    with self.assertRaisesRegexp(
+        NotImplementedError,
+        'TPUEstimatorSpec not available for this model head.'):
+      _ = head._create_tpu_estimator_spec(
+          features=None, mode=None, logits=None)
+    with self.assertRaisesRegexp(
+        NotImplementedError,
+        r'Subclasses of _Head must implement `create_estimator_spec\(\)` or '
+        r'_create_tpu_estimator_spec\(\).'):
+      _ = head.create_estimator_spec(
+          features=None, mode=None, logits=None)
 
 
 class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
@@ -876,6 +969,35 @@ class MultiClassHeadWithSoftmaxCrossEntropyLoss(test.TestCase):
       self.assertEqual(
           six.b('{0:s}{1:.2f}'.format(expected_train_result, expected_loss)),
           train_result)
+
+  def test_train_with_update_ops(self):
+    n_classes = 3
+    head = head_lib._multi_class_head_with_softmax_cross_entropy_loss(n_classes)
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((10, 0, 0), (0, 10, 0),), dtype=np.float32),
+          labels=np.array(((1,), (1,)), dtype=np.int64),
+          train_op_fn=_train_op_fn)
+
+      with self.test_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     n_classes = 3
@@ -2009,6 +2131,34 @@ class BinaryLogisticHeadWithSigmoidCrossEntropyLossTest(test.TestCase):
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss)
       self.assertEqual(expected_train_result, train_result)
+
+  def test_train_with_update_ops(self):
+    head = head_lib._binary_logistic_head_with_sigmoid_cross_entropy_loss()
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((45,), (-41,),), dtype=np.float32),
+          labels=np.array(((1,), (1,),), dtype=np.float64),
+          train_op_fn=_train_op_fn)
+
+      with self.test_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     head = head_lib._binary_logistic_head_with_sigmoid_cross_entropy_loss(
@@ -3185,6 +3335,34 @@ class RegressionHead(test.TestCase):
       loss, train_result = sess.run((spec.loss, spec.train_op))
       self.assertAllClose(expected_loss, loss)
       self.assertEqual(expected_train_result, train_result)
+
+  def test_train_with_update_ops(self):
+    head = head_lib._regression_head()
+
+    with ops.Graph().as_default():
+      w = variables.Variable(1)
+      update_op = w.assign_add(1)
+      ops.add_to_collection(ops.GraphKeys.UPDATE_OPS, update_op)
+
+      t = variables.Variable('')
+      expected_train_result = b'my_train_op'
+      def _train_op_fn(loss):
+        del loss
+        return t.assign(expected_train_result)
+
+      spec = head.create_estimator_spec(
+          features={'x': np.array(((42,),), dtype=np.int32)},
+          mode=model_fn.ModeKeys.TRAIN,
+          logits=np.array(((45,), (41,),), dtype=np.float32),
+          labels=np.array(((43.,), (44.,),), dtype=np.float64),
+          train_op_fn=_train_op_fn)
+
+      with self.test_session() as sess:
+        _initialize_variables(self, spec.scaffold)
+        sess.run(spec.train_op)
+        w_value, t_value = sess.run([w, t])
+        self.assertEqual(2, w_value)
+        self.assertEqual(expected_train_result, t_value)
 
   def test_train_summaries_with_head_name(self):
     head = head_lib._regression_head(name='some_regression_head')
