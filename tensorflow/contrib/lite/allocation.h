@@ -20,8 +20,8 @@ limitations under the License.
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
-#include "tensorflow/contrib/lite/context.h"
-#include "tensorflow/contrib/lite/error_reporter.h"
+#include "tensorflow/contrib/lite/c/c_api_internal.h"
+#include "tensorflow/contrib/lite/core/api/error_reporter.h"
 #include "tensorflow/contrib/lite/simple_memory_arena.h"
 
 namespace tflite {
@@ -52,6 +52,8 @@ class MMAPAllocation : public Allocation {
   const void* base() const override;
   size_t bytes() const override;
   bool valid() const override;
+
+  static bool IsSupported();
 
  protected:
   // Data required for mmap.

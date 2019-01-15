@@ -26,6 +26,7 @@ import numpy as np
 
 from tensorflow.contrib.data.python.ops import batching
 from tensorflow.contrib.data.python.ops import error_ops
+from tensorflow.contrib.data.python.ops import optimization
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.data.ops import dataset_ops
@@ -53,7 +54,7 @@ class MapDatasetTest(test.TestCase):
     init_op = iterator.initializer
     get_next = iterator.get_next()
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       sess.run(init_op)
       for x in [1., 2., 3., 5.]:
         self.assertEqual(x, sess.run(get_next))
@@ -71,7 +72,7 @@ class MapDatasetTest(test.TestCase):
     init_op = iterator.initializer
     get_next = iterator.get_next()
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       sess.run(init_op)
       for x in [1., 2., 3., 5.]:
         self.assertEqual(x, sess.run(get_next))
@@ -79,23 +80,26 @@ class MapDatasetTest(test.TestCase):
         sess.run(get_next)
 
   def testReadFileIgnoreError(self):
+
     def write_string_to_file(value, filename):
       with open(filename, "w") as f:
         f.write(value)
-    filenames = [os.path.join(self.get_temp_dir(), "file_%d.txt" % i)
-                 for i in range(5)]
+
+    filenames = [
+        os.path.join(self.get_temp_dir(), "file_%d.txt" % i) for i in range(5)
+    ]
     for filename in filenames:
       write_string_to_file(filename, filename)
 
     dataset = (
         dataset_ops.Dataset.from_tensor_slices(filenames).map(
-            io_ops.read_file, num_parallel_calls=2).prefetch(2).apply(
-                error_ops.ignore_errors()))
+            io_ops.read_file,
+            num_parallel_calls=2).prefetch(2).apply(error_ops.ignore_errors()))
     iterator = dataset.make_initializable_iterator()
     init_op = iterator.initializer
     get_next = iterator.get_next()
 
-    with self.test_session() as sess:
+    with self.cached_session() as sess:
       # All of the files are present.
       sess.run(init_op)
       for filename in filenames:
@@ -135,7 +139,7 @@ class MapDatasetTest(test.TestCase):
 
     with ops.Graph().as_default() as g:
       captured_init_op, init_op, get_next = _build_graph()
-      with self.test_session(graph=g) as sess:
+      with self.session(graph=g) as sess:
         sess.run(captured_init_op)
         sess.run(init_op)
         for i in range(10):
@@ -205,7 +209,7 @@ class MapDatasetBenchmark(test.Benchmark):
             end = time.time()
             chained_deltas.append(end - start)
 
-        fused_dataset = dataset = dataset.apply(
+        fused_dataset = dataset.apply(
             batching.map_and_batch(
                 math_ops.matmul,
                 num_parallel_calls=num_calls,
@@ -263,6 +267,92 @@ class MapDatasetBenchmark(test.Benchmark):
     benchmark("Parallel batch size evaluation", par_batch_size_series)
     benchmark("Transformation parallelism evaluation", par_num_calls_series)
     benchmark("Threadpool size evaluation", par_inter_op_series)
+
+  # This benchmark compares the performance of pipeline with multiple chained
+  # maps with and without map fusion.
+  def benchmarkChainOfMaps(self):
+    chain_lengths = [0, 1, 2, 5, 10, 20, 50]
+    for chain_length in chain_lengths:
+      self._benchmarkChainOfMaps(chain_length, False)
+      self._benchmarkChainOfMaps(chain_length, True)
+
+  def _benchmarkChainOfMaps(self, chain_length, optimize_dataset):
+    with ops.Graph().as_default():
+      dataset = dataset_ops.Dataset.from_tensors(0).repeat(None)
+      for _ in range(chain_length):
+        dataset = dataset.map(lambda x: x)
+      if optimize_dataset:
+        dataset = dataset.apply(optimization.optimize(["map_fusion"]))
+
+      iterator = dataset.make_one_shot_iterator()
+      next_element = iterator.get_next()
+
+      with session.Session() as sess:
+        for _ in range(5):
+          sess.run(next_element.op)
+        deltas = []
+        for _ in range(100):
+          start = time.time()
+          for _ in range(100):
+            sess.run(next_element.op)
+          end = time.time()
+          deltas.append(end - start)
+
+        median_wall_time = np.median(deltas) / 100
+        opt_mark = "opt" if optimize_dataset else "no-opt"
+        print("Map dataset {} chain length: {} Median wall time: {}".format(
+            opt_mark, chain_length, median_wall_time))
+        self.report_benchmark(
+            iters=1000,
+            wall_time=median_wall_time,
+            name="benchmark_map_dataset_chain_latency_{}_{}".format(
+                opt_mark, chain_length))
+
+
+class MapAndFilterBenchmark(test.Benchmark):
+
+  # This benchmark compares the performance of pipeline with multiple chained
+  # map + filter with and without map fusion.
+  def benchmarkMapAndFilter(self):
+    chain_lengths = [0, 1, 2, 5, 10, 20, 50]
+    for chain_length in chain_lengths:
+      self._benchmarkMapAndFilter(chain_length, False)
+      self._benchmarkMapAndFilter(chain_length, True)
+
+  def _benchmarkMapAndFilter(self, chain_length, optimize_dataset):
+    with ops.Graph().as_default():
+      dataset = dataset_ops.Dataset.from_tensors(0).repeat(None)
+      for _ in range(chain_length):
+        dataset = dataset.map(lambda x: x + 5).filter(
+            lambda x: math_ops.greater_equal(x - 5, 0))
+      if optimize_dataset:
+        dataset = dataset.apply(
+            optimization.optimize(["map_and_filter_fusion"]))
+
+      iterator = dataset.make_one_shot_iterator()
+      next_element = iterator.get_next()
+
+      with session.Session() as sess:
+        for _ in range(10):
+          sess.run(next_element.op)
+        deltas = []
+        for _ in range(100):
+          start = time.time()
+          for _ in range(100):
+            sess.run(next_element.op)
+          end = time.time()
+          deltas.append(end - start)
+
+        median_wall_time = np.median(deltas) / 100
+        opt_mark = "opt" if optimize_dataset else "no-opt"
+        print("Map and filter dataset {} chain length: {} Median wall time: {}".
+              format(opt_mark, chain_length, median_wall_time))
+        self.report_benchmark(
+            iters=1000,
+            wall_time=median_wall_time,
+            name="benchmark_map_and_filter_dataset_chain_latency_{}_{}".format(
+                opt_mark, chain_length))
+
 
 if __name__ == "__main__":
   test.main()

@@ -18,6 +18,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import operator
 import os
 
@@ -306,7 +307,8 @@ def read_eval_metrics(eval_dir):
         metrics[value.tag] = value.simple_value
     if metrics:
       eval_metrics_dict[event.step] = metrics
-  return eval_metrics_dict
+  return collections.OrderedDict(
+      sorted(eval_metrics_dict.items(), key=lambda t: t[0]))
 
 
 def _stop_if_threshold_crossed_hook(estimator, metric_name, threshold,
@@ -394,10 +396,11 @@ def _summaries(eval_dir):
   Yields:
     `tensorflow.Event` object read from the event files.
   """
-  for event_file in gfile.Glob(
-      os.path.join(eval_dir, _EVENT_FILE_GLOB_PATTERN)):
-    for event in summary_iterator.summary_iterator(event_file):
-      yield event
+  if gfile.Exists(eval_dir):
+    for event_file in gfile.Glob(
+        os.path.join(eval_dir, _EVENT_FILE_GLOB_PATTERN)):
+      for event in summary_iterator.summary_iterator(event_file):
+        yield event
 
 
 def _get_or_create_stop_var():

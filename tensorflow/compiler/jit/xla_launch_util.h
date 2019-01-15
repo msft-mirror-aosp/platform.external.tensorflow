@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/kernels/variable_ops.h"
 #include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/lib/gtl/array_slice.h"
 
 namespace tensorflow {
 class XlaAllocator;
@@ -43,7 +44,7 @@ class XlaAllocator;
 // resource variable is not initialized, the corresponding OptionalTensor
 // will have its `present` field set to false.
 std::map<int, OptionalTensor> SnapshotResourceVariables(
-    OpKernelContext* ctx, const std::vector<int>& variables);
+    OpKernelContext* ctx, absl::Span<const int> variables);
 
 // Adapter class that wraps a Tensorflow allocator as an XLA allocator.
 // Assumes that the Tensorflow allocator permits asynchronous deallocation:
@@ -93,9 +94,9 @@ class XlaComputationLaunchContext {
                       const std::map<int, OptionalTensor>& variables);
 
   // Given the XLA output in `output`, populate all outputs of `ctx`.
-  void PopulateOutputs(OpKernelContext* ctx,
-                       const XlaCompiler::CompilationResult* kernel,
-                       xla::ScopedShapedBuffer output);
+  Status PopulateOutputs(OpKernelContext* ctx,
+                         const XlaCompiler::CompilationResult* kernel,
+                         xla::ScopedShapedBuffer output);
 
   // Return the argument list. Only valid after PopulateInputs() has been
   // called.
@@ -122,7 +123,11 @@ class XlaTensorBuffer : public TensorBuffer {
     data_ = const_cast<void*>(ptr);
   }
 
-  ~XlaTensorBuffer() override { allocator_->DeallocateRaw(data_); }
+  ~XlaTensorBuffer() override {
+    if (data_) {
+      allocator_->DeallocateRaw(data_);
+    }
+  }
 
   void* data() const override { return data_; }
   size_t size() const override { return expected_size_; }
@@ -163,4 +168,4 @@ xla::ScopedShapedBuffer ExtractSubShapedBuffer(
 
 }  // namespace tensorflow
 
-#endif
+#endif  // TENSORFLOW_COMPILER_JIT_XLA_LAUNCH_UTIL_H_

@@ -18,6 +18,7 @@ limitations under the License.
 #include <functional>
 
 #include "tensorflow/compiler/xla/service/llvm_ir/llvm_util.h"
+#include "tensorflow/core/platform/dynamic_annotations.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/types.h"
@@ -73,6 +74,30 @@ extern const char* const kReleaseOutfeedBufferAfterPopulationSymbolName =
     "__xla_cpu_runtime_ReleaseOutfeedBufferAfterPopulation";
 extern const char* const kParallelForkJoinSymbolName =
     "__xla_cpu_runtime_ParallelForkJoin";
+extern const char* const kKeyValueSortPREDSymbolName =
+    "__xla_cpu_runtime_KeyValueSortPRED";
+extern const char* const kKeyValueSortS8SymbolName =
+    "__xla_cpu_runtime_KeyValueSortS8";
+extern const char* const kKeyValueSortU8SymbolName =
+    "__xla_cpu_runtime_KeyValueSortU8";
+extern const char* const kKeyValueSortS16SymbolName =
+    "__xla_cpu_runtime_KeyValueSortS16";
+extern const char* const kKeyValueSortU16SymbolName =
+    "__xla_cpu_runtime_KeyValueSortU16";
+extern const char* const kKeyValueSortF16SymbolName =
+    "__xla_cpu_runtime_KeyValueSortF16";
+extern const char* const kKeyValueSortS32SymbolName =
+    "__xla_cpu_runtime_KeyValueSortS32";
+extern const char* const kKeyValueSortU32SymbolName =
+    "__xla_cpu_runtime_KeyValueSortU32";
+extern const char* const kKeyValueSortF32SymbolName =
+    "__xla_cpu_runtime_KeyValueSortF32";
+extern const char* const kKeyValueSortS64SymbolName =
+    "__xla_cpu_runtime_KeyValueSortS64";
+extern const char* const kKeyValueSortU64SymbolName =
+    "__xla_cpu_runtime_KeyValueSortU64";
+extern const char* const kKeyValueSortF64SymbolName =
+    "__xla_cpu_runtime_KeyValueSortF64";
 
 extern const char* const kXlaCpuRuntimeSymbolNamePrefix = "__xla_cpu_runtime_";
 }  // namespace runtime
@@ -92,9 +117,10 @@ tensorflow::string ShapeString(const void* shape_ptr, xla::int32 shape_length) {
 
 }  // namespace
 
-void* __xla_cpu_runtime_AcquireInfeedBufferForDequeue(xla::int32 buffer_length,
-                                                      const void* shape,
-                                                      xla::int32 shape_length) {
+TF_ATTRIBUTE_NO_SANITIZE_MEMORY void*
+__xla_cpu_runtime_AcquireInfeedBufferForDequeue(xla::int32 buffer_length,
+                                                const void* shape,
+                                                xla::int32 shape_length) {
   if (VLOG_IS_ON(2)) {
     LOG(INFO) << "AcquireInfeedBufferForDequeue: "
               << ShapeString(shape, shape_length);
@@ -111,9 +137,11 @@ void* __xla_cpu_runtime_AcquireInfeedBufferForDequeue(xla::int32 buffer_length,
   return buffer->data();
 }
 
-void __xla_cpu_runtime_ReleaseInfeedBufferAfterDequeue(
-    xla::int32 buffer_length, void* buffer_ptr, const void* shape_ptr,
-    xla::int32 shape_length) {
+TF_ATTRIBUTE_NO_SANITIZE_MEMORY void
+__xla_cpu_runtime_ReleaseInfeedBufferAfterDequeue(xla::int32 buffer_length,
+                                                  void* buffer_ptr,
+                                                  const void* shape_ptr,
+                                                  xla::int32 shape_length) {
   if (VLOG_IS_ON(2)) {
     LOG(INFO) << "ReleaseInfeedBufferAfterDeque: "
               << ShapeString(shape_ptr, shape_length);
@@ -125,8 +153,10 @@ void __xla_cpu_runtime_ReleaseInfeedBufferAfterDequeue(
                                         std::move(shape));
 }
 
-void* __xla_cpu_runtime_AcquireOutfeedBufferForPopulation(
-    xla::int32 buffer_length, const void* shape_ptr, xla::int32 shape_length) {
+TF_ATTRIBUTE_NO_SANITIZE_MEMORY void*
+__xla_cpu_runtime_AcquireOutfeedBufferForPopulation(xla::int32 buffer_length,
+                                                    const void* shape_ptr,
+                                                    xla::int32 shape_length) {
   if (VLOG_IS_ON(2)) {
     LOG(INFO) << "AcquireOutfeedBufferForPopulation: "
               << ShapeString(shape_ptr, shape_length);
@@ -143,9 +173,11 @@ void* __xla_cpu_runtime_AcquireOutfeedBufferForPopulation(
   return buffer->data();
 }
 
-void __xla_cpu_runtime_ReleaseOutfeedBufferAfterPopulation(
-    xla::int32 buffer_length, void* buffer_ptr, const void* shape_ptr,
-    xla::int32 shape_length) {
+TF_ATTRIBUTE_NO_SANITIZE_MEMORY void
+__xla_cpu_runtime_ReleaseOutfeedBufferAfterPopulation(xla::int32 buffer_length,
+                                                      void* buffer_ptr,
+                                                      const void* shape_ptr,
+                                                      xla::int32 shape_length) {
   if (VLOG_IS_ON(2)) {
     LOG(INFO) << "ReleaseOutfeedBufferAfterPopulation: "
               << ShapeString(shape_ptr, shape_length);

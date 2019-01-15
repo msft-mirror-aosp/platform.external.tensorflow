@@ -30,6 +30,7 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gen_array_ops
+from tensorflow.python.ops import gen_state_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.platform import tf_logging as logging
@@ -40,57 +41,108 @@ from tensorflow.python.util.deprecation import deprecated
 from tensorflow.python.util.tf_export import tf_export
 
 
-def default_variable_creator(_, *args, **kwds):
-  del args, kwds
-  raise NotImplementedError("resource_variable_ops needs to be imported")
+def default_variable_creator(_, **kwds):
+  del kwds
+  raise NotImplementedError("variable_scope needs to be imported")
 
 
 def _make_getter(captured_getter, captured_previous):
   """To avoid capturing loop variables."""
-  def getter(*args, **kwargs):
-    return captured_getter(captured_previous, *args, **kwargs)
+  def getter(**kwargs):
+    return captured_getter(captured_previous, **kwargs)
   return getter
 
 
 @tf_export("VariableSynchronization")
 class VariableSynchronization(enum.Enum):
-  """Indicates when a distributed variable will be synced."""
+  """Indicates when a distributed variable will be synced.
 
-  # Indicates that the synchronization will be determined by the current
-  # `DistributionStrategy` (eg. With `MirroredStrategy` this would be
-  # `ON_WRITE`).
+  * `AUTO`: Indicates that the synchronization will be determined by the current
+    `DistributionStrategy` (eg. With `MirroredStrategy` this would be
+    `ON_WRITE`).
+  * `NONE`: Indicates that there will only be one copy of the variable, so
+    there is no need to sync.
+  * `ON_WRITE`: Indicates that the variable will be updated across devices
+    every time it is written.
+  * `ON_READ`: Indicates that the variable will be aggregated across devices
+    when it is read (eg. when checkpointing or when evaluating an op that uses
+    the variable).
+  """
   AUTO = 0
-
-  # Indicates that there will only be one copy of the variable, so there is no
-  # need to sync.
   NONE = 1
-
-  # Indicates that the variable will be aggregated across devices
-  # every time it is updated.
   ON_WRITE = 2
-
-  # Indicates that the variable will be aggregated across devices
-  # when it is read (eg. when checkpointing or when evaluating an op that uses
-  # the variable).
   ON_READ = 3
 
 
 @tf_export("VariableAggregation")
 class VariableAggregation(enum.Enum):
-  """Indicates how a distributed variable will be aggregated."""
+  """Indicates how a distributed variable will be aggregated.
+
+  `tf.contrib.distribute.DistributionStrategy` distributes a model by making
+  multiple copies (called "towers") acting data-parallel on different elements
+  of the input batch. When performing some variable-update operation, say
+  `var.assign_add(x)`, in a model, we need to resolve how to combine the
+  different values for `x` computed in the different towers.
+
+  * `NONE`: This is the default, giving an error if you use a
+    variable-update operation with multiple towers.
+  * `SUM`: Add the updates across towers.
+  * `MEAN`: Take the arithmetic mean ("average") of the updates across towers.
+  * `ONLY_FIRST_TOWER`: This is for when every tower is performing the same
+    update, but we only want to perform the update once. Used, e.g., for the
+    global step counter.
+  """
   NONE = 0
   SUM = 1
   MEAN = 2
+  ONLY_FIRST_TOWER = 3
 
 
 class VariableMetaclass(type):
   """Metaclass to allow construction of tf.Variable to be overridden."""
 
+  def _variable_call(cls,
+                     initial_value=None,
+                     trainable=None,
+                     collections=None,
+                     validate_shape=True,
+                     caching_device=None,
+                     name=None,
+                     variable_def=None,
+                     dtype=None,
+                     expected_shape=None,
+                     import_scope=None,
+                     constraint=None,
+                     use_resource=None,
+                     synchronization=VariableSynchronization.AUTO,
+                     aggregation=VariableAggregation.NONE):
+    """Call on Variable class. Useful to force the signature."""
+    previous_getter = lambda **kwargs: default_variable_creator(None, **kwargs)
+    for getter in ops.get_default_graph()._variable_creator_stack:  # pylint: disable=protected-access
+      previous_getter = _make_getter(getter, previous_getter)
+
+    # Reset `aggregation` that is explicitly set as `None` to the enum NONE.
+    if aggregation is None:
+      aggregation = VariableAggregation.NONE
+    return previous_getter(
+        initial_value=initial_value,
+        trainable=trainable,
+        collections=collections,
+        validate_shape=validate_shape,
+        caching_device=caching_device,
+        name=name,
+        variable_def=variable_def,
+        dtype=dtype,
+        expected_shape=expected_shape,
+        import_scope=import_scope,
+        constraint=constraint,
+        use_resource=use_resource,
+        synchronization=synchronization,
+        aggregation=aggregation)
+
   def __call__(cls, *args, **kwargs):
     if cls is Variable:
-      previous_getter = lambda *a, **k: default_variable_creator(None, *a, **k)
-      # TODO(apassos) use a stack of getters here
-      return previous_getter(*args, **kwargs)
+      return cls._variable_call(*args, **kwargs)
     else:
       return super(VariableMetaclass, cls).__call__(*args, **kwargs)
 
@@ -98,7 +150,7 @@ class VariableMetaclass(type):
 @tf_export("Variable")
 class Variable(six.with_metaclass(VariableMetaclass,
                                   checkpointable.CheckpointableBase)):
-  """See the @{$variables$Variables How To} for a high level overview.
+  """See the [Variables Guide](https://tensorflow.org/guide/variables).
 
   A variable maintains state in the graph across calls to `run()`. You add a
   variable to the graph by constructing an instance of the class `Variable`.
@@ -183,27 +235,31 @@ class Variable(six.with_metaclass(VariableMetaclass,
   various `Optimizer` classes use this collection as the default list of
   variables to optimize.
 
-  WARNING: tf.Variable objects have a non-intuitive memory model. A Variable is
-  represented internally as a mutable Tensor which can non-deterministically
-  alias other Tensors in a graph. The set of operations which consume a Variable
-  and can lead to aliasing is undetermined and can change across TensorFlow
-  versions. Avoid writing code which relies on the value of a Variable either
-  changing or not changing as other operations happen. For example, using
-  Variable objects or simple functions thereof as predicates in a `tf.cond` is
-  dangerous and error-prone:
+  WARNING: tf.Variable objects by default have a non-intuitive memory model. A
+  Variable is represented internally as a mutable Tensor which can
+  non-deterministically alias other Tensors in a graph. The set of operations
+  which consume a Variable and can lead to aliasing is undetermined and can
+  change across TensorFlow versions. Avoid writing code which relies on the
+  value of a Variable either changing or not changing as other operations
+  happen. For example, using Variable objects or simple functions thereof as
+  predicates in a `tf.cond` is dangerous and error-prone:
 
   ```
   v = tf.Variable(True)
   tf.cond(v, lambda: v.assign(False), my_false_fn)  # Note: this is broken.
   ```
 
-  Here replacing tf.Variable with tf.contrib.eager.Variable will fix any
-  nondeterminism issues.
+  Here replacing adding `use_resource=True` when constructing the variable will
+  fix any nondeterminism issues:
+  ```
+  v = tf.Variable(True, use_resource=True)
+  tf.cond(v, lambda: v.assign(False), my_false_fn)
+  ```
 
   To use the replacement for variables which does
   not have these issues:
 
-  * Replace `tf.Variable` with `tf.contrib.eager.Variable`;
+  * Add `use_resource=True` when constructing `tf.Variable`;
   * Call `tf.get_variable_scope().set_use_resource(True)` inside a
     `tf.variable_scope` before the `tf.get_variable()` call.
   """
@@ -279,13 +335,13 @@ class Variable(six.with_metaclass(VariableMetaclass,
        a resource variable is always created.
       synchronization: Indicates when a distributed a variable will be
         aggregated. Accepted values are constants defined in the class
-        @{tf.VariableSynchronization}. By default the synchronization is set to
+        `tf.VariableSynchronization`. By default the synchronization is set to
         `AUTO` and the current `DistributionStrategy` chooses
         when to synchronize. If `synchronization` is set to `ON_READ`,
         `trainable` must not be set to `True`.
       aggregation: Indicates how a distributed variable will be aggregated.
         Accepted values are constants defined in the class
-        @{tf.VariableAggregation}.
+        `tf.VariableAggregation`.
 
     Raises:
       ValueError: If both `variable_def` and initial_value are specified.
@@ -347,7 +403,7 @@ class Variable(six.with_metaclass(VariableMetaclass,
 
     This convenience method requires a session where the graph
     containing this variable has been launched. If no session is
-    passed, the default session is used.  See @{tf.Session} for more
+    passed, the default session is used.  See `tf.Session` for more
     information on launching a graph and on sessions.
 
     ```python
@@ -417,7 +473,7 @@ class Variable(six.with_metaclass(VariableMetaclass,
     """
     raise NotImplementedError
 
-  def assign(self, value, use_locking=False):
+  def assign(self, value, use_locking=False, name=None, read_value=True):
     """Assigns a new value to the variable.
 
     This is essentially a shortcut for `assign(self, value)`.
@@ -425,6 +481,9 @@ class Variable(six.with_metaclass(VariableMetaclass,
     Args:
       value: A `Tensor`. The new value for this variable.
       use_locking: If `True`, use locking during the assignment.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
@@ -432,7 +491,7 @@ class Variable(six.with_metaclass(VariableMetaclass,
     """
     raise NotImplementedError
 
-  def assign_add(self, delta, use_locking=False):
+  def assign_add(self, delta, use_locking=False, name=None, read_value=True):
     """Adds a value to this variable.
 
      This is essentially a shortcut for `assign_add(self, delta)`.
@@ -440,6 +499,9 @@ class Variable(six.with_metaclass(VariableMetaclass,
     Args:
       delta: A `Tensor`. The value to add to this variable.
       use_locking: If `True`, use locking during the operation.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
@@ -447,7 +509,7 @@ class Variable(six.with_metaclass(VariableMetaclass,
     """
     raise NotImplementedError
 
-  def assign_sub(self, delta, use_locking=False):
+  def assign_sub(self, delta, use_locking=False, name=None, read_value=True):
     """Subtracts a value from this variable.
 
     This is essentially a shortcut for `assign_sub(self, delta)`.
@@ -455,6 +517,9 @@ class Variable(six.with_metaclass(VariableMetaclass,
     Args:
       delta: A `Tensor`. The value to subtract from this variable.
       use_locking: If `True`, use locking during the operation.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
@@ -462,15 +527,200 @@ class Variable(six.with_metaclass(VariableMetaclass,
     """
     raise NotImplementedError
 
-  def scatter_sub(self, sparse_delta, use_locking=False):
+  def scatter_sub(self, sparse_delta, use_locking=False, name=None):
     """Subtracts `IndexedSlices` from this variable.
-
-    This is essentially a shortcut for `scatter_sub(self, sparse_delta.indices,
-    sparse_delta.values)`.
 
     Args:
       sparse_delta: `IndexedSlices` to be subtracted from this variable.
       use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    raise NotImplementedError
+
+  def scatter_add(self, sparse_delta, use_locking=False, name=None):
+    """Adds `IndexedSlices` to this variable.
+
+    Args:
+      sparse_delta: `IndexedSlices` to be assigned to this variable.
+      use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    raise NotImplementedError
+
+  def scatter_update(self, sparse_delta, use_locking=False, name=None):
+    """Assigns `IndexedSlices` to this variable.
+
+    Args:
+      sparse_delta: `IndexedSlices` to be assigned to this variable.
+      use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    raise NotImplementedError
+
+  def scatter_nd_sub(self, indices, updates, name=None):
+    """Applies sparse subtraction to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        op = ref.scatter_nd_sub(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(op)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, -9, 3, -6, -6, 6, 7, -4]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    raise NotImplementedError
+
+  def scatter_nd_add(self, indices, updates, name=None):
+    """Applies sparse addition to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        add = ref.scatter_nd_add(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(add)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, 13, 3, 14, 14, 6, 7, 20]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    raise NotImplementedError
+
+  def scatter_nd_update(self, indices, updates, name=None):
+    """Applies sparse assignment to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        op = ref.scatter_nd_assign(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(op)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, 11, 3, 10, 9, 6, 7, 12]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
@@ -510,7 +760,7 @@ class Variable(six.with_metaclass(VariableMetaclass,
 
     This convenience method requires a session where the graph
     containing this variable has been launched. If no session is
-    passed, the default session is used.  See @{tf.Session} for more
+    passed, the default session is used.  See `tf.Session` for more
     information on launching a graph and on sessions.
 
     ```python
@@ -650,8 +900,8 @@ class Variable(six.with_metaclass(VariableMetaclass,
   @staticmethod
   def from_proto(variable_def, import_scope=None):
     """Returns a `Variable` object created from `variable_def`."""
-    return Variable(variable_def=variable_def,
-                    import_scope=import_scope)
+    return RefVariable(variable_def=variable_def,
+                       import_scope=import_scope)
 
   class SaveSliceInfo(object):
     """Information on how to save this Variable as a slice.
@@ -832,19 +1082,7 @@ class RefVariable(Variable):
       ValueError: If the initial value is not specified, or does not have a
         shape and `validate_shape` is `True`.
       RuntimeError: If eager execution is enabled.
-
-    @compatibility(eager)
-    `tf.Variable` is not compatible with eager execution.  Use
-    `tfe.Variable` instead which is compatible with both eager execution
-    and graph construction.  See [the TensorFlow Eager Execution
-    guide](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/contrib/eager/python/g3doc/guide.md#variables-and-optimizers)
-    for details on how variables work in eager execution.
-    @end_compatibility
     """
-    if context.executing_eagerly():
-      raise RuntimeError(
-          "tf.Variable not supported when eager execution is enabled. "
-          "Please use tf.contrib.eager.Variable instead")
     self._in_graph_mode = True
     if variable_def:
       # If variable_def is provided, recreates the variable from its fields.
@@ -955,8 +1193,7 @@ class RefVariable(Variable):
       # Ensure that we weren't lifted into the eager context.
       if context.executing_eagerly():
         raise RuntimeError(
-            "tf.Variable not supported when eager execution is enabled. "
-            "Please use tf.contrib.eager.Variable instead")
+            "RefVariable not supported when eager execution is enabled. ")
       with ops.name_scope(name, "Variable", [] if init_from_fn else
                           [initial_value]) as name:
 
@@ -1078,7 +1315,7 @@ class RefVariable(Variable):
   def _AsTensor(self):  # pylint: disable=invalid-name
     """Converts this variable to a Tensor.
 
-    See @{tf.Variable.value}.
+    See `tf.Variable.value`.
 
     Returns:
       A `Tensor` containing the value of the variable.
@@ -1135,7 +1372,7 @@ class RefVariable(Variable):
 
     Returns is a `Tensor` which holds a reference to the variable.  You can
     assign a new value to the variable by passing the tensor to an assign op.
-    See @{tf.Variable.value} if you want to get the value of the
+    See `tf.Variable.value` if you want to get the value of the
     variable.
 
     Returns:
@@ -1163,7 +1400,7 @@ class RefVariable(Variable):
 
     This convenience method requires a session where the graph
     containing this variable has been launched. If no session is
-    passed, the default session is used.  See @{tf.Session} for more
+    passed, the default session is used.  See `tf.Session` for more
     information on launching a graph and on sessions.
 
     ```python
@@ -1236,7 +1473,7 @@ class RefVariable(Variable):
     """
     return self._constraint
 
-  def assign(self, value, use_locking=False):
+  def assign(self, value, use_locking=False, name=None, read_value=True):
     """Assigns a new value to the variable.
 
     This is essentially a shortcut for `assign(self, value)`.
@@ -1244,14 +1481,21 @@ class RefVariable(Variable):
     Args:
       value: A `Tensor`. The new value for this variable.
       use_locking: If `True`, use locking during the assignment.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
       the assignment has completed.
     """
-    return state_ops.assign(self._variable, value, use_locking=use_locking)
+    assign = state_ops.assign(self._variable, value, use_locking=use_locking,
+                              name=name)
+    if read_value:
+      return assign
+    return assign.op
 
-  def assign_add(self, delta, use_locking=False):
+  def assign_add(self, delta, use_locking=False, name=None, read_value=True):
     """Adds a value to this variable.
 
      This is essentially a shortcut for `assign_add(self, delta)`.
@@ -1259,14 +1503,21 @@ class RefVariable(Variable):
     Args:
       delta: A `Tensor`. The value to add to this variable.
       use_locking: If `True`, use locking during the operation.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
       the addition has completed.
     """
-    return state_ops.assign_add(self._variable, delta, use_locking=use_locking)
+    assign = state_ops.assign_add(
+        self._variable, delta, use_locking=use_locking, name=name)
+    if read_value:
+      return assign
+    return assign.op
 
-  def assign_sub(self, delta, use_locking=False):
+  def assign_sub(self, delta, use_locking=False, name=None, read_value=True):
     """Subtracts a value from this variable.
 
     This is essentially a shortcut for `assign_sub(self, delta)`.
@@ -1274,22 +1525,27 @@ class RefVariable(Variable):
     Args:
       delta: A `Tensor`. The value to subtract from this variable.
       use_locking: If `True`, use locking during the operation.
+      name: The name of the operation to be created
+      read_value: if True, will return something which evaluates to the
+        new value of the variable; if False will return the assign op.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
       the subtraction has completed.
     """
-    return state_ops.assign_sub(self._variable, delta, use_locking=use_locking)
+    assign = state_ops.assign_sub(
+        self._variable, delta, use_locking=use_locking, name=name)
+    if read_value:
+      return assign
+    return assign.op
 
-  def scatter_sub(self, sparse_delta, use_locking=False):
+  def scatter_sub(self, sparse_delta, use_locking=False, name=None):
     """Subtracts `IndexedSlices` from this variable.
-
-    This is essentially a shortcut for `scatter_sub(self, sparse_delta.indices,
-    sparse_delta.values)`.
 
     Args:
       sparse_delta: `IndexedSlices` to be subtracted from this variable.
       use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
 
     Returns:
       A `Tensor` that will hold the new value of this variable after
@@ -1300,11 +1556,216 @@ class RefVariable(Variable):
     """
     if not isinstance(sparse_delta, ops.IndexedSlices):
       raise ValueError("sparse_delta is not IndexedSlices: %s" % sparse_delta)
-    return state_ops.scatter_sub(
+    return gen_state_ops.scatter_sub(
         self._variable,
         sparse_delta.indices,
         sparse_delta.values,
-        use_locking=use_locking)
+        use_locking=use_locking,
+        name=name)
+
+  def scatter_add(self, sparse_delta, use_locking=False, name=None):
+    """Adds `IndexedSlices` from this variable.
+
+    Args:
+      sparse_delta: `IndexedSlices` to be added to this variable.
+      use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    if not isinstance(sparse_delta, ops.IndexedSlices):
+      raise ValueError("sparse_delta is not IndexedSlices: %s" % sparse_delta)
+    return gen_state_ops.scatter_add(
+        self._variable,
+        sparse_delta.indices,
+        sparse_delta.values,
+        use_locking=use_locking,
+        name=name)
+
+  def scatter_update(self, sparse_delta, use_locking=False, name=None):
+    """Assigns `IndexedSlices` to this variable.
+
+    Args:
+      sparse_delta: `IndexedSlices` to be assigned to this variable.
+      use_locking: If `True`, use locking during the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    if not isinstance(sparse_delta, ops.IndexedSlices):
+      raise ValueError("sparse_delta is not IndexedSlices: %s" % sparse_delta)
+    return gen_state_ops.scatter_update(
+        self._variable,
+        sparse_delta.indices,
+        sparse_delta.values,
+        use_locking=use_locking,
+        name=name)
+
+  def scatter_nd_sub(self, indices, updates, name=None):
+    """Applies sparse subtraction to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        op = ref.scatter_nd_sub(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(op)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, -9, 3, -6, -6, 6, 7, -4]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    return gen_state_ops.scatter_nd_sub(
+        self._variable, indices, updates, use_locking=True, name=name)
+
+  def scatter_nd_add(self, indices, updates, name=None):
+    """Applies sparse addition to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        add = ref.scatter_nd_add(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(add)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, 13, 3, 14, 14, 6, 7, 20]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    return gen_state_ops.scatter_nd_add(
+        self._variable, indices, updates, use_locking=True, name=name)
+
+  def scatter_nd_update(self, indices, updates, name=None):
+    """Applies sparse assignment to individual values or slices in a Variable.
+
+    `ref` is a `Tensor` with rank `P` and `indices` is a `Tensor` of rank `Q`.
+
+    `indices` must be integer tensor, containing indices into `ref`.
+    It must be shape `[d_0, ..., d_{Q-2}, K]` where `0 < K <= P`.
+
+    The innermost dimension of `indices` (with length `K`) corresponds to
+    indices into elements (if `K = P`) or slices (if `K < P`) along the `K`th
+    dimension of `ref`.
+
+    `updates` is `Tensor` of rank `Q-1+P-K` with shape:
+
+    ```
+    [d_0, ..., d_{Q-2}, ref.shape[K], ..., ref.shape[P-1]].
+    ```
+
+    For example, say we want to add 4 scattered elements to a rank-1 tensor to
+    8 elements. In Python, that update would look like this:
+
+    ```python
+        ref = tf.Variable([1, 2, 3, 4, 5, 6, 7, 8])
+        indices = tf.constant([[4], [3], [1] ,[7]])
+        updates = tf.constant([9, 10, 11, 12])
+        op = ref.scatter_nd_update(indices, updates)
+        with tf.Session() as sess:
+          print sess.run(op)
+    ```
+
+    The resulting update to ref would look like this:
+
+        [1, 11, 3, 10, 9, 6, 7, 12]
+
+    See `tf.scatter_nd` for more details about how to make updates to
+    slices.
+
+    Args:
+      indices: The indices to be used in the operation.
+      updates: The values to be used in the operation.
+      name: the name of the operation.
+
+    Returns:
+      A `Tensor` that will hold the new value of this variable after
+      the scattered subtraction has completed.
+
+    Raises:
+      ValueError: if `sparse_delta` is not an `IndexedSlices`.
+    """
+    return gen_state_ops.scatter_nd_update(
+        self._variable, indices, updates, use_locking=True, name=name)
 
   def _strided_slice_assign(self,
                             begin,
@@ -1358,7 +1819,7 @@ class RefVariable(Variable):
 
     This convenience method requires a session where the graph
     containing this variable has been launched. If no session is
-    passed, the default session is used.  See @{tf.Session} for more
+    passed, the default session is used.  See `tf.Session` for more
     information on launching a graph and on sessions.
 
     ```python
@@ -1951,7 +2412,7 @@ def global_variables(scope=None):
   This convenience function returns the contents of that collection.
 
   An alternative to global variables are local variables. See
-  @{tf.local_variables}
+  `tf.local_variables`
 
   Args:
     scope: (Optional.) A string. If supplied, the resulting list is filtered
@@ -2004,7 +2465,7 @@ def local_variables(scope=None):
   This convenience function returns the contents of that collection.
 
   An alternative to local variables are global variables. See
-  @{tf.global_variables}
+  `tf.global_variables`
 
   Args:
     scope: (Optional.) A string. If supplied, the resulting list is filtered

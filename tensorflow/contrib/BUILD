@@ -46,6 +46,7 @@ py_library(
         "//tensorflow/contrib/gan",
         "//tensorflow/contrib/graph_editor:graph_editor_py",
         "//tensorflow/contrib/grid_rnn:grid_rnn_py",
+        "//tensorflow/contrib/hadoop",
         "//tensorflow/contrib/hooks",
         "//tensorflow/contrib/image:distort_image_py",
         "//tensorflow/contrib/image:image_py",
@@ -54,15 +55,14 @@ py_library(
         "//tensorflow/contrib/integrate:integrate_py",
         "//tensorflow/contrib/keras",
         "//tensorflow/contrib/kernel_methods",
-        "//tensorflow/contrib/kfac",
         "//tensorflow/contrib/labeled_tensor",
         "//tensorflow/contrib/layers:layers_py",
         "//tensorflow/contrib/learn",
         "//tensorflow/contrib/legacy_seq2seq:seq2seq_py",
         "//tensorflow/contrib/libsvm",
-        "//tensorflow/contrib/linalg:linalg_py",
         "//tensorflow/contrib/linear_optimizer:sdca_estimator_py",
         "//tensorflow/contrib/linear_optimizer:sdca_ops_py",
+        "//tensorflow/contrib/lite/python:lite",
         "//tensorflow/contrib/lookup:lookup_py",
         "//tensorflow/contrib/losses:losses_py",
         "//tensorflow/contrib/losses:metric_learning_py",
@@ -107,7 +107,6 @@ py_library(
         "//tensorflow/contrib/tfprof",
         "//tensorflow/contrib/timeseries",
         "//tensorflow/contrib/tpu",
-        "//tensorflow/contrib/tpu:tpu_py",
         "//tensorflow/contrib/training:training_py",
         "//tensorflow/contrib/util:util_py",
         "//tensorflow/python:util",
@@ -129,9 +128,8 @@ py_library(
     ]) + if_not_windows([
         "//tensorflow/contrib/bigtable",  # depends on bigtable
         "//tensorflow/contrib/cloud:cloud_py",  # doesn't compile on Windows
-        "//tensorflow/contrib/ffmpeg:ffmpeg_ops_py",
-        "//tensorflow/contrib/lite/python:lite",  # unix dependency, need to fix code
         "//tensorflow/contrib/tensorrt:init_py",  # doesn't compile on windows
+        "//tensorflow/contrib/ffmpeg:ffmpeg_ops_py",
     ]),
 )
 
@@ -143,6 +141,7 @@ cc_library(
         "//tensorflow/contrib/coder:all_kernels",
         "//tensorflow/contrib/data/kernels:dataset_kernels",
         "//tensorflow/contrib/factorization/kernels:all_kernels",
+        "//tensorflow/contrib/hadoop:dataset_kernels",
         "//tensorflow/contrib/input_pipeline:input_pipeline_ops_kernels",
         "//tensorflow/contrib/layers:sparse_feature_cross_op_kernel",
         "//tensorflow/contrib/nearest_neighbor:nearest_neighbor_ops_kernels",
@@ -166,7 +165,9 @@ cc_library(
             "//tensorflow/contrib/kinesis:dataset_kernels",
         ],
         "//conditions:default": [],
-    }),
+    }) + if_not_windows([
+        "//tensorflow/contrib/tensorrt:trt_engine_op_kernel",
+    ]),
 )
 
 cc_library(
@@ -176,8 +177,10 @@ cc_library(
         "//tensorflow/contrib/boosted_trees:boosted_trees_ops_op_lib",
         "//tensorflow/contrib/coder:all_ops",
         "//tensorflow/contrib/data:dataset_ops_op_lib",
+        "//tensorflow/contrib/data:indexed_dataset_ops_op_lib",
         "//tensorflow/contrib/factorization:all_ops",
         "//tensorflow/contrib/framework:all_ops",
+        "//tensorflow/contrib/hadoop:dataset_ops_op_lib",
         "//tensorflow/contrib/input_pipeline:input_pipeline_ops_op_lib",
         "//tensorflow/contrib/layers:sparse_feature_cross_op_op_lib",
         "//tensorflow/contrib/nccl:nccl_ops_op_lib",
@@ -201,5 +204,7 @@ cc_library(
             "//tensorflow/contrib/kinesis:dataset_ops_op_lib",
         ],
         "//conditions:default": [],
-    }),
+    }) + if_not_windows([
+        "//tensorflow/contrib/tensorrt:trt_engine_op_op_lib",
+    ]),
 )
