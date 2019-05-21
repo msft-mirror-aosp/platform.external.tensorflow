@@ -979,6 +979,32 @@ class NNAPIDelegateKernel {
       nodes_.push_back(node_index);
     }
 
+    if (params->delegate->data_ != nullptr) {
+      // user specified an acclelerator to use.
+      const char* device_name_ptr = reinterpret_cast<const char*>(params->delegate->data_);
+      std::string device_name(device_name_ptr);
+      uint32_t numDevices = 0;
+      RETURN_TFLITE_ERROR_IF_NN_ERROR(
+        context, nnapi_->ANeuralNetworks_getDeviceCount(&numDevices));
+
+      for (uint32_t i = 0; i < numDevices; i++) {
+        ANeuralNetworksDevice* device = nullptr;
+        const char* buffer = nullptr;
+        RETURN_TFLITE_ERROR_IF_NN_ERROR(
+          context, nnapi_->ANeuralNetworks_getDevice(i, &device));
+        RETURN_TFLITE_ERROR_IF_NN_ERROR(
+          context, nnapi_->ANeuralNetworksDevice_getName(device, &buffer));
+        if (device_name.compare(buffer) == 0) {
+          nnapi_device_ = device;
+          break;
+        }
+      }
+      if (nnapi_device_ == nullptr) {
+        context->ReportError(context, "Could not find the specified accelerator.");
+        return kTfLiteError;
+      }
+    }
+
     if (!nn_model_) {
       ANeuralNetworksModel* model = nullptr;
       RETURN_TFLITE_ERROR_IF_NN_ERROR(
@@ -991,9 +1017,17 @@ class NNAPIDelegateKernel {
 
     if (!nn_compilation_) {
       ANeuralNetworksCompilation* compilation = nullptr;
-      RETURN_TFLITE_ERROR_IF_NN_ERROR(
-          context, nnapi_->ANeuralNetworksCompilation_create(nn_model_.get(),
-                                                             &compilation));
+      if (nnapi_device_ != nullptr) {
+        // Compile for the selected accelerator.
+        RETURN_TFLITE_ERROR_IF_NN_ERROR(
+          context, nnapi_->ANeuralNetworksCompilation_createForDevices(nn_model_.get(),
+                                                                       &nnapi_device_, 1,
+                                                                       &compilation));
+      } else {
+        RETURN_TFLITE_ERROR_IF_NN_ERROR(
+            context, nnapi_->ANeuralNetworksCompilation_create(nn_model_.get(),
+                                                               &compilation));
+      }
       const int finish_result =
           nnapi_->ANeuralNetworksCompilation_finish(compilation);
       if (finish_result != ANEURALNETWORKS_NO_ERROR) {
@@ -1095,9 +1129,15 @@ class NNAPIDelegateKernel {
     return kTfLiteOk;
   }
 
+  // NN API Delegate Registration (the pseudo kernel that will invoke NN
+  // API node sub sets)
+  static const TfLiteRegistration registration;
+
  private:
   // Access to NNApi.
   const NnApi* nnapi_;
+  // ANN device handle.
+  ANeuralNetworksDevice* nnapi_device_ = nullptr;
   // ANN API state.
   std::unique_ptr<ANeuralNetworksModel, NNFreeModel> nn_model_;
   std::unique_ptr<ANeuralNetworksCompilation, NNFreeCompilation>
@@ -1272,10 +1312,40 @@ class NNAPIDelegateKernel {
   }
 };
 
+const TfLiteRegistration NNAPIDelegateKernel::registration = {
+      .init = [](TfLiteContext* context, const char* buffer,
+                 size_t length) -> void* {
+        const TfLiteDelegateParams* params =
+            reinterpret_cast<const TfLiteDelegateParams*>(buffer);
+        NNAPIDelegateKernel* kernel_state = new NNAPIDelegateKernel;
+        kernel_state->Init(context, params);
+        return kernel_state;
+      },
+
+      .free = [](TfLiteContext* context, void* buffer) -> void {
+        delete reinterpret_cast<NNAPIDelegateKernel*>(buffer);
+      },
+
+      .prepare = [](TfLiteContext* context, TfLiteNode* node) -> TfLiteStatus {
+        NNAPIDelegateKernel* state =
+            reinterpret_cast<NNAPIDelegateKernel*>(node->user_data);
+        return state->nn_compilation_ == nullptr ? kTfLiteError : kTfLiteOk;
+      },
+
+      .invoke = [](TfLiteContext* context, TfLiteNode* node) -> TfLiteStatus {
+        NNAPIDelegateKernel* state =
+            reinterpret_cast<NNAPIDelegateKernel*>(node->user_data);
+        return state->Invoke(context, node);
+      },
+
+      .profiling_string = nullptr,
+      .builtin_code = kTfLiteBuiltinDelegate,
+  };
+
 }  // namespace
 
 // Return a NN API Delegate struct that can check for support of ops.
-TfLiteDelegate* NnApiDelegate() {
+TfLiteDelegate* NnApiDelegate(const char* device_name) {
   static TfLiteDelegate delegate = {
       .data_ = nullptr,
       .Prepare = [](TfLiteContext* context,
@@ -1324,44 +1394,10 @@ TfLiteDelegate* NnApiDelegate() {
         // First element in vector must be the number of actual nodes.
         supported_nodes[0] = supported_nodes.size() - 1;
 
-        // NN API Delegate Registration (the pseudo kernel that will invoke NN
-        // API node sub sets)
-        static const TfLiteRegistration nnapi_delegate_kernel = {
-            .init = [](TfLiteContext* context, const char* buffer,
-                       size_t length) -> void* {
-              const TfLiteDelegateParams* params =
-                  reinterpret_cast<const TfLiteDelegateParams*>(buffer);
-              NNAPIDelegateKernel* kernel_state = new NNAPIDelegateKernel;
-              kernel_state->Init(context, params);
-              return kernel_state;
-            },
-
-            .free = [](TfLiteContext* context, void* buffer) -> void {
-              delete reinterpret_cast<NNAPIDelegateKernel*>(buffer);
-            },
-
-            .prepare = [](TfLiteContext* context,
-                          TfLiteNode* node) -> TfLiteStatus {
-              // Since the underlying resize happened ahead of delegation
-              // worked. This does nothing.
-              return kTfLiteOk;
-            },
-
-            .invoke = [](TfLiteContext* context,
-                         TfLiteNode* node) -> TfLiteStatus {
-              NNAPIDelegateKernel* state =
-                  reinterpret_cast<NNAPIDelegateKernel*>(node->user_data);
-              return state->Invoke(context, node);
-            },
-
-            .profiling_string = nullptr,
-            .builtin_code = kTfLiteBuiltinDelegate,
-        };
-
         // Request TFLite to partition the graph and make kernels
-        // for each independent node sub set a new nnapi_delegate_kernel.
+        // for each independent node sub set a new NNAPIDelegateKernel.
         return context->ReplaceNodeSubsetsWithDelegateKernels(
-            context, nnapi_delegate_kernel,
+            context, NNAPIDelegateKernel::registration,
             reinterpret_cast<TfLiteIntArray*>(supported_nodes.data()),
             delegate);
       },
@@ -1371,7 +1407,14 @@ TfLiteDelegate* NnApiDelegate() {
       .FreeBufferHandle = nullptr,
       .flags = kTfLiteDelegateFlagsNone,
   };
-
+  static std::string device_name_;
+  if (device_name == nullptr) {
+      device_name_.clear();
+      delegate.data_ = nullptr;
+  } else {
+      device_name_ = device_name;
+      delegate.data_ = (void *) device_name_.c_str();
+  }
   return &delegate;
 }
 
