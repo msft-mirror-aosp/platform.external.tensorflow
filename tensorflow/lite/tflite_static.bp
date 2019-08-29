@@ -152,7 +152,7 @@ cc_library_static {
         "external/eigen",
         "external/flatbuffers/include",
         "external/gemmlowp",
-        "external/libtextclassifier",
+        "external/libtextclassifier/native/",
         "external/tensorflow",
     ],
     whole_static_libs: [
