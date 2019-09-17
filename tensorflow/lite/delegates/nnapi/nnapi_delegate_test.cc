@@ -325,6 +325,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithBufferHandles) {
     GTEST_SKIP();
   }
   StatefulNnApiDelegate::Options options;
+  options.accelerator_name = "nnapi-reference";
   FloatAddOpModel m(options, {TensorType_FLOAT32, {1, 2, 2, 1}},
                     {TensorType_FLOAT32, {1, 2, 2, 1}},
                     {TensorType_FLOAT32, {}}, ActivationFunctionType_NONE);
