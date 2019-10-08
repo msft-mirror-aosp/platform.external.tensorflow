@@ -1948,7 +1948,9 @@ class PhasedLSTMCell(rnn_cell_impl.RNNCell):
         in an existing scope. If not `True`, and the existing scope already has
         the given variables, an error is raised.
     """
-    super(PhasedLSTMCell, self).__init__(_reuse=reuse)
+    # We pass autocast=False because this layer can accept inputs of different
+    # dtypes, so we do not want to automatically cast them to the same dtype.
+    super(PhasedLSTMCell, self).__init__(_reuse=reuse, autocast=False)
     self._num_units = num_units
     self._use_peepholes = use_peepholes
     self._leak = leak
@@ -3296,6 +3298,8 @@ class IndyLSTMCell(rnn_cell_impl.LayerRNNCell):
 
   It does not allow cell clipping, a projection layer, and does not
   use peep-hole connections: it is the basic baseline.
+
+  For a detailed analysis of IndyLSTMs, see https://arxiv.org/abs/1903.08023.
   """
 
   def __init__(self,
