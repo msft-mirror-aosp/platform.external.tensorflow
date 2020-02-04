@@ -20,8 +20,6 @@ limitations under the License.
 #include <cstdint>
 #include <type_traits>
 
-#include "fixedpoint/fixedpoint.h"
-#include "profiling/instrumentation.h"
 #include "tensorflow/lite/experimental/ruy/check_macros.h"
 #include "tensorflow/lite/experimental/ruy/common.h"
 #include "tensorflow/lite/experimental/ruy/internal_matrix.h"
@@ -29,6 +27,7 @@ limitations under the License.
 #include "tensorflow/lite/experimental/ruy/opt_set.h"
 #include "tensorflow/lite/experimental/ruy/path.h"
 #include "tensorflow/lite/experimental/ruy/platform.h"
+#include "tensorflow/lite/experimental/ruy/profiler/instrumentation.h"
 #include "tensorflow/lite/experimental/ruy/side_pair.h"
 #include "tensorflow/lite/experimental/ruy/size_util.h"
 #include "tensorflow/lite/experimental/ruy/spec.h"
@@ -48,8 +47,10 @@ void RunKernelTyped(Tuning tuning, const PackedMatrix<LhsScalar>& lhs,
                     Matrix<DstScalar>* dst) {
   using Kernel = Kernel<ThePath, LhsScalar, RhsScalar, DstScalar, Spec>;
   Kernel kernel(tuning);
+#if !defined(NDEBUG) || !RUY_OPT_ENABLED(RUY_OPT_FAT_KERNEL)
   using LhsLayout = typename Kernel::LhsLayout;
   using RhsLayout = typename Kernel::RhsLayout;
+#endif
   // end_row and end_col may be larger than dst dimensions.
   // that is because kernels write directly to the destination matrix, whose
   // dimensions may not be a multiple of the kernel dimensions, and we try to
@@ -91,11 +92,33 @@ void RunKernel(Tuning tuning, const SidePair<PMatrix>& src, void* spec,
       end[Side::kLhs], end[Side::kRhs], &mdst);
 }
 
+// Copied from gemmlowp/fixedpoint.
+inline std::int32_t SaturatingRoundingDoublingHighMul(std::int32_t a,
+                                                      std::int32_t b) {
+  bool overflow = a == b && a == std::numeric_limits<std::int32_t>::min();
+  std::int64_t a_64(a);
+  std::int64_t b_64(b);
+  std::int64_t ab_64 = a_64 * b_64;
+  std::int32_t nudge = ab_64 >= 0 ? (1 << 30) : (1 - (1 << 30));
+  std::int32_t ab_x2_high32 =
+      static_cast<std::int32_t>((ab_64 + nudge) / (1ll << 31));
+  return overflow ? std::numeric_limits<std::int32_t>::max() : ab_x2_high32;
+}
+
+inline std::int32_t RoundingDivideByPOT(std::int32_t numerator, int exponent) {
+  std::int32_t sign = numerator >= 0 ? 1 : -1;
+  std::int32_t abs_numerator = std::abs(numerator);
+  std::int32_t mask = (1LL << exponent) - 1;
+  std::int32_t remainder = abs_numerator & mask;
+  std::int32_t threshold = mask >> 1;
+  std::int32_t abs_result =
+      (abs_numerator >> exponent) + (remainder > threshold ? 1 : 0);
+  return sign * abs_result;
+}
+
 // Copied from TF Lite code.
 inline std::int32_t MultiplyByQuantizedMultiplier(
     std::int32_t x, std::int32_t quantized_multiplier, int shift) {
-  using gemmlowp::RoundingDivideByPOT;
-  using gemmlowp::SaturatingRoundingDoublingHighMul;
   int left_shift = shift > 0 ? shift : 0;
   int right_shift = shift > 0 ? 0 : -shift;
   return RoundingDivideByPOT(SaturatingRoundingDoublingHighMul(
@@ -172,7 +195,7 @@ struct Kernel<Path::kStandardCpp, LhsScalar, RhsScalar, DstScalar, Spec> {
     RUY_DCHECK_LE(clamped_end_col, dst->layout.cols);
     RUY_DCHECK_LE(clamped_end_col, end_col);
     RUY_DCHECK_LE(end_col - clamped_end_col, RhsLayout::kCols);
-    gemmlowp::ScopedProfilingLabel label("Kernel (Standard Cpp)");
+    profiler::ScopeLabel label("Kernel (Standard Cpp)");
     const int depth = lhs.layout.rows;
     for (int i = start_row; i < clamped_end_row; i++) {
       for (int j = start_col; j < clamped_end_col; j++) {
@@ -217,15 +240,20 @@ struct Kernel<Path::kStandardCpp, LhsScalar, RhsScalar, DstScalar, Spec> {
 #if RUY_PLATFORM(NEON)
 RUY_INHERIT_KERNEL(Path::kStandardCpp, Path::kNeon)
 RUY_INHERIT_KERNEL(Path::kNeon, Path::kNeonDotprod)
-#elif RUY_PLATFORM(AVX512)
-RUY_INHERIT_KERNEL(Path::kStandardCpp, Path::kAvx512)
+#elif RUY_PLATFORM(X86)
+RUY_INHERIT_KERNEL(Path::kStandardCpp, Path::kSse42)
+RUY_INHERIT_KERNEL(Path::kSse42, Path::kAvx2)
+RUY_INHERIT_KERNEL(Path::kAvx2, Path::kAvx512)
+RUY_INHERIT_KERNEL(Path::kAvx512, Path::kAvxVnni)
 #endif
 
-// KernelParams are shared across 32-bit and 64-bit NEON code, and x86 AVX-512
-// code.
-#if (RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32) || \
-     RUY_PLATFORM(AVX512)) &&                          \
-    RUY_OPT_ENABLED(RUY_OPT_ASM)
+// KernelParams are shared across 32-bit and 64-bit NEON code, and x86 code.
+//
+// In other cases, we still define (empty) versions, so that dummy kernels
+// can use the classes in function signatures.
+#if ((RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32)) && \
+     RUY_OPT_ENABLED(RUY_OPT_ASM)) ||                    \
+    RUY_PLATFORM(X86)
 
 #define RUY_ASM_FLAG_HAS_BIAS 0x1
 #define RUY_ASM_FLAG_HAS_LHS_SUMS 0x2
@@ -401,8 +429,6 @@ inline void MakeKernelParamsFloat(const PackedMatrix<float>& lhs,
                                   int start_row, int start_col, int end_row,
                                   int end_col, Matrix<float>* dst,
                                   KernelParamsFloat<LhsCols, RhsCols>* params) {
-  using Params = KernelParamsFloat<LhsCols, RhsCols>;
-
   const int depth = lhs.layout.rows;
   RUY_DCHECK_EQ(start_row % LhsCols, 0);
   RUY_DCHECK_EQ(start_col % RhsCols, 0);
@@ -438,9 +464,17 @@ inline void MakeKernelParamsFloat(const PackedMatrix<float>& lhs,
   RUY_DCHECK_LT(params->last_col, params->dst_cols);
 }
 
-#endif  // (RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32) ||
-        //  RUY_PLATFORM(AVX512)) &&
-        // RUY_OPT_ENABLED(RUY_OPT_ASM)
+#else  // ((RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32)) &&
+       // RUY_OPT_ENABLED(RUY_OPT_ASM)) || RUY_PLATFORM(X86)
+
+template <int LhsCols, int RhsCols>
+struct KernelParams8bit {};
+
+template <int LhsCols, int RhsCols>
+struct KernelParamsFloat {};
+
+#endif  // ((RUY_PLATFORM(NEON_64) || RUY_PLATFORM(NEON_32)) &&
+        //  RUY_OPT_ENABLED(RUY_OPT_ASM)) || RUY_PLATFORM(X86)
 
 }  // namespace ruy
 

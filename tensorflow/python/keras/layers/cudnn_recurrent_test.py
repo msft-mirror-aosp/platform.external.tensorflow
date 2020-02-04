@@ -20,6 +20,7 @@ from __future__ import print_function
 
 import os
 import tempfile
+
 from absl.testing import parameterized
 import numpy as np
 
@@ -139,7 +140,9 @@ class CuDNNTest(keras_parameterized.TestCase):
       output = layer(inputs, initial_state=initial_state[0])
     else:
       output = layer(inputs, initial_state=initial_state)
-    self.assertIn(initial_state[0], layer._inbound_nodes[0].input_tensors)
+    self.assertTrue(
+        any(initial_state[0] is t
+            for t in layer._inbound_nodes[0].input_tensors))
 
     model = keras.models.Model([inputs] + initial_state, output)
     model.compile(
@@ -458,7 +461,7 @@ class CuDNNV1OnlyTest(keras_parameterized.TestCase):
     input_shape = (3, 5)
 
     def gru(cudnn=False, **kwargs):
-      layer_class = keras.layers.CuDNNGRU if cudnn else keras.layers.GRU
+      layer_class = keras.layers.CuDNNGRU if cudnn else keras.layers.GRUV1
       return layer_class(2, input_shape=input_shape, **kwargs)
 
     def get_layer_weights(layer):
@@ -467,7 +470,7 @@ class CuDNNV1OnlyTest(keras_parameterized.TestCase):
 
     def assert_not_compatible(src, dest, message):
       with self.assertRaises(ValueError) as ex:
-        keras.saving.preprocess_weights_for_loading(
+        keras.saving.hdf5_format.preprocess_weights_for_loading(
             dest,
             get_layer_weights(src))
       self.assertIn(message, str(ex.exception))
