@@ -39,8 +39,6 @@ limitations under the License.
 #include <unistd.h>
 #endif
 
-#include "absl/memory/memory.h"
-#include "absl/types/optional.h"
 #include "tensorflow/lite/allocation.h"
 #include "tensorflow/lite/builtin_op_data.h"
 #include "tensorflow/lite/builtin_ops.h"
@@ -3185,7 +3183,7 @@ TfLiteStatus NNAPIDelegateKernel::GetOperationsSupportedByTargetNnApiDevices(
   }
 
   // Determine the list of operations the device actually supports
-  auto support_flags = absl::make_unique<bool[]>(nodes_.size());
+  auto support_flags = std::make_unique<bool[]>(nodes_.size());
 
   RETURN_TFLITE_ERROR_IF_NN_ERROR(
       context,
@@ -3686,11 +3684,11 @@ TfLiteStatus NNAPIDelegateKernel::AddOpsAndTensors(TfLiteContext* context,
     // Get op type and operands
     // Fails if the Validate function failed
     int nn_op_type;
-    TF_LITE_ENSURE_STATUS(Map(context, reg->builtin_code, reg->version,
-                              target_sdk_version,
-                              {context, &builder, node, &model_state_outputs_,
-                               &model_state_tfl_inputs_, &feedback_loops_},
-                              &nn_op_type));
+    TF_LITE_ENSURE_STATUS(
+        Map(context, reg->builtin_code, reg->version, target_sdk_version,
+            {context, &builder, node, &model_state_outputs_,
+             &model_state_tfl_inputs_, &feedback_loops_, nnapi_errno},
+            &nn_op_type));
 
     // Map outputs to NN API tensor indices.
     int output_tensor_flags = 0;
@@ -3827,17 +3825,17 @@ void StatefulNnApiDelegate::Data::CacheDelegateKernel(
   delegate_state_cache.emplace(cache_key, delegate_state);
 }
 
-absl::optional<NNAPIDelegateKernel*>
+std::optional<NNAPIDelegateKernel*>
 StatefulNnApiDelegate::Data::GetCachedDelegateKernel(
     const TfLiteDelegateParams* delegate_params) {
   const int cache_key = delegate_params->nodes_to_replace->data[0];
   const auto cached_state = delegate_state_cache.find(cache_key);
   if (cached_state != std::end(delegate_state_cache)) {
-    auto result = absl::optional<NNAPIDelegateKernel*>(cached_state->second);
+    auto result = std::optional<NNAPIDelegateKernel*>(cached_state->second);
     delegate_state_cache.erase(cached_state);
     return result;
   } else {
-    return absl::nullopt;
+    return std::nullopt;
   }
 }
 
@@ -4099,7 +4097,7 @@ TfLiteStatus StatefulNnApiDelegate::DoPrepare(TfLiteContext* context,
     delegate_data->delegate_state_cache.clear();
     for (int idx = 0; idx < num_partitions; idx++) {
       const auto& partition_params = params_array[idx];
-      auto kernel_state = absl::make_unique<NNAPIDelegateKernel>();
+      auto kernel_state = std::make_unique<NNAPIDelegateKernel>();
       TfLiteDelegateParams params_with_delegate = partition_params;
       params_with_delegate.delegate = delegate;
       TF_LITE_ENSURE_STATUS(

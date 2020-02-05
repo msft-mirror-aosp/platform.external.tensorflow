@@ -18,13 +18,12 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "absl/types/optional.h"
-#include "re2/re2.h"
 #include "tensorflow/lite/minimal_logging.h"
 
 namespace tflite {
@@ -47,7 +46,8 @@ class ConfigurationEntry {
         is_blacklist_(is_blacklist) {}
 
   bool Matches(const std::string& test_id) {
-    return RE2::FullMatch(test_id, test_id_rex_);
+    // Always return false on Android because there is no re2 library available.
+    return false;
   }
   bool IsBlacklistEntry() const { return is_blacklist_; }
   const T& TestConfig() const { return test_config_; }
@@ -66,7 +66,7 @@ class ConfigurationEntry {
 // and the parse function to convert configuration lines into configuration
 // objects.
 template <typename T>
-absl::optional<T> GetAccelerationTestParam(std::string test_id) {
+std::optional<T> GetAccelerationTestParam(std::string test_id) {
   static std::atomic<std::vector<ConfigurationEntry<T>>*> test_config_ptr;
 
   if (test_config_ptr.load() == nullptr) {
@@ -94,9 +94,9 @@ absl::optional<T> GetAccelerationTestParam(std::string test_id) {
       [&test_id](ConfigurationEntry<T> elem) { return elem.Matches(test_id); });
   if (test_config_iter != test_config->end() &&
       !test_config_iter->IsBlacklistEntry()) {
-    return absl::optional<T>(test_config_iter->TestConfig());
+    return std::optional<T>(test_config_iter->TestConfig());
   } else {
-    return absl::optional<T>();
+    return std::optional<T>();
   }
 }
 

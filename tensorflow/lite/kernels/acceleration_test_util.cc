@@ -14,6 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/acceleration_test_util.h"
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -24,7 +26,6 @@ limitations under the License.
 #include <string>
 #include <unordered_map>
 
-#include "absl/types/optional.h"
 #include "tensorflow/lite/kernels/acceleration_test_util_internal.h"
 #include "tensorflow/lite/minimal_logging.h"
 

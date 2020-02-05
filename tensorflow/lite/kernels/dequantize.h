@@ -15,7 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_KERNELS_DEQUANTIZE_H_
 #define TENSORFLOW_LITE_KERNELS_DEQUANTIZE_H_
 
-#include "third_party/eigen3/Eigen/Core"
+#include "Eigen/Core"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"

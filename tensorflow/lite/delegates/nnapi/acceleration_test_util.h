@@ -15,8 +15,8 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_DELEGATES_NNAPI_ACCELERATION_TEST_UTIL_H_
 #define TENSORFLOW_LITE_DELEGATES_NNAPI_ACCELERATION_TEST_UTIL_H_
 
-#include <gtest/gtest.h>
-#include "absl/types/optional.h"
+#include <optional>
+
 #include "tensorflow/lite/delegates/nnapi/nnapi_delegate_kernel.h"
 
 namespace tflite {
@@ -44,7 +44,7 @@ class NnapiAccelerationTestParams {
 };
 
 // Returns the NNAPI acceleration test configuration for the given test id.
-absl::optional<NnapiAccelerationTestParams> GetNnapiAccelerationTestParam(
+std::optional<NnapiAccelerationTestParams> GetNnapiAccelerationTestParam(
     std::string test_id);
 
 }  // namespace tflite

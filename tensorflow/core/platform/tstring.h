@@ -26,7 +26,6 @@ limitations under the License.
 
 // TODO(dero): This include is temporary, and will be superfluous once
 // absl::string_view is aliased to std::string_view.
-#include "absl/strings/string_view.h"
 namespace absl {
 #ifdef ABSL_NAMESPACE_BEGIN
 ABSL_NAMESPACE_BEGIN
@@ -111,9 +110,9 @@ class tstring {
   tstring(const char* str, size_t len);
   tstring(const char* str);  // NOLINT TODO(b/147740521): Make explicit.
   tstring(size_t n, char c);
-  explicit tstring(const absl::string_view str);
+  explicit tstring(const std::string_view str);
 #ifdef PLATFORM_GOOGLE
-  explicit tstring(const absl::Cord& cord);
+  explicit tstring(const std::Cord& cord);
 #endif  // PLATFORM_GOOGLE
 
   // Copy
@@ -130,9 +129,9 @@ class tstring {
   tstring& operator=(const std::string& str);
   tstring& operator=(const char* str);
   tstring& operator=(char ch);
-  tstring& operator=(const absl::string_view str);
+  tstring& operator=(const std::string_view str);
 #ifdef PLATFORM_GOOGLE
-  tstring& operator=(const absl::Cord& cord);
+  tstring& operator=(const std::Cord& cord);
 #endif  // PLATFORM_GOOGLE
 
   // View Assignment
@@ -154,10 +153,10 @@ class tstring {
   // TODO(b/147740521): Make explicit.
   operator std::string() const;  // NOLINT
   // TODO(b/147740521): Make explicit.
-  operator absl::string_view() const;  // NOLINT
+  operator std::string_view() const;  // NOLINT
 #ifdef PLATFORM_GOOGLE
   template <typename T,
-            typename std::enable_if<std::is_same<T, absl::AlphaNum>::value,
+            typename std::enable_if<std::is_same<T, std::AlphaNum>::value,
                                     T>::type* = nullptr>
   operator T() const;  // NOLINT TODO(b/147740521): Remove.
 #endif  // PLATFORM_GOOGLE
@@ -202,7 +201,7 @@ class tstring {
   // View Assignment
   tstring& assign_as_view(const tstring& str);
   tstring& assign_as_view(const std::string& str);
-  tstring& assign_as_view(const absl::string_view str);
+  tstring& assign_as_view(const std::string_view str);
   tstring& assign_as_view(const char* str, size_t len);
   tstring& assign_as_view(const char* str);
 
@@ -256,11 +255,11 @@ inline tstring::tstring(size_t n, char c) {
 inline tstring::tstring(const std::string& str)
     : tstring(str.data(), str.size()) {}
 
-inline tstring::tstring(const absl::string_view str)
+inline tstring::tstring(const std::string_view str)
     : tstring(str.data(), str.size()) {}
 
 #ifdef PLATFORM_GOOGLE
-inline tstring::tstring(const absl::Cord& cord) {
+inline tstring::tstring(const std::Cord& cord) {
   TF_TString_Init(&tstr_);
   TF_TString_ResizeUninitialized(&tstr_, cord.size());
 
@@ -312,14 +311,14 @@ inline tstring& tstring::operator=(char c) {
   return *this;
 }
 
-inline tstring& tstring::operator=(const absl::string_view str) {
+inline tstring& tstring::operator=(const std::string_view str) {
   TF_TString_Copy(&tstr_, str.data(), str.size());
 
   return *this;
 }
 
 #ifdef PLATFORM_GOOGLE
-inline tstring& tstring::operator=(const absl::Cord& cord) {
+inline tstring& tstring::operator=(const std::Cord& cord) {
   TF_TString_ResizeUninitialized(&tstr_, cord.size());
 
   cord.CopyToArray(data());
@@ -388,15 +387,15 @@ inline tstring::operator std::string() const {
   return std::string(data(), size());
 }
 
-inline tstring::operator absl::string_view() const {
-  return absl::string_view(data(), size());
+inline tstring::operator std::string_view() const {
+  return std::string_view(data(), size());
 }
 
 #ifdef PLATFORM_GOOGLE
 template <typename T, typename std::enable_if<
-                          std::is_same<T, absl::AlphaNum>::value, T>::type*>
+                          std::is_same<T, std::AlphaNum>::value, T>::type*>
 inline tstring::operator T() const {
-  return T(absl::string_view(*this));
+  return T(std::string_view(*this));
 }
 #endif  // PLATFORM_GOOGLE
 
@@ -488,7 +487,7 @@ inline tstring& tstring::assign_as_view(const std::string& str) {
   return *this;
 }
 
-inline tstring& tstring::assign_as_view(const absl::string_view str) {
+inline tstring& tstring::assign_as_view(const std::string_view str) {
   assign_as_view(str.data(), str.size());
 
   return *this;

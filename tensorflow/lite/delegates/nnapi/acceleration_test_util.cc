@@ -18,7 +18,7 @@ limitations under the License.
 
 namespace tflite {
 
-absl::optional<NnapiAccelerationTestParams> GetNnapiAccelerationTestParam(
+std::optional<NnapiAccelerationTestParams> GetNnapiAccelerationTestParam(
     std::string test_id) {
   return GetAccelerationTestParam<NnapiAccelerationTestParams>(test_id);
 }

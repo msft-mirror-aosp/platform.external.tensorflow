@@ -173,6 +173,7 @@ class LogEveryPow2State {
   std::atomic<uint32> counter_{0};
 };
 
+#ifdef TF_ANDROID_ENABLE_LOG_EVERY_N_SECONDS
 class LogEveryNSecState {
  public:
   bool ShouldLog(double seconds);
@@ -183,6 +184,7 @@ class LogEveryNSecState {
   // Cycle count according to CycleClock that we should next log at.
   std::atomic<int64> next_log_time_cycles_{0};
 };
+#endif
 
 // This macro has a lot going on!
 //

@@ -314,7 +314,7 @@ int CountPartitionsExecutedByCpuKernel(const Interpreter* interpreter) {
 }  // namespace
 
 void SingleOpModel::ExpectOpAcceleratedWithNnapi(const std::string& test_id) {
-  absl::optional<NnapiAccelerationTestParams> validation_params =
+  std::optional<NnapiAccelerationTestParams> validation_params =
       GetNnapiAccelerationTestParam(test_id);
   if (!validation_params.has_value()) {
     return;

@@ -20,7 +20,6 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
-#include "absl/types/optional.h"
 #include "tensorflow/lite/c/common.h"
 
 typedef struct ANeuralNetworksMemory ANeuralNetworksMemory;
@@ -167,7 +166,7 @@ class StatefulNnApiDelegate : public TfLiteDelegate {
     void CacheDelegateKernel(const TfLiteDelegateParams* delegate_params,
                              NNAPIDelegateKernel* delegate_state);
     // Returns a cached NNAPIDelegateKernel if available.
-    absl::optional<NNAPIDelegateKernel*> GetCachedDelegateKernel(
+    std::optional<NNAPIDelegateKernel*> GetCachedDelegateKernel(
         const TfLiteDelegateParams* delegate_params);
   };
 

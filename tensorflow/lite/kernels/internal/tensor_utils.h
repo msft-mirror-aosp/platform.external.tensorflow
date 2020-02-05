@@ -18,7 +18,7 @@ limitations under the License.
 #include <algorithm>
 #include <cmath>
 
-#include "third_party/eigen3/Eigen/Core"
+#include "Eigen/Core"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/kernels/cpu_backend_context.h"
 

@@ -25,7 +25,8 @@ extern "C" {
 JNIEXPORT void JNICALL
 Java_org_tensorflow_lite_flex_FlexDelegate_nativeInitTensorFlow(JNIEnv* env,
                                                                 jclass clazz) {
-  ::tflite::InitTensorFlow();
+  // Flex support not available in Android tree.
+  // ::tflite::InitTensorFlow();
 }
 
 JNIEXPORT jlong JNICALL

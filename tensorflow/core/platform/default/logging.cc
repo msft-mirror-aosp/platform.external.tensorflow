@@ -16,13 +16,18 @@ limitations under the License.
 #include "tensorflow/core/platform/default/logging.h"
 
 // TODO(b/142492876): Avoid depending on absl internal.
+#ifdef TF_ANDROID_ENABLE_LOG_EVERY_N_SECONDS
 #include "absl/base/internal/cycleclock.h"
+#endif
+#if !defined(PLATFORM_POSIX_ANDROID)
 #include "absl/base/internal/sysinfo.h"
+#endif
 #include "tensorflow/core/platform/env_time.h"
 #include "tensorflow/core/platform/macros.h"
 
 #if defined(PLATFORM_POSIX_ANDROID)
 #include <android/log.h>
+
 #include <iostream>
 #include <sstream>
 #endif
@@ -143,12 +148,14 @@ VmoduleMap* VmodulesMapFromEnv() {
   return result;
 }
 
+#if !defined(PLATFORM_POSIX_ANDROID)
 bool EmitThreadIdFromEnv() {
   const char* tf_env_var_val = getenv("TF_CPP_LOG_THREAD_ID");
   return tf_env_var_val == nullptr
              ? false
              : ParseInteger(tf_env_var_val, strlen(tf_env_var_val)) != 0;
 }
+#endif
 
 }  // namespace
 
@@ -254,8 +261,7 @@ void LogMessage::GenerateLogMessage() {
   const size_t tid_buffer_size = 10;
   char tid_buffer[tid_buffer_size] = "";
   if (log_thread_id) {
-    snprintf(tid_buffer, sizeof(tid_buffer), " %7u",
-             absl::base_internal::GetTID());
+    snprintf(tid_buffer, sizeof(tid_buffer), " %7u", gettid());
   }
   // TODO(jeff,sanjay): Replace this with something that logs through the env.
   fprintf(stderr, "%s.%06d: %c%s %s:%d] %s\n", time_buffer, micros_remainder,
@@ -380,6 +386,7 @@ bool LogEveryPow2State::ShouldLog(int ignored) {
   return (new_value & (new_value - 1)) == 0;
 }
 
+#ifdef TF_ANDROID_ENABLE_LOG_EVERY_N_SECONDS
 bool LogEveryNSecState::ShouldLog(double seconds) {
   LossyIncrement(&counter_);
   const int64 now_cycles = absl::base_internal::CycleClock::Now();
@@ -392,6 +399,7 @@ bool LogEveryNSecState::ShouldLog(double seconds) {
       std::memory_order_relaxed, std::memory_order_relaxed));
   return true;
 }
+#endif
 
 }  // namespace internal
 }  // namespace tensorflow
