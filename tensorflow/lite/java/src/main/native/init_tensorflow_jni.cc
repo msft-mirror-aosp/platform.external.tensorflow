@@ -23,7 +23,8 @@ extern "C" {
 
 JNIEXPORT void JNICALL Java_org_tensorflow_lite_TensorFlowLite_initTensorFlow(
     JNIEnv* env, jclass clazz) {
-  ::tflite::InitTensorFlow();
+  // Flex support not available in Android tree.
+  // ::tflite::InitTensorFlow();
 }
 
 #ifdef __cplusplus

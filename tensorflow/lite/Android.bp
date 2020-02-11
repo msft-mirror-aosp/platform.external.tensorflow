@@ -114,5 +114,3 @@ cc_library_shared {
 build = [
     "tflite_static.bp",
 ]
-
-subdirs = ["kernels"]
