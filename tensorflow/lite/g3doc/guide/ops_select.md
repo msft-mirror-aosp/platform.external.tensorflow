@@ -79,10 +79,10 @@ tflite_convert \
 ```
 
 When building and running `tflite_convert` directly with `bazel`, please pass
-`--define=with_select_tf_ops=true` as an additional argument.
+`--define=tflite_convert_with_select_tf_ops=true` as an additional argument.
 
 ```
-bazel run --define=with_select_tf_ops=true tflite_convert -- \
+bazel run --define=tflite_convert_with_select_tf_ops=true tflite_convert -- \
   --output_file=/tmp/foo.tflite \
   --graph_def_file=/tmp/foo.pb \
   --input_arrays=input \
@@ -99,23 +99,22 @@ includes the necessary library of TensorFlow ops.
 ### Android AAR
 
 A new Android AAR target with select TensorFlow ops has been added for
-convenience. Assuming a <a href="android.md">working TensorFlow Lite
-build environment</a>, build the Android AAR with select TensorFlow ops as
-follows:
+convenience. Assuming a <a href="android.md">working TensorFlow Lite build
+environment</a>, build the Android AAR with select TensorFlow ops as follows:
 
 ```sh
-bazel build --cxxopt='--std=c++11' -c opt             \
-  --config=android_arm --config=monolithic          \
+bazel build --cxxopt='--std=c++11' -c opt \
+  --config=android_arm --config=monolithic \
   //tensorflow/lite/java:tensorflow-lite-with-select-tf-ops
 ```
 
-This will generate an AAR file in `bazel-genfiles/tensorflow/lite/java/`. From
-there, you can either import the AAR directly into your project, or publish the
-custom AAR to your local Maven repository:
+This will generate an AAR file in `bazel-bin/tensorflow/lite/java/`. From there,
+you can either import the AAR directly into your project, or publish the custom
+AAR to your local Maven repository:
 
 ```sh
 mvn install:install-file \
-  -Dfile=bazel-genfiles/tensorflow/lite/java/tensorflow-lite-with-select-tf-ops.aar \
+  -Dfile=bazel-bin/tensorflow/lite/java/tensorflow-lite-with-select-tf-ops.aar \
   -DgroupId=org.tensorflow \
   -DartifactId=tensorflow-lite-with-select-tf-ops -Dversion=0.1.100 -Dpackaging=aar
 ```
@@ -179,11 +178,8 @@ TensorFlow ops library can be included and enabled as follows:
 
 *   Enable monolithic builds if necessary by adding the `--config=monolithic`
     build flag.
-*   Do one of the following:
-    *   Include the `--define=with_select_tf_ops=true` build flag in the `bazel
-        build` invocation when building TensorFlow Lite.
-    *   Add the TensorFlow ops delegate library dependency to the build
-        dependencies: `tensorflow/lite/delegates/flex:delegate`.
+*   Add the TensorFlow ops delegate library dependency to the build
+    dependencies: `tensorflow/lite/delegates/flex:delegate`.
 
 Note that the necessary `TfLiteDelegate` will be installed automatically when
 creating the interpreter at runtime as long as the delegate is linked into the
