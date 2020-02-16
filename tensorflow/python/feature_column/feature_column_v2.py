@@ -131,9 +131,9 @@ import abc
 import collections
 import math
 
+import re
 import numpy as np
 import six
-
 
 from tensorflow.python.eager import context
 from tensorflow.python.feature_column import feature_column as fc_old
@@ -165,6 +165,7 @@ from tensorflow.python.platform import gfile
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.training import checkpoint_utils
 from tensorflow.python.training.tracking import tracking
+from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.util import deprecation
 from tensorflow.python.util import nest
 from tensorflow.python.util.tf_export import tf_export
@@ -273,6 +274,8 @@ class _StateManagerImpl(StateManager):
     """
     self._trainable = trainable
     self._layer = layer
+    if self._layer is not None and not hasattr(self._layer, '_resources'):
+      self._layer._resources = []  # pylint: disable=protected-access
     self._cols_to_vars_map = collections.defaultdict(lambda: {})
     # TODO(vbardiovsky): Make sure the resources are tracked by moving them to
     # the layer (inheriting from AutoTrackable), e.g.:
@@ -290,17 +293,28 @@ class _StateManagerImpl(StateManager):
     if name in self._cols_to_vars_map[feature_column]:
       raise ValueError('Variable already exists.')
 
-    var = self._layer.add_variable(
-        name=name,
-        shape=shape,
-        dtype=dtype,
-        initializer=initializer,
-        trainable=self._trainable and trainable,
-        use_resource=use_resource,
-        # TODO(rohanj): Get rid of this hack once we have a mechanism for
-        # specifying a default partitioner for an entire layer. In that case,
-        # the default getter for Layers should work.
-        getter=variable_scope.get_variable)
+    # We explicitly track these variables since `name` is not guaranteed to be
+    # unique and disable manual tracking that the add_weight call does.
+    with trackable.no_manual_dependency_tracking_scope(self._layer):
+      var = self._layer.add_weight(
+          name=name,
+          shape=shape,
+          dtype=dtype,
+          initializer=initializer,
+          trainable=self._trainable and trainable,
+          use_resource=use_resource,
+          # TODO(rohanj): Get rid of this hack once we have a mechanism for
+          # specifying a default partitioner for an entire layer. In that case,
+          # the default getter for Layers should work.
+          getter=variable_scope.get_variable)
+    if isinstance(var, variables.PartitionedVariable):
+      for v in var:
+        part_name = name + '/' + str(v._get_save_slice_info().var_offset[0])  # pylint: disable=protected-access
+        self._layer._track_trackable(v, feature_column.name + '/' + part_name)  # pylint: disable=protected-access
+    else:
+      if isinstance(var, trackable.Trackable):
+        self._layer._track_trackable(var, feature_column.name + '/' + name)  # pylint: disable=protected-access
+
     self._cols_to_vars_map[feature_column][name] = var
     return var
 
@@ -311,6 +325,8 @@ class _StateManagerImpl(StateManager):
 
   def add_resource(self, feature_column, name, resource):
     self._cols_to_resources_map[feature_column][name] = resource
+    if self._layer is not None:
+      self._layer._resources.append(resource)  # pylint: disable=protected-access
 
   def get_resource(self, feature_column, name):
     if name in self._cols_to_resources_map[feature_column]:
@@ -332,13 +348,18 @@ class _StateManagerImplV2(_StateManagerImpl):
     if name in self._cols_to_vars_map[feature_column]:
       raise ValueError('Variable already exists.')
 
-    var = self._layer.add_variable(
-        name=name,
-        shape=shape,
-        dtype=dtype,
-        initializer=initializer,
-        trainable=self._trainable and trainable,
-        use_resource=use_resource)
+    # We explicitly track these variables since `name` is not guaranteed to be
+    # unique and disable manual tracking that the add_weight call does.
+    with trackable.no_manual_dependency_tracking_scope(self._layer):
+      var = self._layer.add_weight(
+          name=name,
+          shape=shape,
+          dtype=dtype,
+          initializer=initializer,
+          trainable=self._trainable and trainable,
+          use_resource=use_resource)
+    if isinstance(var, trackable.Trackable):
+      self._layer._track_trackable(var, feature_column.name + '/' + name)  # pylint: disable=protected-access
     self._cols_to_vars_map[feature_column][name] = var
     return var
 
@@ -361,12 +382,19 @@ class _BaseFeaturesLayer(Layer):
     ValueError: if an item in `feature_columns` doesn't match
       `expected_column_type`.
   """
-  def __init__(self, feature_columns, expected_column_type, trainable, name,
+
+  def __init__(self,
+               feature_columns,
+               expected_column_type,
+               trainable,
+               name,
+               partitioner=None,
                **kwargs):
     super(_BaseFeaturesLayer, self).__init__(
         name=name, trainable=trainable, **kwargs)
     self._feature_columns = _normalize_feature_columns(feature_columns)
     self._state_manager = _StateManagerImpl(self, self.trainable)
+    self._partitioner = partitioner
     for column in self._feature_columns:
       if not isinstance(column, expected_column_type):
         raise ValueError(
@@ -377,8 +405,11 @@ class _BaseFeaturesLayer(Layer):
 
   def build(self, _):
     for column in self._feature_columns:
-      with variable_scope._pure_variable_scope(self.name):  # pylint: disable=protected-access
-        with variable_scope._pure_variable_scope(column.name):  # pylint: disable=protected-access
+      with variable_scope._pure_variable_scope(  # pylint: disable=protected-access
+          self.name,
+          partitioner=self._partitioner):
+        with variable_scope._pure_variable_scope(  # pylint: disable=protected-access
+            _sanitize_column_name_for_variable_scope(column.name)):
           column.create_state(self._state_manager)
     super(_BaseFeaturesLayer, self).build(None)
 
@@ -424,6 +455,8 @@ class _BaseFeaturesLayer(Layer):
     column_configs = serialization.serialize_feature_columns(
         self._feature_columns)
     config = {'feature_columns': column_configs}
+    config['partitioner'] = generic_utils.serialize_keras_object(
+        self._partitioner)
 
     base_config = super(  # pylint: disable=bad-super-call
         _BaseFeaturesLayer, self).get_config()
@@ -436,6 +469,8 @@ class _BaseFeaturesLayer(Layer):
     config_cp = config.copy()
     config_cp['feature_columns'] = serialization.deserialize_feature_columns(
         config['feature_columns'], custom_objects=custom_objects)
+    config_cp['partitioner'] = generic_utils.deserialize_keras_object(
+        config['partitioner'], custom_objects)
 
     return cls(**config_cp)
 
@@ -473,7 +508,8 @@ class _LinearModelLayer(Layer):
     # the ops.
     with variable_scope._pure_variable_scope(self.name):  # pylint: disable=protected-access
       for column in self._feature_columns:
-        with variable_scope._pure_variable_scope(column.name):  # pylint: disable=protected-access
+        with variable_scope._pure_variable_scope(  # pylint: disable=protected-access
+            _sanitize_column_name_for_variable_scope(column.name)):
           # Create the state for each feature column
           column.create_state(self._state_manager)
 
@@ -513,7 +549,8 @@ class _LinearModelLayer(Layer):
       transformation_cache = FeatureTransformationCache(features)
       weighted_sums = []
       for column in self._feature_columns:
-        with ops.name_scope(column.name):
+        with ops.name_scope(
+            _sanitize_column_name_for_variable_scope(column.name)):
           # All the weights used in the linear model are owned by the state
           # manager associated with this Linear Model.
           weight_var = self._state_manager.get_variable(column, 'weights')
@@ -736,7 +773,9 @@ def _transform_features_v2(features, feature_columns, state_manager):
       None, default_name='transform_features', values=features.values()):
     transformation_cache = FeatureTransformationCache(features)
     for column in feature_columns:
-      with ops.name_scope(None, default_name=column.name):
+      with ops.name_scope(
+          None,
+          default_name=_sanitize_column_name_for_variable_scope(column.name)):
         outputs[column] = transformation_cache.get(column, state_manager)
   return outputs
 
@@ -752,17 +791,18 @@ def make_parse_example_spec_v2(feature_columns):
 
   ```python
   # Define features and transformations
-  feature_a = categorical_column_with_vocabulary_file(...)
-  feature_b = numeric_column(...)
-  feature_c_bucketized = bucketized_column(numeric_column("feature_c"), ...)
-  feature_a_x_feature_c = crossed_column(
+  feature_a = tf.feature_column.categorical_column_with_vocabulary_file(...)
+  feature_b = tf.feature_column.numeric_column(...)
+  feature_c_bucketized = tf.feature_column.bucketized_column(
+      tf.feature_column.numeric_column("feature_c"), ...)
+  feature_a_x_feature_c = tf.feature_column.crossed_column(
       columns=["feature_a", feature_c_bucketized], ...)
 
   feature_columns = set(
       [feature_b, feature_c_bucketized, feature_a_x_feature_c])
   features = tf.io.parse_example(
       serialized=serialized_examples,
-      features=make_parse_example_spec(feature_columns))
+      features=tf.feature_column.make_parse_example_spec(feature_columns))
   ```
 
   For the above example, make_parse_example_spec would return the dict:
@@ -810,7 +850,8 @@ def embedding_column(categorical_column,
                      ckpt_to_load_from=None,
                      tensor_name_in_ckpt=None,
                      max_norm=None,
-                     trainable=True):
+                     trainable=True,
+                     use_safe_embedding_lookup=True):
   """`DenseColumn` that converts from sparse, categorical input.
 
   Use this when your inputs are sparse, but you want to convert them to a dense
@@ -871,6 +912,13 @@ def embedding_column(categorical_column,
       `None`.
     max_norm: If not `None`, embedding values are l2-normalized to this value.
     trainable: Whether or not the embedding is trainable. Default is True.
+    use_safe_embedding_lookup: If true, uses safe_embedding_lookup_sparse
+      instead of embedding_lookup_sparse. safe_embedding_lookup_sparse ensures
+      there are no empty rows and all weights and ids are positive at the
+      expense of extra compute cost. This only applies to rank 2 (NxM) shaped
+      input tensors. Defaults to true, consider turning off if the above checks
+      are not needed. Note that having empty rows will not trigger any error
+      though the output result might be 0 or omitted.
 
   Returns:
     `DenseColumn` that converts from sparse input.
@@ -904,7 +952,8 @@ def embedding_column(categorical_column,
       ckpt_to_load_from=ckpt_to_load_from,
       tensor_name_in_ckpt=tensor_name_in_ckpt,
       max_norm=max_norm,
-      trainable=trainable)
+      trainable=trainable,
+      use_safe_embedding_lookup=use_safe_embedding_lookup)
 
 
 @tf_export(v1=['feature_column.shared_embedding_columns'])
@@ -916,7 +965,8 @@ def shared_embedding_columns(categorical_columns,
                              ckpt_to_load_from=None,
                              tensor_name_in_ckpt=None,
                              max_norm=None,
-                             trainable=True):
+                             trainable=True,
+                             use_safe_embedding_lookup=True):
   """List of dense columns that convert from sparse, categorical input.
 
   This is similar to `embedding_column`, except that it produces a list of
@@ -999,6 +1049,13 @@ def shared_embedding_columns(categorical_columns,
     max_norm: If not `None`, each embedding is clipped if its l2-norm is larger
       than this value, before combining.
     trainable: Whether or not the embedding is trainable. Default is True.
+    use_safe_embedding_lookup: If true, uses safe_embedding_lookup_sparse
+      instead of embedding_lookup_sparse. safe_embedding_lookup_sparse ensures
+      there are no empty rows and all weights and ids are positive at the
+      expense of extra compute cost. This only applies to rank 2 (NxM) shaped
+      input tensors. Defaults to true, consider turning off if the above checks
+      are not needed. Note that having empty rows will not trigger any error
+      though the output result might be 0 or omitted.
 
   Returns:
     A list of dense columns that converts from sparse input. The order of
@@ -1039,19 +1096,21 @@ def shared_embedding_columns(categorical_columns,
     raise ValueError(
         'All categorical_columns must be subclasses of _CategoricalColumn. '
         'Given: {}, of type: {}'.format(c0, type(c0)))
-  if isinstance(c0,
-                (fc_old._WeightedCategoricalColumn, WeightedCategoricalColumn)):  # pylint: disable=protected-access
+  while isinstance(
+      c0, (fc_old._WeightedCategoricalColumn, WeightedCategoricalColumn,  # pylint: disable=protected-access
+           fc_old._SequenceCategoricalColumn, SequenceCategoricalColumn)):  # pylint: disable=protected-access
     c0 = c0.categorical_column
   for c in sorted_columns[1:]:
-    if isinstance(
-        c, (fc_old._WeightedCategoricalColumn, WeightedCategoricalColumn)):  # pylint: disable=protected-access
+    while isinstance(
+        c, (fc_old._WeightedCategoricalColumn, WeightedCategoricalColumn,  # pylint: disable=protected-access
+            fc_old._SequenceCategoricalColumn, SequenceCategoricalColumn)):  # pylint: disable=protected-access
       c = c.categorical_column
     if not isinstance(c, type(c0)):
       raise ValueError(
           'To use shared_embedding_column, all categorical_columns must have '
-          'the same type, or be weighted_categorical_column of the same type. '
-          'Given column: {} of type: {} does not match given column: {} of '
-          'type: {}'.format(c0, type(c0), c, type(c)))
+          'the same type, or be weighted_categorical_column or sequence column '
+          'of the same type. Given column: {} of type: {} does not match given '
+          'column: {} of type: {}'.format(c0, type(c0), c, type(c)))
     if num_buckets != c._num_buckets:  # pylint: disable=protected-access
       raise ValueError(
           'To use shared_embedding_column, all categorical_columns must have '
@@ -1075,7 +1134,8 @@ def shared_embedding_columns(categorical_columns,
             ckpt_to_load_from=ckpt_to_load_from,
             tensor_name_in_ckpt=tensor_name_in_ckpt,
             max_norm=max_norm,
-            trainable=trainable))
+            trainable=trainable,
+            use_safe_embedding_lookup=use_safe_embedding_lookup))
 
   return result
 
@@ -1089,7 +1149,8 @@ def shared_embedding_columns_v2(categorical_columns,
                                 ckpt_to_load_from=None,
                                 tensor_name_in_ckpt=None,
                                 max_norm=None,
-                                trainable=True):
+                                trainable=True,
+                                use_safe_embedding_lookup=True):
   """List of dense columns that convert from sparse, categorical input.
 
   This is similar to `embedding_column`, except that it produces a list of
@@ -1171,6 +1232,13 @@ def shared_embedding_columns_v2(categorical_columns,
     max_norm: If not `None`, each embedding is clipped if its l2-norm is
       larger than this value, before combining.
     trainable: Whether or not the embedding is trainable. Default is True.
+    use_safe_embedding_lookup: If true, uses safe_embedding_lookup_sparse
+      instead of embedding_lookup_sparse. safe_embedding_lookup_sparse ensures
+      there are no empty rows and all weights and ids are positive at the
+      expense of extra compute cost. This only applies to rank 2 (NxM) shaped
+      input tensors. Defaults to true, consider turning off if the above checks
+      are not needed. Note that having empty rows will not trigger any error
+      though the output result might be 0 or omitted.
 
   Returns:
     A list of dense columns that converts from sparse input. The order of
@@ -1211,17 +1279,17 @@ def shared_embedding_columns_v2(categorical_columns,
     raise ValueError(
         'All categorical_columns must be subclasses of CategoricalColumn. '
         'Given: {}, of type: {}'.format(c0, type(c0)))
-  if isinstance(c0, WeightedCategoricalColumn):
+  while isinstance(c0, (WeightedCategoricalColumn, SequenceCategoricalColumn)):
     c0 = c0.categorical_column
   for c in sorted_columns[1:]:
-    if isinstance(c, WeightedCategoricalColumn):
+    while isinstance(c, (WeightedCategoricalColumn, SequenceCategoricalColumn)):
       c = c.categorical_column
     if not isinstance(c, type(c0)):
       raise ValueError(
           'To use shared_embedding_column, all categorical_columns must have '
-          'the same type, or be weighted_categorical_column of the same type. '
-          'Given column: {} of type: {} does not match given column: {} of '
-          'type: {}'.format(c0, type(c0), c, type(c)))
+          'the same type, or be weighted_categorical_column or sequence column '
+          'of the same type. Given column: {} of type: {} does not match given '
+          'column: {} of type: {}'.format(c0, type(c0), c, type(c)))
     if num_buckets != c.num_buckets:
       raise ValueError(
           'To use shared_embedding_column, all categorical_columns must have '
@@ -1235,7 +1303,8 @@ def shared_embedding_columns_v2(categorical_columns,
 
   column_creator = SharedEmbeddingColumnCreator(
       dimension, initializer, ckpt_to_load_from, tensor_name_in_ckpt,
-      num_buckets, trainable, shared_embedding_collection_name)
+      num_buckets, trainable, shared_embedding_collection_name,
+      use_safe_embedding_lookup)
 
   result = []
   for column in categorical_columns:
@@ -1325,7 +1394,7 @@ def numeric_column(key,
 
 @tf_export('feature_column.bucketized_column')
 def bucketized_column(source_column, boundaries):
-  """Represents discretized dense input.
+  """Represents discretized dense input bucketed by `boundaries`.
 
   Buckets include the left boundary, and exclude the right boundary. Namely,
   `boundaries=[0., 1., 2.]` generates buckets `(-inf, 0.)`, `[0., 1.)`,
@@ -1351,30 +1420,31 @@ def bucketized_column(source_column, boundaries):
   Example:
 
   ```python
-  price = numeric_column('price')
-  bucketized_price = bucketized_column(price, boundaries=[...])
+  price = tf.feature_column.numeric_column('price')
+  bucketized_price = tf.feature_column.bucketized_column(
+      price, boundaries=[...])
   columns = [bucketized_price, ...]
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
-  linear_prediction = linear_model(features, columns)
-
-  # or
-  columns = [bucketized_price, ...]
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
-  dense_tensor = input_layer(features, columns)
+  features = tf.io.parse_example(
+      ..., features=tf.feature_column.make_parse_example_spec(columns))
+  dense_tensor = tf.keras.layers.DenseFeatures(columns)(features)
   ```
 
   `bucketized_column` can also be crossed with another categorical column using
   `crossed_column`:
 
   ```python
-  price = numeric_column('price')
+  price = tf.feature_column.numeric_column('price')
   # bucketized_column converts numerical feature to a categorical one.
-  bucketized_price = bucketized_column(price, boundaries=[...])
+  bucketized_price = tf.feature_column.bucketized_column(
+      price, boundaries=[...])
   # 'keywords' is a string feature.
-  price_x_keywords = crossed_column([bucketized_price, 'keywords'], 50K)
+  price_x_keywords = tf.feature_column.crossed_column(
+      [bucketized_price, 'keywords'], 50K)
   columns = [price_x_keywords, ...]
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
-  linear_prediction = linear_model(features, columns)
+  features = tf.io.parse_example(
+      ..., features=tf.feature_column.make_parse_example_spec(columns))
+  dense_tensor = tf.keras.layers.DenseFeatures(columns)(features)
+  linear_model = tf.keras.experimental.LinearModel(units=...)(dense_tensor)
   ```
 
   Args:
@@ -1650,7 +1720,7 @@ def categorical_column_with_vocabulary_file_v2(key,
     if not gfile.Exists(vocabulary_file):
       raise ValueError('vocabulary_file in {} does not exist.'.format(key))
 
-    with gfile.GFile(vocabulary_file) as f:
+    with gfile.GFile(vocabulary_file, mode='rb') as f:
       vocabulary_size = sum(1 for _ in f)
     logging.info(
         'vocabulary_size = %d in %s is inferred from the number of elements '
@@ -1839,9 +1909,9 @@ def categorical_column_with_identity(key, num_buckets, default_value=None):
       column name and the dictionary key for feature parsing configs, feature
       `Tensor` objects, and feature columns.
     num_buckets: Range of inputs and outputs is `[0, num_buckets)`.
-    default_value: If `None`, this column's graph operations will fail for
-      out-of-range inputs. Otherwise, this value must be in the range
-      `[0, num_buckets)`, and will replace inputs in that range.
+    default_value: If set, values outside of range `[0, num_buckets)` will
+      be replaced with this value. If not set, values >= num_buckets will
+      cause a failure while values < 0 will be dropped.
 
   Returns:
     A `CategoricalColumn` that returns identity values.
@@ -1894,7 +1964,15 @@ def indicator_column(categorical_column):
 
   Returns:
     An `IndicatorColumn`.
+
+  Raises:
+    ValueError: If `categorical_column` is not CategoricalColumn type.
   """
+  if not isinstance(categorical_column,
+                    (CategoricalColumn, fc_old._CategoricalColumn)):  # pylint: disable=protected-access
+    raise ValueError(
+        'Unsupported input type. Input must be a CategoricalColumn. '
+        'Given: {}'.format(categorical_column))
   return IndicatorColumn(categorical_column)
 
 
@@ -2250,8 +2328,7 @@ class FeatureColumn(object):
     """
     pass
 
-  @abc.abstractmethod
-  def _get_config(self):
+  def get_config(self):
     """Returns the config of the feature column.
 
     A FeatureColumn config is a Python dictionary (serializable) containing the
@@ -2268,7 +2345,7 @@ class FeatureColumn(object):
             'SerializationExampleFeatureColumn',
             ('dimension', 'parent', 'dtype', 'normalizer_fn'))):
 
-      def _get_config(self):
+      def get_config(self):
         # Create a dict from the namedtuple.
         # Python attribute literals can be directly copied from / to the config.
         # For example 'dimension', assuming it is an integer literal.
@@ -2289,8 +2366,8 @@ class FeatureColumn(object):
         return config
 
       @classmethod
-      def _from_config(cls, config, custom_objects=None, columns_by_name=None):
-        # This should do the inverse transform from `_get_config` and construct
+      def from_config(cls, config, custom_objects=None, columns_by_name=None):
+        # This should do the inverse transform from `get_config` and construct
         # the namedtuple.
         kwargs = config.copy()
         kwargs['parent'] = deserialize_feature_column(
@@ -2305,21 +2382,24 @@ class FeatureColumn(object):
       A serializable Dict that can be used to deserialize the object with
       from_config.
     """
-    pass
+    return self._get_config()
+
+  def _get_config(self):
+    raise NotImplementedError('Must be implemented in subclasses.')
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """Creates a FeatureColumn from its config.
 
-    This method should be the reverse of `_get_config`, capable of instantiating
-    the same FeatureColumn from the config dictionary. See `_get_config` for an
+    This method should be the reverse of `get_config`, capable of instantiating
+    the same FeatureColumn from the config dictionary. See `get_config` for an
     example of common (de)serialization practices followed in this file.
 
     TODO(b/118939620): This is a private method until consensus is reached on
     supporting object deserialization deduping within Keras.
 
     Args:
-      config: A Dict config acquired with `_get_config`.
+      config: A Dict config acquired with `get_config`.
       custom_objects: Optional dictionary mapping names (strings) to custom
         classes or functions to be considered during deserialization.
       columns_by_name: A Dict[String, FeatureColumn] of existing columns in
@@ -2329,7 +2409,11 @@ class FeatureColumn(object):
     Returns:
       A FeatureColumn for the input config.
     """
-    pass
+    return cls._from_config(config, custom_objects, columns_by_name)
+
+  @classmethod
+  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+    raise NotImplementedError('Must be implemented in subclasses.')
 
 
 class DenseColumn(FeatureColumn):
@@ -2631,7 +2715,7 @@ class FeatureTransformationCache(object):
     if rank is not None:
       if rank == 0:
         raise ValueError(
-            'Feature (key: {}) cannot have rank 0. Give: {}'.format(
+            'Feature (key: {}) cannot have rank 0. Given: {}'.format(
                 key, feature_tensor))
       return feature_tensor if rank != 1 else expand_dims(feature_tensor)
 
@@ -2842,7 +2926,7 @@ class NumericColumn(
     """See 'FeatureColumn` base class."""
     return [self.key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     config = dict(zip(self._fields, self))
     config['normalizer_fn'] = generic_utils.serialize_keras_object(
@@ -2851,7 +2935,7 @@ class NumericColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -2999,7 +3083,7 @@ class BucketizedColumn(
     """See 'FeatureColumn` base class."""
     return [self.source_column]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -3007,7 +3091,7 @@ class BucketizedColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
@@ -3025,8 +3109,31 @@ class EmbeddingColumn(
     collections.namedtuple(
         'EmbeddingColumn',
         ('categorical_column', 'dimension', 'combiner', 'initializer',
-         'ckpt_to_load_from', 'tensor_name_in_ckpt', 'max_norm', 'trainable'))):
+         'ckpt_to_load_from', 'tensor_name_in_ckpt', 'max_norm', 'trainable',
+         'use_safe_embedding_lookup'))):
   """See `embedding_column`."""
+
+  def __new__(cls,
+              categorical_column,
+              dimension,
+              combiner,
+              initializer,
+              ckpt_to_load_from,
+              tensor_name_in_ckpt,
+              max_norm,
+              trainable,
+              use_safe_embedding_lookup=True):
+    return super(EmbeddingColumn, cls).__new__(
+        cls,
+        categorical_column=categorical_column,
+        dimension=dimension,
+        combiner=combiner,
+        initializer=initializer,
+        ckpt_to_load_from=ckpt_to_load_from,
+        tensor_name_in_ckpt=tensor_name_in_ckpt,
+        max_norm=max_norm,
+        trainable=trainable,
+        use_safe_embedding_lookup=use_safe_embedding_lookup)
 
   @property
   def _is_v2_column(self):
@@ -3071,8 +3178,11 @@ class EmbeddingColumn(
 
   def create_state(self, state_manager):
     """Creates the embedding lookup variable."""
+    default_num_buckets = (self.categorical_column.num_buckets
+                           if self._is_v2_column
+                           else self.categorical_column._num_buckets)   # pylint: disable=protected-access
     num_buckets = getattr(self.categorical_column, 'num_buckets',
-                          self.categorical_column._num_buckets)  # pylint: disable=protected-access
+                          default_num_buckets)
     embedding_shape = (num_buckets, self.dimension)
     state_manager.create_variable(
         self,
@@ -3096,11 +3206,17 @@ class EmbeddingColumn(
           self.tensor_name_in_ckpt: to_restore
       })
 
+    sparse_id_rank = tensor_shape.dimension_value(
+        sparse_ids.dense_shape.get_shape()[0])
+    embedding_lookup_sparse = embedding_ops.safe_embedding_lookup_sparse
+    if (not self.use_safe_embedding_lookup and sparse_id_rank is not None and
+        sparse_id_rank <= 2):
+      embedding_lookup_sparse = embedding_ops.embedding_lookup_sparse
     # Return embedding lookup result.
-    return embedding_ops.safe_embedding_lookup_sparse(
-        embedding_weights=embedding_weights,
-        sparse_ids=sparse_ids,
-        sparse_weights=sparse_weights,
+    return embedding_lookup_sparse(
+        embedding_weights,
+        sparse_ids,
+        sparse_weights,
         combiner=self.combiner,
         name='%s_weights' % self.name,
         max_norm=self.max_norm)
@@ -3229,7 +3345,7 @@ class EmbeddingColumn(
     """See 'FeatureColumn` base class."""
     return [self.categorical_column]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -3239,8 +3355,10 @@ class EmbeddingColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
+    if 'use_safe_embedding_lookup' not in config:
+      config['use_safe_embedding_lookup'] = True
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -3266,7 +3384,8 @@ class SharedEmbeddingColumnCreator(tracking.AutoTrackable):
                tensor_name_in_ckpt,
                num_buckets,
                trainable,
-               name='shared_embedding_column_creator'):
+               name='shared_embedding_column_creator',
+               use_safe_embedding_lookup=True):
     self._dimension = dimension
     self._initializer = initializer
     self._ckpt_to_load_from = ckpt_to_load_from
@@ -3274,11 +3393,13 @@ class SharedEmbeddingColumnCreator(tracking.AutoTrackable):
     self._num_buckets = num_buckets
     self._trainable = trainable
     self._name = name
+    self._use_safe_embedding_lookup = use_safe_embedding_lookup
     # Map from graph keys to embedding_weight variables.
     self._embedding_weights = {}
 
   def __call__(self, categorical_column, combiner, max_norm):
-    return SharedEmbeddingColumn(categorical_column, self, combiner, max_norm)
+    return SharedEmbeddingColumn(categorical_column, self, combiner, max_norm,
+                                 self._use_safe_embedding_lookup)
 
   @property
   def embedding_weights(self):
@@ -3314,8 +3435,22 @@ class SharedEmbeddingColumn(
     collections.namedtuple(
         'SharedEmbeddingColumn',
         ('categorical_column', 'shared_embedding_column_creator', 'combiner',
-         'max_norm'))):
+         'max_norm', 'use_safe_embedding_lookup'))):
   """See `embedding_column`."""
+
+  def __new__(cls,
+              categorical_column,
+              shared_embedding_column_creator,
+              combiner,
+              max_norm,
+              use_safe_embedding_lookup=True):
+    return super(SharedEmbeddingColumn, cls).__new__(
+        cls,
+        categorical_column=categorical_column,
+        shared_embedding_column_creator=shared_embedding_column_creator,
+        combiner=combiner,
+        max_norm=max_norm,
+        use_safe_embedding_lookup=use_safe_embedding_lookup)
 
   @property
   def _is_v2_column(self):
@@ -3366,11 +3501,17 @@ class SharedEmbeddingColumn(
 
       embedding_weights = self.shared_embedding_column_creator.embedding_weights
 
+      sparse_id_rank = tensor_shape.dimension_value(
+          sparse_ids.dense_shape.get_shape()[0])
+      embedding_lookup_sparse = embedding_ops.safe_embedding_lookup_sparse
+      if (not self.use_safe_embedding_lookup and sparse_id_rank is not None and
+          sparse_id_rank <= 2):
+        embedding_lookup_sparse = (embedding_ops.embedding_lookup_sparse)
       # Return embedding lookup result.
-      return embedding_ops.safe_embedding_lookup_sparse(
-          embedding_weights=embedding_weights,
-          sparse_ids=sparse_ids,
-          sparse_weights=sparse_weights,
+      return embedding_lookup_sparse(
+          embedding_weights,
+          sparse_ids,
+          sparse_weights,
           combiner=self.combiner,
           name='%s_weights' % self.name,
           max_norm=self.max_norm)
@@ -3421,15 +3562,6 @@ class SharedEmbeddingColumn(
   def parents(self):
     """See 'FeatureColumn` base class."""
     return [self.categorical_column]
-
-  def _get_config(self):
-    """See 'FeatureColumn` base class."""
-    raise NotImplementedError()
-
-  @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
-    """See 'FeatureColumn` base class."""
-    raise NotImplementedError()
 
 
 def _check_shape(shape, key):
@@ -3541,14 +3673,14 @@ class HashedCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     config = dict(zip(self._fields, self))
     config['dtype'] = self.dtype.name
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -3584,7 +3716,7 @@ class VocabularyFileCategoricalColumn(
   def _parse_example_spec(self):
     return self.parse_example_spec
 
-  def _transform_input_tensor(self, input_tensor):
+  def _transform_input_tensor(self, input_tensor, state_manager=None):
     """Creates a lookup table for the vocabulary."""
     if self.dtype.is_integer != input_tensor.dtype.is_integer:
       raise ValueError(
@@ -3602,20 +3734,23 @@ class VocabularyFileCategoricalColumn(
       key_dtype = dtypes.int64
       input_tensor = math_ops.cast(input_tensor, dtypes.int64)
 
-    # TODO(rohanj): Use state manager to manage the index table creation.
-    return lookup_ops.index_table_from_file(
+    name = '{}_lookup'.format(self.key)
+    table = lookup_ops.index_table_from_file(
         vocabulary_file=self.vocabulary_file,
         num_oov_buckets=self.num_oov_buckets,
         vocab_size=self.vocabulary_size,
         default_value=self.default_value,
         key_dtype=key_dtype,
-        name='{}_lookup'.format(self.key)).lookup(input_tensor)
+        name=name)
+    if state_manager is not None:
+      state_manager.add_resource(self, name, table)
+    return table.lookup(input_tensor)
 
   def transform_feature(self, transformation_cache, state_manager):
     """Creates a lookup table for the vocabulary."""
     input_tensor = _to_sparse_input_and_drop_ignore_values(
         transformation_cache.get(self.key, state_manager))
-    return self._transform_input_tensor(input_tensor)
+    return self._transform_input_tensor(input_tensor, state_manager)
 
   @deprecation.deprecated(_FEATURE_COLUMN_DEPRECATION_DATE,
                           _FEATURE_COLUMN_DEPRECATION)
@@ -3652,14 +3787,14 @@ class VocabularyFileCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     config = dict(zip(self._fields, self))
     config['dtype'] = self.dtype.name
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -3696,7 +3831,7 @@ class VocabularyListCategoricalColumn(
   def _parse_example_spec(self):
     return self.parse_example_spec
 
-  def _transform_input_tensor(self, input_tensor):
+  def _transform_input_tensor(self, input_tensor, state_manager=None):
     """Creates a lookup table for the vocabulary list."""
     if self.dtype.is_integer != input_tensor.dtype.is_integer:
       raise ValueError(
@@ -3714,19 +3849,22 @@ class VocabularyListCategoricalColumn(
       key_dtype = dtypes.int64
       input_tensor = math_ops.cast(input_tensor, dtypes.int64)
 
-    # TODO(rohanj): Use state manager to manage the index table creation.
-    return lookup_ops.index_table_from_tensor(
+    name = '{}_lookup'.format(self.key)
+    table = lookup_ops.index_table_from_tensor(
         vocabulary_list=tuple(self.vocabulary_list),
         default_value=self.default_value,
         num_oov_buckets=self.num_oov_buckets,
         dtype=key_dtype,
-        name='{}_lookup'.format(self.key)).lookup(input_tensor)
+        name=name)
+    if state_manager is not None:
+      state_manager.add_resource(self, name, table)
+    return table.lookup(input_tensor)
 
   def transform_feature(self, transformation_cache, state_manager):
     """Creates a lookup table for the vocabulary list."""
     input_tensor = _to_sparse_input_and_drop_ignore_values(
         transformation_cache.get(self.key, state_manager))
-    return self._transform_input_tensor(input_tensor)
+    return self._transform_input_tensor(input_tensor, state_manager)
 
   @deprecation.deprecated(_FEATURE_COLUMN_DEPRECATION_DATE,
                           _FEATURE_COLUMN_DEPRECATION)
@@ -3763,14 +3901,14 @@ class VocabularyListCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     config = dict(zip(self._fields, self))
     config['dtype'] = self.dtype.name
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -3812,22 +3950,14 @@ class IdentityCategoricalColumn(
       raise ValueError(
           'Invalid input, not integer. key: {} dtype: {}'.format(
               self.key, input_tensor.dtype))
-
-    values = math_ops.cast(input_tensor.values, dtypes.int64, name='values')
-    num_buckets = math_ops.cast(
-        self.num_buckets, dtypes.int64, name='num_buckets')
-    zero = math_ops.cast(0, dtypes.int64, name='zero')
-    if self.default_value is None:
-      # Fail if values are out-of-range.
-      assert_less = check_ops.assert_less(
-          values, num_buckets, data=(values, num_buckets),
-          name='assert_less_than_num_buckets')
-      assert_greater = check_ops.assert_greater_equal(
-          values, zero, data=(values,),
-          name='assert_greater_or_equal_0')
-      with ops.control_dependencies((assert_less, assert_greater)):
-        values = array_ops.identity(values)
-    else:
+    values = input_tensor.values
+    if input_tensor.values.dtype != dtypes.int64:
+      values = math_ops.cast(values, dtypes.int64, name='values')
+    if self.default_value is not None:
+      values = math_ops.cast(input_tensor.values, dtypes.int64, name='values')
+      num_buckets = math_ops.cast(
+          self.num_buckets, dtypes.int64, name='num_buckets')
+      zero = math_ops.cast(0, dtypes.int64, name='zero')
       # Assign default for out-of-range values.
       values = array_ops.where_v2(
           math_ops.logical_or(
@@ -3883,12 +4013,12 @@ class IdentityCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     return dict(zip(self._fields, self))
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     _check_config_keys(config, cls._fields)
     kwargs = _standardize_and_copy_config(config)
@@ -3966,9 +4096,10 @@ class WeightedCategoricalColumn(
     """Applies weights to tensor generated from `categorical_column`'."""
     weight_tensor = transformation_cache.get(self.weight_feature_key,
                                              state_manager)
-    weight_tensor = self._transform_weight_tensor(weight_tensor)
-    return (transformation_cache.get(self.categorical_column, state_manager),
-            weight_tensor)
+    sparse_weight_tensor = self._transform_weight_tensor(weight_tensor)
+    sparse_categorical_tensor = _to_sparse_input_and_drop_ignore_values(
+        transformation_cache.get(self.categorical_column, state_manager))
+    return (sparse_categorical_tensor, sparse_weight_tensor)
 
   @deprecation.deprecated(_FEATURE_COLUMN_DEPRECATION_DATE,
                           _FEATURE_COLUMN_DEPRECATION)
@@ -3997,7 +4128,7 @@ class WeightedCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.categorical_column, self.weight_feature_key]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -4007,7 +4138,7 @@ class WeightedCategoricalColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
@@ -4141,7 +4272,7 @@ class CrossedColumn(
     """See 'FeatureColumn` base class."""
     return list(self.keys)
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -4149,7 +4280,7 @@ class CrossedColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
@@ -4224,16 +4355,14 @@ class IndicatorColumn(
     """See `FeatureColumn` base class."""
     return '{}_indicator'.format(self.categorical_column.name)
 
-  def _transform_id_weight_pair(self, id_weight_pair):
+  def _transform_id_weight_pair(self, id_weight_pair, size):
     id_tensor = id_weight_pair.id_tensor
     weight_tensor = id_weight_pair.weight_tensor
 
     # If the underlying column is weighted, return the input as a dense tensor.
     if weight_tensor is not None:
       weighted_column = sparse_ops.sparse_merge(
-          sp_ids=id_tensor,
-          sp_values=weight_tensor,
-          vocab_size=int(self._variable_shape[-1]))
+          sp_ids=id_tensor, sp_values=weight_tensor, vocab_size=int(size))
       # Remove (?, -1) index.
       weighted_column = sparse_ops.sparse_slice(weighted_column, [0, 0],
                                                 weighted_column.dense_shape)
@@ -4249,10 +4378,7 @@ class IndicatorColumn(
     # One hot must be float for tf.concat reasons since all other inputs to
     # input_layer are float32.
     one_hot_id_tensor = array_ops.one_hot(
-        dense_id_tensor,
-        depth=self._variable_shape[-1],
-        on_value=1.0,
-        off_value=0.0)
+        dense_id_tensor, depth=size, on_value=1.0, off_value=0.0)
 
     # Reduce to get a multi-hot per example.
     return math_ops.reduce_sum(one_hot_id_tensor, axis=[-2])
@@ -4274,13 +4400,15 @@ class IndicatorColumn(
     """
     id_weight_pair = self.categorical_column.get_sparse_tensors(
         transformation_cache, state_manager)
-    return self._transform_id_weight_pair(id_weight_pair)
+    return self._transform_id_weight_pair(id_weight_pair,
+                                          self.variable_shape[-1])
 
   @deprecation.deprecated(_FEATURE_COLUMN_DEPRECATION_DATE,
                           _FEATURE_COLUMN_DEPRECATION)
   def _transform_feature(self, inputs):
     id_weight_pair = self.categorical_column._get_sparse_tensors(inputs)  # pylint: disable=protected-access
-    return self._transform_id_weight_pair(id_weight_pair)
+    return self._transform_id_weight_pair(id_weight_pair,
+                                          self._variable_shape[-1])
 
   @property
   def parse_example_spec(self):
@@ -4411,7 +4539,7 @@ class IndicatorColumn(
     """See 'FeatureColumn` base class."""
     return [self.categorical_column]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -4420,7 +4548,7 @@ class IndicatorColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
@@ -4557,7 +4685,7 @@ class SequenceCategoricalColumn(
     """See 'FeatureColumn` base class."""
     return [self.categorical_column]
 
-  def _get_config(self):
+  def get_config(self):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import serialize_feature_column  # pylint: disable=g-import-not-at-top
     config = dict(zip(self._fields, self))
@@ -4566,7 +4694,7 @@ class SequenceCategoricalColumn(
     return config
 
   @classmethod
-  def _from_config(cls, config, custom_objects=None, columns_by_name=None):
+  def from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
     from tensorflow.python.feature_column.serialization import deserialize_feature_column  # pylint: disable=g-import-not-at-top
     _check_config_keys(config, cls._fields)
@@ -4604,3 +4732,9 @@ def _standardize_and_copy_config(config):
       kwargs[k] = tuple(v)
 
   return kwargs
+
+
+def _sanitize_column_name_for_variable_scope(name):
+  """Sanitizes user-provided feature names for use as variable scopes."""
+  invalid_char = re.compile('[^A-Za-z0-9_.\\-]')
+  return invalid_char.sub('_', name)

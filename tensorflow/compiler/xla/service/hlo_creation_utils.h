@@ -76,6 +76,9 @@ StatusOr<HloInstruction*> MakeReshapeHlo(
 // containing `operand` and `start_indices` (`operand` and `start_indices` must
 // be in the same computation).
 StatusOr<HloInstruction*> MakeDynamicSliceHlo(
+    HloInstruction* operand, absl::Span<HloInstruction* const> start_indices,
+    absl::Span<const int64> slice_sizes);
+StatusOr<HloInstruction*> MakeDynamicSliceHlo(
     HloInstruction* operand, HloInstruction* start_indices,
     absl::Span<const int64> slice_sizes);
 
@@ -91,6 +94,9 @@ StatusOr<HloInstruction*> MakeDynamicUpdateSliceHlo(
 HloInstruction* MakeBroadcastHlo(HloInstruction* operand,
                                  absl::Span<const int64> broadcast_dimensions,
                                  absl::Span<const int64> result_shape_bounds);
+HloInstruction* MakeBroadcastHlo(HloInstruction* operand,
+                                 absl::Span<const int64> broadcast_dimensions,
+                                 const Shape& shape);
 
 // Creates a GetTupleElement HLO instruction and adds it to the computation
 // containing `operand`.
@@ -106,6 +112,14 @@ StatusOr<HloInstruction*> MakeConcatHlo(
 // Creates a Convert HLO instruction that converts the given instruction to have
 // the given primitive type.
 HloInstruction* MakeConvertToHlo(HloInstruction* hlo, PrimitiveType type);
+
+// Creates a BitcastConvert HLO instruction.
+HloInstruction* MakeBitcastConvertToHlo(HloInstruction* hlo,
+                                        PrimitiveType type);
+
+// Creates an Iota HLO instruction.
+HloInstruction* MakeIotaHlo(HloComputation* computation, const Shape& shape,
+                            int64 iota_dimension);
 
 // Creates a Dot HLO instruction and adds it to the computation containing `lhs`
 // and `rhs` (both must be in the same computation).
@@ -164,6 +178,22 @@ template <class NativeT>
 HloInstruction* MakeR0ConstantHlo(HloComputation* computation, NativeT value) {
   return computation->AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::CreateR0<NativeT>(value)));
+}
+
+// Makes a scalar that is elementwise compatible with the shape of the base
+// instruction.
+template <class NativeT>
+HloInstruction* MakeScalarLike(HloInstruction* base, NativeT value) {
+  auto scalar = base->parent()->AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<NativeT>(value)
+                                         .Convert(base->shape().element_type())
+                                         .ValueOrDie()));
+  if (base->shape().rank() == 0) {
+    *scalar->mutable_shape() = base->shape();
+    return scalar;
+  }
+  return base->parent()->AddInstruction(
+      HloInstruction::CreateBroadcast(base->shape(), scalar, {}));
 }
 
 // -----------------------------------------------------------------------------
