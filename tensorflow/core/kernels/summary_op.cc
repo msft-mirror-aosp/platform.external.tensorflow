@@ -42,8 +42,8 @@ class SummaryScalarOp : public OpKernel {
 
     OP_REQUIRES(
         c,
-        tags.IsSameSize(values) ||
-            (IsLegacyScalar(tags.shape()) && IsLegacyScalar(values.shape())),
+        tags.IsSameSize(values) || (TensorShapeUtils::IsScalar(tags.shape()) &&
+                                    TensorShapeUtils::IsScalar(values.shape())),
         errors::InvalidArgument(
             "tags and values not the same shape: ", tags.shape().DebugString(),
             " != ", values.shape().DebugString(), SingleTag(tags)));
@@ -52,13 +52,13 @@ class SummaryScalarOp : public OpKernel {
     Summary s;
     for (int i = 0; i < Ttags.size(); i++) {
       Summary::Value* v = s.add_value();
-      v->set_tag(Ttags(i));
+      v->set_tag(string(Ttags(i)));  // NOLINT
       v->set_simple_value(float(Tvalues(i)));
     }
 
     Tensor* summary_tensor = nullptr;
     OP_REQUIRES_OK(c, c->allocate_output(0, TensorShape({}), &summary_tensor));
-    CHECK(s.SerializeToString(&summary_tensor->scalar<string>()()));
+    CHECK(SerializeToTString(s, &summary_tensor->scalar<tstring>()()));
   }
 
   // If there's only one tag, include it in the error message
@@ -82,7 +82,7 @@ class SummaryHistoOp : public OpKernel {
     const Tensor& tags = c->input(0);
     const Tensor& values = c->input(1);
     const auto flat = values.flat<T>();
-    OP_REQUIRES(c, IsLegacyScalar(tags.shape()),
+    OP_REQUIRES(c, TensorShapeUtils::IsScalar(tags.shape()),
                 errors::InvalidArgument("tags must be scalar"));
     // Build histogram of values in "values" tensor
     histogram::Histogram histo;
@@ -102,12 +102,12 @@ class SummaryHistoOp : public OpKernel {
 
     Summary s;
     Summary::Value* v = s.add_value();
-    v->set_tag(tags.scalar<string>()());
+    v->set_tag(string(tags.scalar<tstring>()()));  // NOLINT
     histo.EncodeToProto(v->mutable_histo(), false /* Drop zero buckets */);
 
     Tensor* summary_tensor = nullptr;
     OP_REQUIRES_OK(c, c->allocate_output(0, TensorShape({}), &summary_tensor));
-    CHECK(s.SerializeToString(&summary_tensor->scalar<string>()()));
+    CHECK(SerializeToTString(s, &summary_tensor->scalar<tstring>()()));
   }
 };
 
@@ -164,7 +164,7 @@ class SummaryMergeOp : public OpKernel {
 
     Tensor* summary_tensor = nullptr;
     OP_REQUIRES_OK(c, c->allocate_output(0, TensorShape({}), &summary_tensor));
-    CHECK(s.SerializeToString(&summary_tensor->scalar<string>()()));
+    CHECK(SerializeToTString(s, &summary_tensor->scalar<tstring>()()));
   }
 };
 

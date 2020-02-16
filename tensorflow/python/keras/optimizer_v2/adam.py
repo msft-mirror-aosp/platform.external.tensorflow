@@ -66,30 +66,34 @@ class Adam(optimizer_v2.OptimizerV2):
       described at the end of section 2 of the paper:
 
       $$t := t + 1$$
-      $$lr_t := \text{learning\_rate} * \sqrt{1 - beta_2^t} / (1 - beta_1^t)$$
+      $$\text{lr}_t := \mathrm{learning_rate} *
+        \sqrt{1 - \beta_2^t} / (1 - \beta_1^t)$$
 
-      $$m_t := beta_1 * m_{t-1} + (1 - beta_1) * g$$
-      $$v_t := beta_2 * v_{t-1} + (1 - beta_2) * g * g$$
-      $$variable := variable - lr_t * m_t / (\sqrt{v_t} + \epsilon)$$
+      $$m_t := \beta_1 * m_{t-1} + (1 - \beta_1) * g$$
+      $$v_t := \beta_2 * v_{t-1} + (1 - \beta_2) * g * g$$
+      $$\text{variable} := \text{variable} -
+        lr_t * m_t / (\sqrt{v_t} + \epsilon)$$
 
     If amsgrad = True:
       Initialization:
 
       $$m_0 := 0 \text{(Initialize initial 1st moment vector)}$$
       $$v_0 := 0 \text{(Initialize initial 2nd moment vector)}$$
-      $$v_hat_0 := 0 \text{(Initialize initial 2nd moment vector)}$$
+      $$\hat{v}_0 := 0 \text{(Initialize initial 2nd moment vector)}$$
       $$t := 0 \text{(Initialize timestep)}$$
 
       The update rule for `variable` with gradient `g` uses an optimization
       described at the end of section 2 of the paper:
 
       $$t := t + 1$$
-      $$lr_t := \text{learning\_rate} * \sqrt{1 - beta_2^t} / (1 - beta_1^t)$$
+      $$\text{lr}_t := \mathrm{learning_rate} *
+        \sqrt{1 - \beta_2^t} / (1 - \beta_1^t)$$
 
-      $$m_t := beta_1 * m_{t-1} + (1 - beta_1) * g$$
-      $$v_t := beta_2 * v_{t-1} + (1 - beta_2) * g * g$$
-      $$v_hat_t := max(v_hat_{t-1}, v_t)$$
-      $$variable := variable - lr_t * m_t / (\sqrt{v_hat_t} + \epsilon)$$
+      $$m_t := \beta_1 * m_{t-1} + (1 - \beta_1) * g$$
+      $$v_t := \beta_2 * v_{t-1} + (1 - \beta_2) * g * g$$
+      $$\hat{v}_t := \max(\hat{v}_{t-1}, v_t)$$
+      $$\text{variable} := \text{variable} -
+        \text{lr}_t * m_t / (\sqrt{\hat{v}_t} + \epsilon)$$
 
     The default value of 1e-7 for epsilon might not be a good default in
     general. For example, when training an Inception network on ImageNet a
@@ -108,7 +112,8 @@ class Adam(optimizer_v2.OptimizerV2):
     unless a variable slice was actually used).
 
     Args:
-      learning_rate: A Tensor or a floating point value.  The learning rate.
+      learning_rate: A `Tensor`, floating point value, or a schedule that is a
+        `tf.keras.optimizers.schedules.LearningRateSchedule`. The learning rate.
       beta_1: A float value or a constant float tensor. The exponential decay
         rate for the 1st moment estimates.
       beta_2: A float value or a constant float tensor. The exponential decay
@@ -119,16 +124,19 @@ class Adam(optimizer_v2.OptimizerV2):
       amsgrad: boolean. Whether to apply AMSGrad variant of this algorithm from
         the paper "On the Convergence of Adam and beyond".
       name: Optional name for the operations created when applying gradients.
-        Defaults to "Adam".  @compatibility(eager) When eager execution is
-        enabled, `learning_rate`, `beta_1`, `beta_2`, and `epsilon` can each be
-        a callable that takes no arguments and returns the actual value to use.
-        This can be useful for changing these values across different
-        invocations of optimizer functions. @end_compatibility
+        Defaults to "Adam".
       **kwargs: keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`,
         `decay`}. `clipnorm` is clip gradients by norm; `clipvalue` is clip
         gradients by value, `decay` is included for backward compatibility to
         allow time inverse decay of learning rate. `lr` is included for backward
         compatibility, recommended to use `learning_rate` instead.
+
+    @compatibility(eager)
+    When eager execution is enabled, `learning_rate`, `beta_1`, `beta_2`,
+    and `epsilon` can each be a callable that takes no arguments and
+    returns the actual value to use. This can be useful for changing these
+    values across different invocations of optimizer functions.
+    @end_compatibility
     """
 
     super(Adam, self).__init__(name, **kwargs)
