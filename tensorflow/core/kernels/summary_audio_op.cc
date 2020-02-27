@@ -39,7 +39,7 @@ class SummaryAudioOp : public OpKernel {
   void Compute(OpKernelContext* c) override {
     const Tensor& tag = c->input(0);
     const Tensor& tensor = c->input(1);
-    OP_REQUIRES(c, IsLegacyScalar(tag.shape()),
+    OP_REQUIRES(c, TensorShapeUtils::IsScalar(tag.shape()),
                 errors::InvalidArgument("Tag must be a scalar"));
     OP_REQUIRES(c, tensor.dims() >= 2 && tensor.dims() <= 3,
                 errors::InvalidArgument("Tensor must be 3-D or 2-D, got: ",
@@ -92,7 +92,7 @@ class SummaryAudioOp : public OpKernel {
 
     Tensor* summary_tensor = nullptr;
     OP_REQUIRES_OK(c, c->allocate_output(0, TensorShape({}), &summary_tensor));
-    CHECK(s.SerializeToString(&summary_tensor->scalar<string>()()));
+    CHECK(SerializeToTString(s, &summary_tensor->scalar<tstring>()()));
   }
 
  private:
