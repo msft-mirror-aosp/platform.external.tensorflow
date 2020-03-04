@@ -19,7 +19,10 @@ java_library_static {
         "android-support-annotations",
     ],
     srcs: [
+        ":tflite_nnapi_delegate_java",
         "src/main/java/org/tensorflow/lite/*.java",
+    ],
+    static_libs: [
     ],
 }
 
