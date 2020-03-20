@@ -18,6 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
+
 from absl.testing import parameterized
 import numpy as np
 import six
@@ -32,6 +33,8 @@ from tensorflow.python.eager import context
 from tensorflow.python.eager import test
 from tensorflow.python.framework import random_seed
 from tensorflow.python.keras.distribute import distributed_training_utils
+from tensorflow.python.keras.mixed_precision.experimental import policy
+from tensorflow.python.keras.preprocessing import sequence
 from tensorflow.python.util import nest
 
 _RANDOM_SEED = 1337
@@ -294,7 +297,10 @@ def compare_results(results_with_ds,
                     testcase,
                     partial_last_batch=None):
   """Compares results of model compiled with/without distribution strategy."""
-  if partial_last_batch == 'train_and_eval':
+  if policy.global_policy().compute_dtype in ('float16', 'bfloat16'):
+    default_tolerance = 1e-2
+    relaxed_tolerance = 1e-2
+  elif partial_last_batch == 'train_and_eval':
     # We relax the tolerence a lot in the partial last batch case as
     #   1. the examples in uneven batches may have different weights when
     #      applying the gradients in the distributed case.
@@ -380,7 +386,7 @@ class TestDistributionStrategyCorrectnessBase(test.TestCase,
   def set_up_test_config(self,
                          use_numpy=False,
                          use_validation_data=False,
-                         with_batch_norm=False):
+                         with_batch_norm=None):
     self.use_numpy = use_numpy
     self.use_validation_data = use_validation_data
     self.with_batch_norm = with_batch_norm
@@ -424,27 +430,17 @@ class TestDistributionStrategyCorrectnessBase(test.TestCase,
                 input_shapes=None):
     raise NotImplementedError
 
-  def skip_unsupported_test_configuration(self, distribution,
-                                          experimental_run_tf_function):
-    if should_skip_tpu_with_eager(
-        distribution) and experimental_run_tf_function:
-      self.skipTest('TPUStrategy does not support eager mode with '
-                    'experimental_run_tf_function.')
-    return
-
   def run_correctness_test(self,
                            distribution,
                            use_numpy,
                            use_validation_data,
                            experimental_run_tf_function=None,
-                           with_batch_norm=False,
+                           with_batch_norm=None,
                            is_stateful_model=False,
                            partial_last_batch=None,
                            training_epochs=2):
     with self.cached_session():
       self.set_up_test_config(use_numpy, use_validation_data, with_batch_norm)
-      self.skip_unsupported_test_configuration(distribution,
-                                               experimental_run_tf_function)
 
       if partial_last_batch == 'eval':
         x_train, y_train, x_eval, y_eval, x_predict = (
@@ -507,7 +503,8 @@ class TestDistributionStrategyCorrectnessBase(test.TestCase,
       # First, special case, for multi-replica distributed training, batch
       # norm is not aggregated globally. So it is expected to have different
       # weights.
-      if (self.with_batch_norm and distribution.num_replicas_in_sync > 1):
+      if (self.with_batch_norm == 'regular' and
+          distribution.num_replicas_in_sync > 1):
         with self.assertRaises(AssertionError):
           compare_results(
               results_with_ds,
@@ -545,8 +542,6 @@ class TestDistributionStrategyCorrectnessBase(test.TestCase,
                           experimental_run_tf_function=None):
     with self.cached_session():
       self.set_up_test_config()
-      self.skip_unsupported_test_configuration(distribution,
-                                               experimental_run_tf_function)
 
       x_train, y_train, _ = self.get_data()
       model = self.get_model(
@@ -631,7 +626,7 @@ class TestDistributionStrategyEmbeddingModelCorrectnessBase(
       labels.append(label)
       features.append(word_ids)
 
-    features = keras.preprocessing.sequence.pad_sequences(
+    features = sequence.pad_sequences(
         features, maxlen=max_words)
     x_train = np.asarray(features, dtype=np.float32)
     y_train = np.asarray(labels, dtype=np.int32).reshape((count, 1))

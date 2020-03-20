@@ -19,8 +19,6 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 
-#include "fixedpoint/fixedpoint.h"
-#include "profiling/instrumentation.h"
 #include "tensorflow/lite/experimental/ruy/common.h"
 #include "tensorflow/lite/experimental/ruy/internal_matrix.h"
 #include "tensorflow/lite/experimental/ruy/kernel_common.h"
@@ -28,6 +26,7 @@ limitations under the License.
 #include "tensorflow/lite/experimental/ruy/opt_set.h"
 #include "tensorflow/lite/experimental/ruy/path.h"
 #include "tensorflow/lite/experimental/ruy/platform.h"
+#include "tensorflow/lite/experimental/ruy/profiler/instrumentation.h"
 #include "tensorflow/lite/experimental/ruy/side_pair.h"
 #include "tensorflow/lite/experimental/ruy/size_util.h"
 #include "tensorflow/lite/experimental/ruy/spec.h"
@@ -37,9 +36,16 @@ namespace ruy {
 
 #if RUY_PLATFORM(NEON) && RUY_OPT_ENABLED(RUY_OPT_ASM)
 
+#if RUY_PLATFORM(NEON_64)
 void Kernel8bitNeonOutOfOrder(const KernelParams8bit<4, 4>& params);
+void Kernel8bitNeonOutOfOrder1Col(const KernelParams8bit<4, 4>& params);
+#elif RUY_PLATFORM(NEON_32)
+void Kernel8bitNeonOutOfOrder(const KernelParams8bit<4, 2>& params);
+void Kernel8bitNeonOutOfOrder1Col(const KernelParams8bit<4, 2>& params);
+#endif
 void Kernel8bitNeonInOrder(const KernelParams8bit<4, 4>& params);
 void Kernel8bitNeonDotprodOutOfOrder(const KernelParams8bit<8, 8>& params);
+void Kernel8bitNeonDotprodOutOfOrder1Col(const KernelParams8bit<8, 8>& params);
 void Kernel8bitNeonDotprodInOrder(const KernelParams8bit<8, 8>& params);
 
 #if RUY_PLATFORM(NEON_64)
@@ -58,6 +64,10 @@ struct Kernel<Path::kNeon, std::int8_t, std::int8_t, DstScalar,
     KernelParams8bit<LhsLayout::kCols, RhsLayout::kCols> params;
     MakeKernelParams8bit(lhs, rhs, spec, start_row, start_col, end_row, end_col,
                          dst, &params);
+    if (dst->layout.cols == 1) {
+      Kernel8bitNeonOutOfOrder1Col(params);
+      return;
+    }
     if (__builtin_expect(tuning == Tuning::kInOrder, true)) {
       Kernel8bitNeonInOrder(params);
     } else {
@@ -65,7 +75,34 @@ struct Kernel<Path::kNeon, std::int8_t, std::int8_t, DstScalar,
     }
   }
 };
+#endif
 
+#if RUY_PLATFORM(NEON_32)
+template <typename DstScalar>
+struct Kernel<Path::kNeon, std::int8_t, std::int8_t, DstScalar,
+              BasicSpec<std::int32_t, DstScalar>> {
+  using LhsLayout = FixedKernelLayout<Order::kColMajor, 16, 4>;
+  using RhsLayout = FixedKernelLayout<Order::kColMajor, 16, 2>;
+  Tuning tuning = Tuning::kAuto;
+  explicit Kernel(Tuning tuning_) : tuning(tuning_) {}
+  void Run(const PackedMatrix<std::int8_t>& lhs,
+           const PackedMatrix<std::int8_t>& rhs,
+           const BasicSpec<std::int32_t, DstScalar>& spec, int start_row,
+           int start_col, int end_row, int end_col,
+           Matrix<DstScalar>* dst) const {
+    KernelParams8bit<LhsLayout::kCols, RhsLayout::kCols> params;
+    MakeKernelParams8bit(lhs, rhs, spec, start_row, start_col, end_row, end_col,
+                         dst, &params);
+    if (dst->layout.cols == 1) {
+      Kernel8bitNeonOutOfOrder1Col(params);
+      return;
+    }
+    Kernel8bitNeonOutOfOrder(params);
+  }
+};
+#endif
+
+#if RUY_PLATFORM(NEON_64)
 template <typename DstScalar>
 struct Kernel<Path::kNeonDotprod, std::int8_t, std::int8_t, DstScalar,
               BasicSpec<std::int32_t, DstScalar>> {
@@ -81,7 +118,9 @@ struct Kernel<Path::kNeonDotprod, std::int8_t, std::int8_t, DstScalar,
     KernelParams8bit<LhsLayout::kCols, RhsLayout::kCols> params;
     MakeKernelParams8bit(lhs, rhs, spec, start_row, start_col, end_row, end_col,
                          dst, &params);
-    if (__builtin_expect(tuning == Tuning::kInOrder, true)) {
+    if (dst->layout.cols == 1) {
+      Kernel8bitNeonDotprodOutOfOrder1Col(params);
+    } else if (__builtin_expect(tuning == Tuning::kInOrder, true)) {
       Kernel8bitNeonDotprodInOrder(params);
     } else {
       Kernel8bitNeonDotprodOutOfOrder(params);

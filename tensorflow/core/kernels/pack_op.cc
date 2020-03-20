@@ -142,7 +142,7 @@ TF_CALL_QUANTIZED_TYPES(REGISTER_PACK);
 
 #if defined(IS_MOBILE_PLATFORM) && !defined(SUPPORT_SELECTIVE_REGISTRATION)
 // Primarily used for SavedModel support on mobile.
-REGISTER_PACK(string);
+REGISTER_PACK(tstring);
 #endif  // defined(IS_MOBILE_PLATFORM) &&
         // !defined(SUPPORT_SELECTIVE_REGISTRATION)
 
@@ -160,6 +160,8 @@ TF_CALL_bfloat16(REGISTER_GPU);
 TF_CALL_int64(REGISTER_GPU);
 TF_CALL_int16(REGISTER_GPU);
 TF_CALL_bool(REGISTER_GPU);
+TF_CALL_complex64(REGISTER_GPU);
+TF_CALL_complex128(REGISTER_GPU);
 #undef REGISTER_GPU
 
 // A special GPU kernel for int32.
