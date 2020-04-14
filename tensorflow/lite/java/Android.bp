@@ -36,6 +36,7 @@ cc_library_shared {
         "src/main/native/*.cc",
     ],
     header_libs: [
+        "jni_headers",
         "tensorflow_headers",
         "flatbuffer_headers",
     ],
