@@ -1,6 +1,10 @@
 # Description:
 #   Contains typical networks definitions.
 
+licenses(["notice"])  # Apache 2.0
+
+exports_files(["LICENSE"])
+
 load("//tensorflow:tensorflow.bzl", "py_test")
 
 package(
@@ -8,10 +12,7 @@ package(
         "//tensorflow:__subpackages__",
         "//tensorflow_models:__subpackages__",
     ],
-    licenses = ["notice"],  # Apache 2.0
 )
-
-exports_files(["LICENSE"])
 
 # Transitive dependencies of this target will be included in the pip package.
 py_library(
@@ -44,7 +45,6 @@ py_test(
     name = "alexnet_test",
     size = "medium",
     srcs = ["alexnet_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":alexnet",
@@ -117,7 +117,6 @@ py_test(
     name = "inception_v1_test",
     size = "medium",
     srcs = ["inception_v1_test.py"],
-    python_version = "PY2",
     shard_count = 8,
     srcs_version = "PY2AND3",
     deps = [
@@ -138,7 +137,6 @@ py_test(
     name = "inception_v2_test",
     size = "medium",
     srcs = ["inception_v2_test.py"],
-    python_version = "PY2",
     shard_count = 8,
     srcs_version = "PY2AND3",
     deps = [
@@ -159,7 +157,6 @@ py_test(
     name = "inception_v3_test",
     size = "medium",
     srcs = ["inception_v3_test.py"],
-    python_version = "PY2",
     shard_count = 8,
     srcs_version = "PY2AND3",
     deps = [
@@ -194,7 +191,6 @@ py_test(
     name = "overfeat_test",
     size = "medium",
     srcs = ["overfeat_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":overfeat",
@@ -239,7 +235,6 @@ py_test(
     name = "resnet_v1_test",
     size = "medium",
     srcs = ["resnet_v1_test.py"],
-    python_version = "PY2",
     shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
@@ -276,7 +271,6 @@ py_test(
     name = "resnet_v2_test",
     size = "medium",
     srcs = ["resnet_v2_test.py"],
-    python_version = "PY2",
     shard_count = 4,
     srcs_version = "PY2AND3",
     deps = [
@@ -313,7 +307,6 @@ py_test(
     name = "vgg_test",
     size = "medium",
     srcs = ["vgg_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":vgg",

@@ -18,7 +18,6 @@ cc_library(
         "//tensorflow:android": [],
         "//conditions:default": ["."],
     }),
-    visibility = ["//visibility:public"],
 )
 
 # Silly rules to make

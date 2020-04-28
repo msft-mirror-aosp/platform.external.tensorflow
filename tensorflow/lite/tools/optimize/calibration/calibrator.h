@@ -50,8 +50,7 @@ namespace calibration {
 //
 // or adding calibration data to model itself.
 // ModelT * original_floating_point_model = ...
-// calibration_reader->AddCalibrationToModel(original_floating_point_model,
-// false);
+// calibration_reader->AddCalibrationToModel(original_floating_point_model);
 //
 TfLiteStatus BuildLoggingInterpreter(
     const FlatBufferModel& model, const OpResolver& op_resolver,

@@ -46,7 +46,7 @@ class _ShuffleAndRepeatDataset(dataset_ops.UnaryUnchangedStructureDataset):
         count=self._count,
         seed=self._seed,
         seed2=self._seed2,
-        **self._flat_structure)
+        **dataset_ops.flat_structure(self))
     super(_ShuffleAndRepeatDataset, self).__init__(input_dataset,
                                                    variant_tensor)
 
@@ -79,7 +79,7 @@ def shuffle_and_repeat(buffer_size, count=None, seed=None):
       indefinitely.
     seed: (Optional.) A `tf.int64` scalar `tf.Tensor`, representing the
       random seed that will be used to create the distribution. See
-      `tf.compat.v1.set_random_seed` for behavior.
+      `tf.set_random_seed` for behavior.
 
   Returns:
     A `Dataset` transformation function, which can be passed to

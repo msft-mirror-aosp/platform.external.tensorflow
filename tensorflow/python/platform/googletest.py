@@ -24,9 +24,9 @@ import sys
 import tempfile
 
 # go/tf-wildcard-import
-# pylint: disable=wildcard-import,redefined-builtin
+# pylint: disable=wildcard-import
 from absl.testing.absltest import *
-# pylint: enable=wildcard-import,redefined-builtin
+# pylint: enable=wildcard-import
 
 from tensorflow.python.framework import errors
 from tensorflow.python.lib.io import file_io

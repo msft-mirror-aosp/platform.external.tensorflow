@@ -22,7 +22,6 @@ limitations under the License.
 #define TENSORFLOW_LITE_UTIL_H_
 
 #include <vector>
-
 #include "tensorflow/lite/c/c_api_internal.h"
 
 namespace tflite {
@@ -58,13 +57,6 @@ struct TfLiteIntArrayDeleter {
     if (a) TfLiteIntArrayFree(a);
   }
 };
-
-// Populates the size in bytes of a type into `bytes`. Returns kTfLiteOk for
-// valid types, and kTfLiteError otherwise.
-TfLiteStatus GetSizeOfType(TfLiteContext* context, const TfLiteType type,
-                           size_t* bytes);
-
-TfLiteStatus UnresolvedOpInvoke(TfLiteContext* context, TfLiteNode* node);
 
 }  // namespace tflite
 

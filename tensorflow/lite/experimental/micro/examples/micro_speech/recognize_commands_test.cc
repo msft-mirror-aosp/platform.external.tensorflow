@@ -78,10 +78,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestBasic) {
 
   RecognizeCommands recognize_commands(error_reporter);
 
-  std::initializer_list<uint8_t> result_data = {255, 0, 0, 0};
-  auto result_dims = {2, 1, 4};
   TfLiteTensor results = tflite::testing::CreateQuantizedTensor(
-      result_data, tflite::testing::IntArrayFromInitializer(result_dims),
+      {255, 0, 0, 0}, tflite::testing::IntArrayFromInitializer({2, 1, 4}),
       "input_tensor", 0.0f, 128.0f);
 
   const char* found_command;
@@ -98,10 +96,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestFindCommands) {
 
   RecognizeCommands recognize_commands(error_reporter, 1000, 51);
 
-  std::initializer_list<uint8_t> yes_data = {0, 0, 255, 0};
-  auto yes_dims = {2, 1, 4};
   TfLiteTensor yes_results = tflite::testing::CreateQuantizedTensor(
-      yes_data, tflite::testing::IntArrayFromInitializer(yes_dims),
+      {0, 0, 255, 0}, tflite::testing::IntArrayFromInitializer({2, 1, 4}),
       "input_tensor", 0.0f, 128.0f);
 
   bool has_found_new_command = false;
@@ -126,10 +122,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestFindCommands) {
     TF_LITE_MICRO_EXPECT_EQ(0, tflite::testing::TestStrcmp("yes", new_command));
   }
 
-  std::initializer_list<uint8_t> no_data = {0, 0, 0, 255};
-  auto no_dims = {2, 1, 4};
   TfLiteTensor no_results = tflite::testing::CreateQuantizedTensor(
-      no_data, tflite::testing::IntArrayFromInitializer(no_dims),
+      {0, 0, 0, 255}, tflite::testing::IntArrayFromInitializer({2, 1, 4}),
       "input_tensor", 0.0f, 128.0f);
   has_found_new_command = false;
   new_command = "";
@@ -161,10 +155,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestBadInputLength) {
 
   RecognizeCommands recognize_commands(error_reporter, 1000, 51);
 
-  std::initializer_list<uint8_t> bad_data = {0, 0, 255};
-  auto bad_dims = {2, 1, 3};
   TfLiteTensor bad_results = tflite::testing::CreateQuantizedTensor(
-      bad_data, tflite::testing::IntArrayFromInitializer(bad_dims),
+      {0, 0, 255}, tflite::testing::IntArrayFromInitializer({2, 1, 3}),
       "input_tensor", 0.0f, 128.0f);
 
   const char* found_command;
@@ -181,10 +173,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestBadInputTimes) {
 
   RecognizeCommands recognize_commands(error_reporter, 1000, 51);
 
-  std::initializer_list<uint8_t> result_data = {0, 0, 255, 0};
-  auto result_dims = {2, 1, 4};
   TfLiteTensor results = tflite::testing::CreateQuantizedTensor(
-      result_data, tflite::testing::IntArrayFromInitializer(result_dims),
+      {0, 0, 255, 0}, tflite::testing::IntArrayFromInitializer({2, 1, 4}),
       "input_tensor", 0.0f, 128.0f);
 
   const char* found_command;
@@ -204,10 +194,8 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestTooFewInputs) {
 
   RecognizeCommands recognize_commands(error_reporter, 1000, 51);
 
-  std::initializer_list<uint8_t> result_data = {0, 0, 255, 0};
-  auto result_dims = {2, 1, 4};
   TfLiteTensor results = tflite::testing::CreateQuantizedTensor(
-      result_data, tflite::testing::IntArrayFromInitializer(result_dims),
+      {0, 0, 255, 0}, tflite::testing::IntArrayFromInitializer({2, 1, 4}),
       "input_tensor", 0.0f, 128.0f);
 
   const char* found_command;

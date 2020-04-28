@@ -1,11 +1,8 @@
 # Tools and utilities that aid in XLA development and usage.
 
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    default_visibility = ["//tensorflow/compiler/xla:internal"],
-    licenses = ["notice"],  # Apache 2.0
-)
+package(default_visibility = ["//tensorflow/compiler/xla:internal"])
 
 # Filegroup used to collect source files for dependency checking.
 filegroup(
@@ -16,6 +13,8 @@ filegroup(
     ]),
     visibility = ["//tensorflow/compiler/xla:internal"],
 )
+
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary", "tf_cc_test")
 
 tf_cc_binary(
     name = "hex_floats_to_packed_literal",
@@ -73,7 +72,6 @@ cc_library(
         "//tensorflow/compiler/xla/tests:test_utils",
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
-        "//third_party/eigen3",
         "@com_google_absl//absl/types:span",
     ],
     alwayslink = True,

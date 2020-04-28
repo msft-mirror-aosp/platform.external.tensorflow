@@ -2,14 +2,13 @@
 # Contains ops for iterative solvers for linear systems, linear least-squares
 # problems, singular value decomposition and eigenvalue decomposition.
 
-load("//tensorflow:tensorflow.bzl", "cuda_py_test")
-
-package(
-    default_visibility = ["//tensorflow:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+package(default_visibility = ["//tensorflow:__subpackages__"])
+
+load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 
 py_library(
     name = "solvers_py",

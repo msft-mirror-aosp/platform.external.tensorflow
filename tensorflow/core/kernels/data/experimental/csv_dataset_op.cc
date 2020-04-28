@@ -23,7 +23,6 @@ limitations under the License.
 
 namespace tensorflow {
 namespace data {
-namespace experimental {
 namespace {
 
 class CSVDatasetOp : public DatasetOpKernel {
@@ -62,7 +61,7 @@ class CSVDatasetOp : public DatasetOpKernel {
     OP_REQUIRES(ctx, select_cols_tensor->dims() == 1,
                 errors::InvalidArgument("`select_cols` must be a vector."));
 
-    int64 buffer_size = 0;
+    int64 buffer_size;
     OP_REQUIRES_OK(
         ctx, ParseScalarArgument<int64>(ctx, "buffer_size", &buffer_size));
     OP_REQUIRES(ctx, buffer_size > 0,
@@ -93,7 +92,7 @@ class CSVDatasetOp : public DatasetOpKernel {
     std::vector<string> filenames;
     filenames.reserve(filenames_tensor->NumElements());
     for (int i = 0; i < filenames_tensor->NumElements(); ++i) {
-      filenames.push_back(filenames_tensor->flat<tstring>()(i));
+      filenames.push_back(filenames_tensor->flat<string>()(i));
     }
 
     io::ZlibCompressionOptions zlib_compression_options =
@@ -169,8 +168,6 @@ class CSVDatasetOp : public DatasetOpKernel {
     }
 
     string DebugString() const override { return "CSVDatasetOp::Dataset"; }
-
-    Status CheckExternalState() const override { return Status::OK(); }
 
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
@@ -721,10 +718,10 @@ class CSVDatasetOp : public DatasetOpKernel {
           }
           case DT_STRING: {
             if (field.empty() || field == dataset()->na_value_) {
-              component.scalar<tstring>()() =
-                  dataset()->record_defaults_[output_idx].flat<tstring>()(0);
+              component.scalar<string>()() =
+                  dataset()->record_defaults_[output_idx].flat<string>()(0);
             } else {
-              component.scalar<tstring>()() = string(field);
+              component.scalar<string>()() = string(field);
             }
             break;
           }
@@ -857,11 +854,10 @@ class CSVDatasetOp : public DatasetOpKernel {
   std::vector<PartialTensorShape> output_shapes_;
 };  // class CSVDatasetOp
 
-REGISTER_KERNEL_BUILDER(Name("CSVDataset").Device(DEVICE_CPU), CSVDatasetOp);
+// Register the kernel implementation for CSVDataset.
 REGISTER_KERNEL_BUILDER(Name("ExperimentalCSVDataset").Device(DEVICE_CPU),
                         CSVDatasetOp);
 
 }  // namespace
-}  // namespace experimental
 }  // namespace data
 }  // namespace tensorflow

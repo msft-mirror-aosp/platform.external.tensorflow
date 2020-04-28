@@ -38,7 +38,9 @@ class OutfeedThunk : public Thunk {
   OutfeedThunk(const OutfeedThunk&) = delete;
   OutfeedThunk& operator=(const OutfeedThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const ShapeTree<BufferAllocation::Slice> outfeed_slices_;

@@ -1,4 +1,4 @@
-# Generate a concrete function
+# Generating a concrete function
 
 In order to convert TensorFlow 2.0 models to TensorFlow Lite, the model needs to
 be exported as a concrete function. This document outlines what a concrete

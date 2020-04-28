@@ -100,9 +100,7 @@ struct LeakyRelu {
   // activations: same shape as "features".
   void operator()(const Device& d, typename TTypes<T>::ConstTensor features,
                   T alpha, typename TTypes<T>::Tensor activations) {
-    // Note that alpha might be > 1 or < 0, so we don't use cwiseMax here.
-    activations.device(d) =
-        (features > static_cast<T>(0)).select(features, features * alpha);
+    activations.device(d) = features.cwiseMax(features * alpha);
   }
 };
 

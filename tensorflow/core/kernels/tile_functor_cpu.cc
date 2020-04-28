@@ -21,11 +21,11 @@ limitations under the License.
 #include "tensorflow/core/kernels/tile_functor.h"
 
 namespace tensorflow {
+
 namespace internal {
-namespace {
 
 template <typename Device, typename T>
-void TileSimpleImpl(const Device& d, Tensor* out, const Tensor& in) {
+void TileSimple(const Device& d, Tensor* out, const Tensor& in) {
   const int ndims = in.dims();
   const int64 nelem = out->NumElements();
   gtl::InlinedVector<int64, 8> in_strides = ComputeStride<int64>(in.shape());
@@ -44,21 +44,7 @@ void TileSimpleImpl(const Device& d, Tensor* out, const Tensor& in) {
   }
 }
 
-}  // namespace
-
-template <typename T>
-void TileSimple(const Eigen::ThreadPoolDevice& d, Tensor* out,
-                const Tensor& in) {
-  return TileSimpleImpl<Eigen::ThreadPoolDevice, T>(d, out, in);
-}
-#ifdef TENSORFLOW_USE_SYCL
-template <typename T>
-void TileSimple(const Eigen::SyclDevice& d, Tensor* out, const Tensor& in) {
-  return TileSimpleImpl<Eigen::SyclDevice, T>(d, out, in);
-}
-#endif
-
-}  // namespace internal
+}  // end namespace internal
 
 namespace functor {
 
@@ -74,7 +60,6 @@ TF_CALL_float(DEFINE_TYPE);
 TF_CALL_bfloat16(DEFINE_TYPE);
 TF_CALL_double(DEFINE_TYPE);
 TF_CALL_uint8(DEFINE_TYPE);
-TF_CALL_int8(DEFINE_TYPE);
 TF_CALL_int32(DEFINE_TYPE);
 TF_CALL_int16(DEFINE_TYPE);
 TF_CALL_int64(DEFINE_TYPE);

@@ -16,15 +16,16 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_KERNELS_TILE_FUNCTOR_GPU_H_
 #define TENSORFLOW_CORE_KERNELS_TILE_FUNCTOR_GPU_H_
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 
 #define EIGEN_USE_GPU
 
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
+
 #include "tensorflow/core/framework/register_types.h"
 #include "tensorflow/core/kernels/ops_util.h"
 #include "tensorflow/core/kernels/tile_functor.h"
-#include "tensorflow/core/util/gpu_kernel_helper.h"
+#include "tensorflow/core/util/cuda_kernel_helper.h"
 
 namespace tensorflow {
 namespace internal {
@@ -35,7 +36,7 @@ __global__ void TileKernel(int nthreads, const T* src, const int32* buf,
   const int32* in_strides = buf;
   const int32* out_strides = buf + ndims;
   const int32* in_dim_sizes = buf + ndims * 2;
-  GPU_1D_KERNEL_LOOP(o_idx, nthreads) {
+  CUDA_1D_KERNEL_LOOP(o_idx, nthreads) {
     int32 i_idx = 0;
     int32 t = o_idx;
     for (int i = 0; i < ndims; ++i) {
@@ -46,8 +47,8 @@ __global__ void TileKernel(int nthreads, const T* src, const int32* buf,
   }
 }
 
-template <typename T>
-void TileSimple(const Eigen::GpuDevice& d, Tensor* out, const Tensor& in) {
+template <typename Device, typename T>
+void TileSimple(const Device& d, Tensor* out, const Tensor& in) {
   // Ensures we can use 32-bit index.
   const int64 in_nelem = in.NumElements();
   CHECK_LT(in_nelem, kint32max) << "Tensor too large to transpose on GPU";
@@ -67,24 +68,23 @@ void TileSimple(const Eigen::GpuDevice& d, Tensor* out, const Tensor& in) {
   // device.
   auto num_bytes = sizeof(int64) * host_buf.size();
   auto dev_buf = d.allocate(num_bytes);
-  // NOTE: host_buf is not allocated by GpuHostAllocator, and
+  // NOTE: host_buf is not allocated by CudaHostAllocator, and
   // therefore we are doing a sync copy effectively.
   d.memcpyHostToDevice(dev_buf, host_buf.data(), num_bytes);
   // Launch kernel to q[...] = p[...].
   const T* p = in.flat<T>().data();
   T* q = out->flat<T>().data();
-  GpuLaunchConfig cfg = GetGpuLaunchConfig(out_nelem, d);
+  CudaLaunchConfig cfg = GetCudaLaunchConfig(out_nelem, d);
   TF_CHECK_OK(
-      GpuLaunchKernel(TileKernel<T>, cfg.block_count, cfg.thread_per_block, 0,
-                      d.stream(), cfg.virtual_thread_count, p,
-                      reinterpret_cast<const int32*>(dev_buf), ndims, q));
+      CudaLaunchKernel(TileKernel<T>, cfg.block_count, cfg.thread_per_block, 0,
+                       d.stream(), cfg.virtual_thread_count, p,
+                       reinterpret_cast<const int32*>(dev_buf), ndims, q));
   // Safe to deallocate immediately after the kernel launch.
   d.deallocate(dev_buf);
 }
 
 }  // end namespace internal
 }  // namespace tensorflow
-
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 #endif  // TENSORFLOW_CORE_KERNELS_TILE_FUNCTOR_GPU_H_

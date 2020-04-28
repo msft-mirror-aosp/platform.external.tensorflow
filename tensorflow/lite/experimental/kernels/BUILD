@@ -1,11 +1,10 @@
-load("//tensorflow/lite:build_def.bzl", "tflite_copts")
+package(default_visibility = [
+    "//visibility:public",
+])
 
-package(
-    default_visibility = [
-        "//visibility:public",
-    ],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
+
+load("//tensorflow/lite:build_def.bzl", "tflite_copts")
 
 # ctc support classes imported directly from TensorFlow.
 cc_library(
@@ -19,7 +18,7 @@ cc_library(
     ],
     deps = [
         ":top_n",
-        "//tensorflow/lite/kernels/internal:compatibility",
+        "//tensorflow/lite/kernels/internal:types",
         "//third_party/eigen3",
     ],
 )
@@ -31,12 +30,12 @@ cc_library(
         "top_n.h",
     ],
     deps = [
-        "//tensorflow/lite/kernels/internal:compatibility",
+        "//tensorflow/lite/kernels/internal:types",
     ],
 )
 
 cc_library(
-    name = "ctc_beam_search_decoder_op",
+    name = "experimental_ops",
     srcs = [
         "ctc_beam_search_decoder.cc",
     ],
@@ -67,61 +66,11 @@ cc_test(
     srcs = ["ctc_beam_search_decoder_test.cc"],
     tags = ["tflite_not_portable_ios"],
     deps = [
-        ":ctc_beam_search_decoder_op",
+        ":experimental_ops",
         "//tensorflow/lite:framework",
         "//tensorflow/lite/kernels:builtin_ops",
         "//tensorflow/lite/kernels:test_util",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
-    ],
-)
-
-cc_library(
-    name = "gru_cell",
-    srcs = ["gru_cell.cc"],
-    hdrs = ["gru_cell.h"],
-    deps = [
-        "//tensorflow/lite/kernels:cpu_backend_context",
-        "//tensorflow/lite/kernels/internal:optimized_base",
-        "//tensorflow/lite/kernels/internal:tensor",
-        "//third_party/eigen3",
-    ],
-)
-
-cc_library(
-    name = "unidirectional_sequence_gru_op",
-    srcs = [
-        "unidirectional_sequence_gru.cc",
-    ],
-    # Suppress warnings that are introduced by Eigen Tensor.
-    copts = tflite_copts() + [
-        "-Wno-error=reorder",
-    ] + select({
-        "//tensorflow:ios": ["-Wno-error=invalid-partial-specialization"],
-        "//conditions:default": [
-        ],
-    }),
-    deps = [
-        ":gru_cell",
-        "//tensorflow/lite:framework",
-        "//tensorflow/lite/c:c_api_internal",
-        "//tensorflow/lite/kernels:cpu_backend_context",
-        "//tensorflow/lite/kernels:kernel_util",
-        "//tensorflow/lite/kernels:op_macros",
-        "//tensorflow/lite/kernels/internal:tensor",
-        "@flatbuffers",
-    ],
-)
-
-cc_test(
-    name = "unidirectional_sequence_gru_test",
-    size = "small",
-    srcs = ["unidirectional_sequence_gru_test.cc"],
-    tags = ["tflite_not_portable_ios"],
-    deps = [
-        ":unidirectional_sequence_gru_op",
-        "//tensorflow/lite:framework",
-        "//tensorflow/lite/kernels:test_util",
-        "@com_google_googletest//:gtest",
     ],
 )

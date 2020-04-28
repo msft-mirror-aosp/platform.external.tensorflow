@@ -106,7 +106,8 @@ void ZlibOutputBuffer::AddToInputBuffer(StringPiece data) {
   z_stream_->avail_in += bytes_to_write;
 }
 
-Status ZlibOutputBuffer::DeflateBuffered(int flush_mode) {
+Status ZlibOutputBuffer::DeflateBuffered(bool last) {
+  int flush_mode = last ? Z_FINISH : zlib_options_.flush_mode;
   do {
     // From zlib manual (http://www.zlib.net/manual.html):
     //
@@ -159,7 +160,7 @@ Status ZlibOutputBuffer::Append(StringPiece data) {
     return Status::OK();
   }
 
-  TF_RETURN_IF_ERROR(DeflateBuffered(zlib_options_.flush_mode));
+  TF_RETURN_IF_ERROR(DeflateBuffered());
 
   // At this point input stream should be empty.
   if (bytes_to_write <= AvailableInputSpace()) {
@@ -190,21 +191,10 @@ Status ZlibOutputBuffer::Append(StringPiece data) {
   return Status::OK();
 }
 
-#if defined(PLATFORM_GOOGLE)
-Status ZlibOutputBuffer::Append(const absl::Cord& cord) {
-  absl::CordReader reader(cord);
-  absl::string_view fragment;
-  while (reader.ReadFragment(&fragment)) {
-    TF_RETURN_IF_ERROR(Append(fragment));
-  }
-  return Status::OK();
-}
-#endif
-
 Status ZlibOutputBuffer::Flush() {
-  TF_RETURN_IF_ERROR(DeflateBuffered(Z_PARTIAL_FLUSH));
+  TF_RETURN_IF_ERROR(DeflateBuffered());
   TF_RETURN_IF_ERROR(FlushOutputBufferToFile());
-  return file_->Flush();
+  return Status::OK();
 }
 
 Status ZlibOutputBuffer::Name(StringPiece* result) const {
@@ -218,7 +208,7 @@ Status ZlibOutputBuffer::Sync() {
 
 Status ZlibOutputBuffer::Close() {
   if (z_stream_) {
-    TF_RETURN_IF_ERROR(DeflateBuffered(Z_FINISH));
+    TF_RETURN_IF_ERROR(DeflateBuffered(true));
     TF_RETURN_IF_ERROR(FlushOutputBufferToFile());
     deflateEnd(z_stream_.get());
     z_stream_.reset(nullptr);

@@ -88,17 +88,23 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   // Currently only supports int32 and float.
   // TODO(b/117912892): Support quantization as well.
   const auto dtype = start->type;
-  if (dtype != kTfLiteFloat32 && dtype != kTfLiteInt32) {
-    context->ReportError(context, "Unknown index output data type: %s",
-                         TfLiteTypeGetName(dtype));
-    return kTfLiteError;
-  }
-
+  TF_LITE_ENSURE(context, dtype == kTfLiteInt32 || dtype == kTfLiteFloat32);
   TF_LITE_ENSURE_EQ(context, limit->type, dtype);
   TF_LITE_ENSURE_EQ(context, delta->type, dtype);
-
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-  output->type = dtype;
+
+  switch (dtype) {
+    case kTfLiteInt32:
+      output->type = kTfLiteInt32;
+      break;
+    case kTfLiteFloat32:
+      output->type = kTfLiteFloat32;
+      break;
+    default:
+      context->ReportError(context, "Unknown index output data type: %d",
+                           dtype);
+      return kTfLiteError;
+  }
 
   if (IsConstantTensor(start) && IsConstantTensor(limit) &&
       IsConstantTensor(delta)) {

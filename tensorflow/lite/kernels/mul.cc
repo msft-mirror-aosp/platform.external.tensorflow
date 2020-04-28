@@ -12,14 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/kernels/internal/optimized/integer_ops/mul.h"
-
+#include "tensorflow/lite/kernels/internal/reference/integer_ops/mul.h"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api_internal.h"
-#include "tensorflow/lite/kernels/internal/optimized/cpu_check.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
-#include "tensorflow/lite/kernels/internal/reference/integer_ops/mul.h"
 #include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
@@ -101,8 +98,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       output->type == kTfLiteInt16) {
     double real_multiplier =
         input1->params.scale * input2->params.scale / output->params.scale;
-    QuantizeMultiplier(real_multiplier, &data->output_multiplier,
-                       &data->output_shift);
+    QuantizeMultiplierSmallerThanOneExp(
+        real_multiplier, &data->output_multiplier, &data->output_shift);
   }
 
   return context->ResizeTensor(context, output, output_size);
@@ -179,18 +176,10 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                GetTensorData<dtype>(input2), GetTensorShape(output), \
                GetTensorData<dtype>(output))
     if (input1->type == kTfLiteInt8) {
-      if (kernel_type == kReference) {
-        if (need_broadcast) {
-          TF_LITE_MUL(reference_integer_ops, BroadcastMul4DSlow, int8_t);
-        } else {
-          TF_LITE_MUL(reference_integer_ops, Mul, int8_t);
-        }
+      if (need_broadcast) {
+        TF_LITE_MUL(reference_integer_ops, BroadcastMul4DSlow, int8_t);
       } else {
-        if (need_broadcast) {
-          TF_LITE_MUL(optimized_integer_ops, BroadcastMulFivefold, int8_t);
-        } else {
-          TF_LITE_MUL(optimized_integer_ops, Mul, int8_t);
-        }
+        TF_LITE_MUL(reference_integer_ops, Mul, int8_t);
       }
     } else {
       // type == kTfLiteUInt8

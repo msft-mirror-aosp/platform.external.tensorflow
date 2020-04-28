@@ -40,7 +40,9 @@ class HostToDeviceCopyThunk : public Thunk {
   HostToDeviceCopyThunk(const HostToDeviceCopyThunk&) = delete;
   HostToDeviceCopyThunk& operator=(const HostToDeviceCopyThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const void* source_address_;
@@ -62,7 +64,9 @@ class DeviceToDeviceCopyThunk : public Thunk {
   DeviceToDeviceCopyThunk(const DeviceToDeviceCopyThunk&) = delete;
   DeviceToDeviceCopyThunk& operator=(const DeviceToDeviceCopyThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const BufferAllocation::Slice source_buffer_;

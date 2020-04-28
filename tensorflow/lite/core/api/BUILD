@@ -1,9 +1,10 @@
-load("//tensorflow/lite:build_def.bzl", "tflite_copts")
-
 package(
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
+
+load("//tensorflow/lite:build_def.bzl", "tflite_copts")
 
 cc_library(
     name = "api",
@@ -16,7 +17,6 @@ cc_library(
         "error_reporter.h",
         "flatbuffer_conversions.h",
         "op_resolver.h",
-        "profiler.h",
     ],
     copts = tflite_copts(),
     deps = [

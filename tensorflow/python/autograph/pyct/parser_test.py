@@ -18,6 +18,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import textwrap
+
 from tensorflow.python.autograph.pyct import parser
 from tensorflow.python.platform import test
 
@@ -29,36 +31,50 @@ class ParserTest(test.TestCase):
     def f(x):
       return x + 1
 
-    node, _ = parser.parse_entity(f, future_features=())
+    node, _, _ = parser.parse_entity(f)
     self.assertEqual('f', node.name)
 
-  def test_parse_entity_print_function(self):
+  def test_parse_str(self):
+    mod = parser.parse_str(
+        textwrap.dedent("""
+            def f(x):
+              return x + 1
+    """))
+    self.assertEqual('f', mod.body[0].name)
 
-    def f(x):
-      print(x)
+  def test_parse_str_print(self):
+    mod = parser.parse_str(
+        textwrap.dedent("""
+            def f(x):
+              print(x)
+              return x + 1
+    """))
+    self.assertEqual('f', mod.body[0].name)
 
-    node, _ = parser.parse_entity(f, future_features=('print_function',))
-    self.assertEqual('f', node.name)
+  def test_parse_str_weird_print(self):
+    mod = parser.parse_str(
+        textwrap.dedent("""
+            def f(x):
+              print (x)
+              return x + 1
+    """))
+    self.assertEqual('f', mod.body[0].name)
 
   def test_parse_comments(self):
-
     def f():
 # unindented comment
       pass
-
     with self.assertRaises(ValueError):
-      parser.parse_entity(f, future_features=())
+      parser.parse_entity(f)
 
   def test_parse_multiline_strings(self):
-
     def f():
       print("""
 some
 multiline
 string""")
-
     with self.assertRaises(ValueError):
-      parser.parse_entity(f, future_features=())
+      parser.parse_entity(f)
 
   def test_parse_expression(self):
     node = parser.parse_expression('a.b')

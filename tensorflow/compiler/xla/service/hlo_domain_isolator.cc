@@ -47,11 +47,7 @@ StatusOr<bool> RunInternal(HloModule* module,
         HloInstruction* domain = (*creator)(instruction, root, operand);
         if (domain != nullptr) {
           VLOG(4) << "New domain: " << domain->ToString();
-          // Call ReplaceUseWithDifferentShape even though the shapes are
-          // expected to match to avoid an expensive shape check between the
-          // original and the new instruction.
-          TF_RETURN_IF_ERROR(
-              operand->ReplaceUseWithDifferentShape(instruction, domain));
+          TF_RETURN_IF_ERROR(operand->ReplaceUseWith(instruction, domain));
           ++added_domains;
         }
       }

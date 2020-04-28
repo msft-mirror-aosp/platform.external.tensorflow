@@ -74,9 +74,8 @@ CollectionRegistry::Register(const AbstractMetricDef* const metric_def,
 
   const auto found_it = registry_.find(metric_def->name());
   if (found_it != registry_.end()) {
-    LOG(ERROR) << "Cannot register 2 metrics with the same name: "
+    LOG(FATAL) << "Cannot register 2 metrics with the same name: "
                << metric_def->name();
-    return nullptr;
   }
   registry_.insert(
       {metric_def->name(),

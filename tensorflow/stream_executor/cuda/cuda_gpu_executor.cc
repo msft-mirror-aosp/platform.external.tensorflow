@@ -24,10 +24,7 @@ limitations under the License.
 #else
 #include <unistd.h>
 #endif
-#include "absl/strings/ascii.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "tensorflow/stream_executor/cuda/cuda_diagnostics.h"
 #include "tensorflow/stream_executor/cuda/cuda_driver.h"
@@ -43,7 +40,10 @@ limitations under the License.
 #include "tensorflow/stream_executor/lib/numbers.h"
 #include "tensorflow/stream_executor/lib/path.h"
 #include "tensorflow/stream_executor/lib/process_state.h"
+#include "tensorflow/stream_executor/lib/ptr_util.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
+#include "tensorflow/stream_executor/lib/str_util.h"
+#include "tensorflow/stream_executor/lib/stringprintf.h"
 #include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/platform/logging.h"
 #include "tensorflow/stream_executor/platform/port.h"
@@ -201,7 +201,7 @@ static string GetBinaryDir(bool strip_exe) {
   HMODULE hModule = GetModuleHandle(NULL);
   GetModuleFileName(hModule, exe_path, MAX_PATH);
 #else
-  PCHECK(readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1) != -1);
+  CHECK_ERR(readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1));
 #endif
 #endif
   // Make sure it's null-terminated:
@@ -210,20 +210,23 @@ static string GetBinaryDir(bool strip_exe) {
   if (strip_exe) {
     // The exe is the last component of the path, so remove one component.
     string ret = exe_path;
-    std::vector<string> components = absl::StrSplit(exe_path, '/');
+    std::vector<string> components = port::Split(exe_path, '/');
     components.pop_back();
-    return absl::StrJoin(components, "/");
+    return port::Join(components, "/");
   }
   return exe_path;
 }
 
-port::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
-                                              CUmodule* module) {
+bool GpuExecutor::LoadModuleFromCuBin(const char* cubin, CUmodule* module) {
   uint64_t module_refcount;
   std::tie(*module, module_refcount) = gpu_binary_to_module_[cubin];
 
   if (*module == nullptr) {
-    TF_RETURN_IF_ERROR(GpuDriver::LoadCubin(context_, cubin, module));
+    auto load_status = GpuDriver::LoadCubin(context_, cubin, module);
+    if (!load_status.ok()) {
+      LOG(ERROR) << "failed to load CUBIN: " << load_status;
+      return false;
+    }
     module_refcount = 1;
     VLOG(3) << "Loaded CUBIN " << static_cast<const void *>(cubin)
             << " as module " << *module;
@@ -233,15 +236,17 @@ port::Status GpuExecutor::LoadModuleFromCuBin(const char* cubin,
             << " is already loaded as module " << *module;
   }
   gpu_binary_to_module_[cubin] = {*module, module_refcount};
-  return port::Status::OK();
+  return true;
 }
 
-port::Status GpuExecutor::LoadModuleFromPtx(const char* ptx, CUmodule* module) {
+bool GpuExecutor::LoadModuleFromPtx(const char* ptx, CUmodule* module) {
   uint64_t module_refcount;
   std::tie(*module, module_refcount) = gpu_binary_to_module_[ptx];
 
   if (*module == nullptr) {
-    TF_RETURN_IF_ERROR(GpuDriver::LoadPtx(context_, ptx, module));
+    if (!GpuDriver::LoadPtx(context_, ptx, module)) {
+      return false;
+    }
     VLOG(3) << "Loaded PTX " << static_cast<const void *>(ptx) << " as module "
             << *module;
     module_refcount = 1;
@@ -251,7 +256,7 @@ port::Status GpuExecutor::LoadModuleFromPtx(const char* ptx, CUmodule* module) {
             << " is already loaded as module " << module;
   }
   gpu_binary_to_module_[ptx] = {*module, module_refcount};
-  return port::Status::OK();
+  return true;
 }
 
 bool GpuExecutor::LoadModuleFromHsaco(const char* hsaco, CUmodule* module) {
@@ -259,8 +264,8 @@ bool GpuExecutor::LoadModuleFromHsaco(const char* hsaco, CUmodule* module) {
   return false;
 }
 
-port::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
-                                    KernelBase* kernel) {
+bool GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
+                            KernelBase* kernel) {
   GpuKernel* cuda_kernel = AsGpuKernel(kernel);
   CUmodule module;
   const string *kernelname;
@@ -268,16 +273,18 @@ port::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   VLOG(3) << "GetKernel on kernel " << kernel << " : " << kernel->name();
 
   if (spec.has_cuda_cubin_in_memory()) {
-    absl::MutexLock lock{&in_memory_modules_mu_};
+    mutex_lock lock{in_memory_modules_mu_};
     kernelname = &spec.cuda_cubin_in_memory().kernelname();
     const char *cubin = spec.cuda_cubin_in_memory().bytes();
-    TF_RETURN_IF_ERROR(LoadModuleFromCuBin(cubin, &module));
+    if (!LoadModuleFromCuBin(cubin, &module)) {
+      return false;
+    }
     kernel_to_gpu_binary_[kernel] = cubin;
   } else if (spec.has_cuda_ptx_in_memory()) {
     kernelname = &spec.cuda_ptx_in_memory().kernelname();
 
     if (cc_major_ == 0 && cc_minor_ == 0) {
-      return port::InternalError("Compute capability not set");
+      return false;
     }
 
     const char *ptx = spec.cuda_ptx_in_memory().text(cc_major_, cc_minor_);
@@ -285,19 +292,23 @@ port::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
       ptx = spec.cuda_ptx_in_memory().default_text();
     }
     if (ptx == nullptr) {
-      LOG(FATAL) << "Loader spec has no ptx for kernel " << *kernelname;
+      LOG(FATAL) << "loader spec has no ptx for kernel " << *kernelname;
+      return false;
     }
 
-    absl::MutexLock lock{&in_memory_modules_mu_};
-    TF_RETURN_IF_ERROR(LoadModuleFromPtx(ptx, &module));
+    mutex_lock lock{in_memory_modules_mu_};
+    if (!LoadModuleFromPtx(ptx, &module)) {
+      return false;
+    }
     kernel_to_gpu_binary_[kernel] = ptx;
   } else {
-    return port::InternalError("No method of loading CUDA kernel provided");
+    LOG(WARNING) << "no method of loading CUDA kernel provided";
+    return false;
   }
   VLOG(2) << "getting function " << *kernelname << " from module " << module;
   if (!GpuDriver::GetModuleFunction(context_, module, kernelname->c_str(),
                                     cuda_kernel->gpu_function_ptr())) {
-    return port::InternalError("Could not find the corresponding function");
+    return false;
   }
 
   // We have to trust the kernel loader spec arity because there doesn't appear
@@ -310,7 +321,7 @@ port::Status GpuExecutor::GetKernel(const MultiKernelLoaderSpec& spec,
   }
   kernel->set_metadata(kernel_metadata);
   kernel->set_name(*kernelname);
-  return port::Status::OK();
+  return true;
 }
 
 bool GpuExecutor::UnloadGpuBinary(const void* gpu_binary) {
@@ -333,7 +344,7 @@ bool GpuExecutor::UnloadGpuBinary(const void* gpu_binary) {
 void GpuExecutor::UnloadKernel(const KernelBase* kernel) {
   VLOG(3) << "Unloading kernel " << kernel << " : " << kernel->name();
 
-  absl::MutexLock lock{&in_memory_modules_mu_};
+  mutex_lock lock{in_memory_modules_mu_};
   auto gpu_binary_it = kernel_to_gpu_binary_.find(kernel);
   if (kernel_to_gpu_binary_.end() == gpu_binary_it) {
     VLOG(3) << "Kernel " << kernel << " : " << kernel->name()
@@ -346,41 +357,45 @@ void GpuExecutor::UnloadKernel(const KernelBase* kernel) {
   kernel_to_gpu_binary_.erase(gpu_binary_it);
 }
 
-port::Status GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
-                                     ModuleHandle* module_handle) {
+bool GpuExecutor::LoadModule(const MultiModuleLoaderSpec& spec,
+                             ModuleHandle* module_handle) {
   // In GpuExecutor we store the pointer to the GPU binary (PTX or CUBIN) as
   // ModuleHandle::id().
   CUmodule cu_module;
   if (spec.has_cuda_cubin_in_memory()) {
-    absl::MutexLock lock{&in_memory_modules_mu_};
-    TF_RETURN_IF_ERROR(LoadModuleFromCuBin(
-        reinterpret_cast<const char*>(spec.cuda_cubin_in_memory().data()),
-        &cu_module));
+    mutex_lock lock{in_memory_modules_mu_};
+    if (!LoadModuleFromCuBin(
+            reinterpret_cast<const char *>(spec.cuda_cubin_in_memory().data()),
+            &cu_module)) {
+      return false;
+    }
     *module_handle = ModuleHandle(const_cast<void *>(
         static_cast<const void *>(spec.cuda_cubin_in_memory().data())));
-    return port::Status::OK();
+    return true;
   } else if (spec.has_cuda_ptx_in_memory()) {
     if (cc_major_ == 0 && cc_minor_ == 0) {
-      return port::InternalError("Compute capability not set");
+      return false;
     }
 
     if (!spec.cuda_ptx_in_memory()) {
-      return port::InternalError("PTX not found in spec");
+      return false;
     }
 
-    absl::MutexLock lock{&in_memory_modules_mu_};
-    TF_RETURN_IF_ERROR(
-        LoadModuleFromPtx(spec.cuda_ptx_in_memory(), &cu_module));
+    mutex_lock lock{in_memory_modules_mu_};
+    if (!LoadModuleFromPtx(spec.cuda_ptx_in_memory(), &cu_module)) {
+      return false;
+    }
     *module_handle = ModuleHandle(const_cast<void *>(
         static_cast<const void *>(spec.cuda_ptx_in_memory())));
-    return port::Status::OK();
+    return true;
   }
-  return port::InternalError("No method of loading CUDA module provided");
+  LOG(WARNING) << "no method of loading CUDA module provided";
+  return false;
 }
 
 bool GpuExecutor::UnloadModule(ModuleHandle module_handle) {
   const char *gpu_binary = reinterpret_cast<const char *>(module_handle.id());
-  absl::MutexLock lock{&in_memory_modules_mu_};
+  mutex_lock lock{in_memory_modules_mu_};
   return UnloadGpuBinary(gpu_binary);
 }
 
@@ -402,10 +417,9 @@ bool GpuExecutor::GetKernelMetadata(GpuKernel* cuda_kernel,
   return true;
 }
 
-port::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
-                                 const BlockDim& block_dims,
-                                 const KernelBase& kernel,
-                                 const KernelArgsArrayBase& args) {
+bool GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
+                         const BlockDim& block_dims, const KernelBase& kernel,
+                         const KernelArgsArrayBase& args) {
   CHECK_EQ(kernel.Arity(), args.number_of_arguments());
   CUstream custream = AsGpuStreamValue(stream);
   const GpuKernel* cuda_kernel = AsGpuKernel(&kernel);
@@ -415,7 +429,7 @@ port::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
   // whether we've done an occupancy check on this kernel before isn't free
   // (because we have to synchronize), so we only do this at -v 2+.
   if (VLOG_IS_ON(2)) {
-    absl::MutexLock lock(&launched_kernels_mu_);
+    mutex_lock lock(launched_kernels_mu_);
     if (!launched_kernels_.count(cufunc)) {
       VlogOccupancyInfo(kernel, thread_dims, block_dims);
       // TODO(rspringer): Remove elements from launched_kernels_...if we ever
@@ -431,10 +445,19 @@ port::Status GpuExecutor::Launch(Stream* stream, const ThreadDim& thread_dims,
 
   void **kernel_params = const_cast<void **>(args.argument_addresses().data());
 
-  return GpuDriver::LaunchKernel(
-      context_, cufunc, block_dims.x, block_dims.y, block_dims.z, thread_dims.x,
-      thread_dims.y, thread_dims.z, args.number_of_shared_bytes(), custream,
-      kernel_params, nullptr /* = extra */);
+  if (!GpuDriver::LaunchKernel(context_, cufunc, block_dims.x, block_dims.y,
+                               block_dims.z, thread_dims.x, thread_dims.y,
+                               thread_dims.z, args.number_of_shared_bytes(),
+                               custream, kernel_params,
+                               nullptr /* = extra */)) {
+    LOG(ERROR) << "failed to launch CUDA kernel " << kernel.name() << " with "
+               << args.number_of_arguments()
+               << " args; thread dim: " << thread_dims.ToString()
+               << "; block dim: " << block_dims.ToString();
+    return false;
+  }
+
+  return true;
 }
 
 // This is a non-essential operation; if there's a failure, proceed without
@@ -522,14 +545,17 @@ void* GpuExecutor::Allocate(uint64 size) {
   return GpuDriver::DeviceAllocate(context_, size);
 }
 
-void* GpuExecutor::GetSubBuffer(DeviceMemoryBase* mem, uint64 offset_bytes,
-                                uint64 size_bytes) {
+void* GpuExecutor::AllocateSubBuffer(DeviceMemoryBase* mem, uint64 offset_bytes,
+                                     uint64 size_bytes) {
   // offset and size are in bytes, so char* works as the pointer type.
   return reinterpret_cast<char *>(mem->opaque()) + offset_bytes;
 }
 
 void GpuExecutor::Deallocate(DeviceMemoryBase* mem) {
-  GpuDriver::DeviceDeallocate(context_, mem->opaque());
+  // CUDA "sub-buffers" are just pointer + offset, so no dealloc is necessary.
+  if (!mem->is_sub_buffer()) {
+    GpuDriver::DeviceDeallocate(context_, mem->opaque());
+  }
 }
 
 bool GpuExecutor::HostMemoryRegister(void* location, uint64 size) {
@@ -689,8 +715,8 @@ port::Status GpuExecutor::WaitForEvent(Stream* stream, Event* event) {
   } else {
     return port::Status(
         port::error::INTERNAL,
-        absl::StrFormat("error recording waiting for CUDA event on stream %p",
-                        stream));
+        port::Printf("error recording waiting for CUDA event on stream %p",
+                     stream));
   }
 }
 
@@ -870,7 +896,7 @@ bool GpuExecutor::GetSymbol(const string& symbol_name,
   };
 
   {  // give limited scope to mutex_lock
-    absl::MutexLock lock{&in_memory_modules_mu_};
+    mutex_lock lock{in_memory_modules_mu_};
     if (static_cast<bool>(module_handle)) {
       auto it = gpu_binary_to_module_.find(module_handle.id());
       CHECK(it != gpu_binary_to_module_.end());
@@ -884,17 +910,17 @@ bool GpuExecutor::GetSymbol(const string& symbol_name,
     }
   }
 
-  LOG(INFO) << "Failed to find symbol in any modules: " << symbol_name;
+  LOG(INFO) << "Falied to find symbol in any modules: " << symbol_name;
   return false;
 }
 
-bool FillBlockDimLimit(GpuDeviceHandle device, BlockDim* block_dim_limit) {
+bool GpuExecutor::FillBlockDimLimit(BlockDim* block_dim_limit) const {
   // The BlockDim name is a mismatch against these GRID_DIM_* queries because
   // we use BlockDims to express the dimensions of blocks within a grid
   // (as opposed to ThreadDim which expresses the dimensions of threads
   // within a block).
   int x, y, z;
-  if (!GpuDriver::GetGridLimits(&x, &y, &z, device)) {
+  if (!GpuDriver::GetGridLimits(&x, &y, &z, device_)) {
     return false;
   }
 
@@ -959,7 +985,7 @@ static int TryToReadNumaNode(const string &pci_bus_id, int device_ordinal) {
   }
 
   string filename =
-      absl::StrFormat("/sys/bus/pci/devices/%s/numa_node", pci_bus_id);
+      port::Printf("/sys/bus/pci/devices/%s/numa_node", pci_bus_id.c_str());
 
   // We have to use fopen/fread here so that the device properties can be
   // populated before InitGoogle procedure has been completed (at which point we
@@ -999,84 +1025,71 @@ static int TryToReadNumaNode(const string &pci_bus_id, int device_ordinal) {
 #endif
 }
 
-port::StatusOr<std::unique_ptr<DeviceDescription>>
-GpuExecutor::CreateDeviceDescription(int device_ordinal) {
-  GpuDeviceHandle device;
-  auto status = GpuDriver::GetDevice(device_ordinal, &device);
-  if (!status.ok()) {
-    return status;
-  }
-
-  int cc_major;
-  int cc_minor;
-  status = GpuDriver::GetComputeCapability(&cc_major, &cc_minor, device);
-  if (!status.ok()) {
-    return status;
-  }
-
+DeviceDescription* GpuExecutor::PopulateDeviceDescription() const {
   internal::DeviceDescriptionBuilder builder;
 
   {
     int driver_version = 0;
     (void)GpuDriver::GetDriverVersion(&driver_version);
-    string augmented_driver_version = absl::StrFormat(
+    string augmented_driver_version = port::Printf(
         "%d (%s)", driver_version,
-        cuda::DriverVersionStatusToString(Diagnostician::FindDsoVersion()));
+        cuda::DriverVersionStatusToString(Diagnostician::FindDsoVersion())
+            .c_str());
     builder.set_driver_version(augmented_driver_version);
   }
 
   {
-    string pci_bus_id = GpuDriver::GetPCIBusID(device);
+    string pci_bus_id = GpuDriver::GetPCIBusID(device_);
 
     // Lower the hex characters to match sysfs.
-    pci_bus_id = absl::AsciiStrToLower(pci_bus_id);
+    pci_bus_id = port::Lowercase(pci_bus_id);
     builder.set_pci_bus_id(pci_bus_id);
 
     // Read the NUMA node corresponding to the PCI bus ID out of sysfs.
-    int numa_node = TryToReadNumaNode(pci_bus_id, device_ordinal);
+    int numa_node = TryToReadNumaNode(pci_bus_id, device_ordinal_);
     builder.set_numa_node(numa_node);
   }
 
   {
     builder.set_threads_per_block_limit(
         GpuDriver::GetDeviceAttribute(CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
-                                      device)
+                                      device_)
             .ValueOrDie());
 
     ThreadDim thread_dim_limit;
     thread_dim_limit.x = GpuDriver::GetDeviceAttribute(
-                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X, device)
+                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X, device_)
                              .ValueOrDie();
     thread_dim_limit.y = GpuDriver::GetDeviceAttribute(
-                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y, device)
+                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y, device_)
                              .ValueOrDie();
     thread_dim_limit.z = GpuDriver::GetDeviceAttribute(
-                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z, device)
+                             CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z, device_)
                              .ValueOrDie();
     builder.set_thread_dim_limit(thread_dim_limit);
 
     int clock_rate =
-        GpuDriver::GetDeviceAttribute(CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device)
+        GpuDriver::GetDeviceAttribute(CU_DEVICE_ATTRIBUTE_CLOCK_RATE, device_)
             .ValueOrDie();
     builder.set_clock_rate_ghz(static_cast<float>(clock_rate) / 1e6);
   }
 
   {
     bool ecc_enabled = false;
-    (void)GpuDriver::IsEccEnabled(device, &ecc_enabled);
+    (void)GpuDriver::IsEccEnabled(device_, &ecc_enabled);
     builder.set_ecc_enabled(ecc_enabled);
   }
 
   {
     uint64 device_memory_size = -1;
-    (void)GpuDriver::GetDeviceTotalMemory(device, &device_memory_size);
+    (void)GpuDriver::GetDeviceTotalMemory(device_, &device_memory_size);
     builder.set_device_memory_size(device_memory_size);
   }
 
   port::StatusOr<int> mem_clock_khz = GpuDriver::GetDeviceAttribute(
-      CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE, device_ordinal);
+      CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE, device_ordinal_);
   port::StatusOr<int> mem_bus_width_bits = GpuDriver::GetDeviceAttribute(
-      CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, device_ordinal);
+      CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH, device_ordinal_);
   if (mem_clock_khz.ok() && mem_bus_width_bits.ok()) {
     // Times 2 because HBM is DDR memory; it gets two data bits per each data
     // lane.
@@ -1087,47 +1100,94 @@ GpuExecutor::CreateDeviceDescription(int device_ordinal) {
 
   {
     BlockDim block_dim_limit;
-    FillBlockDimLimit(device, &block_dim_limit);
+    FillBlockDimLimit(&block_dim_limit);
     builder.set_block_dim_limit(block_dim_limit);
   }
 
   {
     string device_name;
-    (void)GpuDriver::GetDeviceName(device, &device_name);
+    (void)GpuDriver::GetDeviceName(device_, &device_name);
     builder.set_name(device_name);
   }
 
   builder.set_platform_version(
-      absl::StrCat("Compute Capability ", cc_major, ".", cc_minor));
+      absl::StrCat("Compute Capability ", cc_major_, ".", cc_minor_));
 
   // TODO(leary) should be a way to query this from the driver, but this is
   // unlikely to change for us any time soon.
   builder.set_device_address_bits(64);
 
   builder.set_device_vendor("NVIDIA Corporation");
-  builder.set_cuda_compute_capability(cc_major, cc_minor);
+  builder.set_cuda_compute_capability(cc_major_, cc_minor_);
   builder.set_shared_memory_per_core(
-      GpuDriver::GetMaxSharedMemoryPerCore(device).ValueOrDie());
+      GpuDriver::GetMaxSharedMemoryPerCore(device_).ValueOrDie());
   builder.set_shared_memory_per_block(
-      GpuDriver::GetMaxSharedMemoryPerBlock(device).ValueOrDie());
+      GpuDriver::GetMaxSharedMemoryPerBlock(device_).ValueOrDie());
   builder.set_core_count(
-      GpuDriver::GetMultiprocessorCount(device).ValueOrDie());
+      GpuDriver::GetMultiprocessorCount(device_).ValueOrDie());
   builder.set_threads_per_core_limit(
-      GpuDriver::GetMaxThreadsPerMultiprocessor(device).ValueOrDie());
+      GpuDriver::GetMaxThreadsPerMultiprocessor(device_).ValueOrDie());
   builder.set_registers_per_block_limit(
-      GpuDriver::GetMaxRegistersPerBlock(device).ValueOrDie());
+      GpuDriver::GetMaxRegistersPerBlock(device_).ValueOrDie());
   builder.set_threads_per_warp(
-      GpuDriver::GetThreadsPerWarp(device).ValueOrDie());
+      GpuDriver::GetThreadsPerWarp(device_).ValueOrDie());
   builder.set_registers_per_core_limit(
       GpuDriver::GetDeviceAttribute(
-          CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR, device)
+          CU_DEVICE_ATTRIBUTE_MAX_REGISTERS_PER_MULTIPROCESSOR, device_)
           .ValueOrDie());
 
-  return builder.Build();
+  // We are loading a dummy ptx kernel to set the device description's
+  // blocks_per_core_limit by calling the CUDA occupancy calculator.  This
+  // value is currently required XLA GPU's CalculateLaunchDimensions()
+  const char* blank_ptx = R"(
+.version 6.0
+.target sm_30
+.address_size 64
+
+        // .globl       testkernel
+.visible .entry testkernel()
+{
+        ret;
+})";
+  const char* kernel_name = "testkernel";
+
+  CUmodule blank_module;
+  CUfunction blank_function;
+  int bpc = -1;
+  bool ptx_success =
+      cuda::CUDADriver::LoadPtx(context_, blank_ptx, &blank_module);
+  if (ptx_success) {
+    ptx_success = cuda::CUDADriver::GetModuleFunction(
+        context_, blank_module, kernel_name, &blank_function);
+    if (ptx_success) {
+      CUresult result = cuOccupancyMaxActiveBlocksPerMultiprocessor(
+          &bpc, blank_function, 1, 1);
+      if (result != CUDA_SUCCESS) {
+        bpc = -1;
+        ptx_success = false;
+      }
+    }
+    cuda::CUDADriver::UnloadModule(context_, blank_module);
+  }
+  if (!ptx_success) {
+    LOG(ERROR) << "Failed to calculate max blocks per SM using dummy kernel.";
+  }
+  builder.set_blocks_per_core_limit(bpc);
+
+  auto built = builder.Build();
+  return built.release();
 }
 
 }  // namespace gpu
 
+void initialize_cuda_gpu_executor() {
+  *internal::MakeCUDAExecutorImplementation() = [](const PluginConfig& config) {
+    return new gpu::GpuExecutor{config};
+  };
+}
+
 }  // namespace stream_executor
 
-REGISTER_MODULE_INITIALIZER(cuda_gpu_executor, {});
+REGISTER_MODULE_INITIALIZER(cuda_gpu_executor, {
+  stream_executor::initialize_cuda_gpu_executor();
+});

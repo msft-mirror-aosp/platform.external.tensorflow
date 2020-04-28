@@ -211,8 +211,7 @@ REGISTER_ADDN_CPU(Variant);
 
 #undef REGISTER_ADDN_CPU
 
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
+#if GOOGLE_CUDA
 #define REGISTER_ADDN_GPU(type) REGISTER_ADDN(type, GPU)
 TF_CALL_GPU_NUMBER_TYPES(REGISTER_ADDN_GPU);
 TF_CALL_int64(REGISTER_ADDN_GPU);
@@ -231,7 +230,7 @@ REGISTER_KERNEL_BUILDER(Name("AddN")
                             .HostMemory("sum"),
                         AddNOp<CPUDevice, int32>);
 
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 #ifdef TENSORFLOW_USE_SYCL
 REGISTER_ADDN(float, SYCL);

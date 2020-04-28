@@ -26,7 +26,6 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/tracing.h"
-#include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/protobuf/master.pb.h"
 
 namespace tensorflow {
@@ -111,12 +110,11 @@ class GrpcRemoteMaster : public MasterInterface {
 
  private:
   // Start tracing, attaching a unique ID to both the trace and the RPC.
-  profiler::TraceMe* NewTraceRpc(StringPiece name, ::grpc::ClientContext* ctx) {
+  tracing::ScopedActivity* NewTraceRpc(StringPiece name,
+                                       ::grpc::ClientContext* ctx) {
     string trace_id = strings::StrCat(tracing::GetUniqueArg());
     ctx->AddMetadata(GrpcIdKey(), trace_id);
-    return new profiler::TraceMe(
-        [&] { return strings::StrCat(name, ":", trace_id); },
-        profiler::TraceMeLevel::kInfo);
+    return new tracing::ScopedActivity(name, trace_id);
   }
 
   template <typename Request, typename Response>
@@ -133,7 +131,7 @@ class GrpcRemoteMaster : public MasterInterface {
     Status s;
     for (int num_retries = 0;; ++num_retries) {
       ::grpc::ClientContext ctx;
-      std::unique_ptr<profiler::TraceMe> trace;
+      std::unique_ptr<tracing::ScopedActivity> trace;
       if (!trace_string.empty()) {
         trace.reset(NewTraceRpc(trace_string, &ctx));
       }

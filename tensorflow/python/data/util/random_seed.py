@@ -29,8 +29,7 @@ from tensorflow.python.ops import math_ops
 def get_seed(seed):
   """Returns the local seeds an operation should use given an op-specific seed.
 
-  See `tf.compat.v1.get_seed` for more details. This wrapper adds support for
-  the case
+  See `tf.get_seed` for more details. This wrapper adds support for the case
   where `seed` may be a tensor.
 
   Args:

@@ -32,7 +32,6 @@ import collections
 import copy
 import errno
 import itertools
-import json
 import multiprocessing
 import os
 import platform
@@ -162,7 +161,6 @@ flags.DEFINE_string(
 # Note: can add python references with e.g.
 # !!python/name:builtins.str
 # !!python/name:__main__.funcname
-# (but this may not be considered safe?)
 SCHEMA_TEXT = """
 header:
   type: string
@@ -341,7 +339,7 @@ def get_slice_sets_and_required_args(slice_sets, tag_spec):
 
 def gather_tag_args(slices, cli_input_args, required_args):
   """Build a dictionary of all the CLI and slice-specified args for a tag."""
-  args = {}
+  args = dict()
 
   for s in slices:
     args = update_args_dict(args, s['args'])
@@ -454,7 +452,7 @@ def gather_existing_partials(partial_path):
     Dict[string, string] of partial short names (like "ubuntu/python" or
       "bazel") to the full contents of that partial.
   """
-  partials = {}
+  partials = dict()
   for path, _, files in os.walk(partial_path):
     for name in files:
       fullpath = os.path.join(path, name)
@@ -476,13 +474,13 @@ def main(argv):
 
   # Read the full spec file, used for everything
   with open(FLAGS.spec_file, 'r') as spec_file:
-    tag_spec = yaml.safe_load(spec_file)
+    tag_spec = yaml.load(spec_file)
 
   # Get existing partial contents
   partials = gather_existing_partials(FLAGS.partial_dir)
 
   # Abort if spec.yaml is invalid
-  schema = yaml.safe_load(SCHEMA_TEXT)
+  schema = yaml.load(SCHEMA_TEXT)
   v = TfDockerTagValidator(schema, partials=partials)
   if not v.validate(tag_spec):
     eprint('> Error: {} is an invalid spec! The errors are:'.format(
@@ -584,42 +582,17 @@ def main(argv):
       image, logs = None, []
       if not FLAGS.dry_run:
         try:
-          # Use low level APIClient in order to stream log output
-          resp = dock.api.build(
+          image, logs = dock.images.build(
               timeout=FLAGS.hub_timeout,
               path='.',
               nocache=FLAGS.nocache,
               dockerfile=dockerfile,
               buildargs=tag_def['cli_args'],
               tag=repo_tag)
-          last_event = None
-          image_id = None
-          # Manually process log output extracting build success and image id
-          # in order to get built image
-          while True:
-            try:
-              output = next(resp).decode('utf-8')
-              json_output = json.loads(output.strip('\r\n'))
-              if 'stream' in json_output:
-                eprint(json_output['stream'], end='')
-                match = re.search(r'(^Successfully built |sha256:)([0-9a-f]+)$',
-                                  json_output['stream'])
-                if match:
-                  image_id = match.group(2)
-                last_event = json_output['stream']
-                # collect all log lines into the logs object
-                logs.append(json_output)
-            except StopIteration:
-              eprint('Docker image build complete.')
-              break
-            except ValueError:
-              eprint('Error parsing from docker image build: {}'.format(output))
-          # If Image ID is not set, the image failed to built properly. Raise
-          # an error in this case with the last log line and all logs
-          if image_id:
-            image = dock.images.get(image_id)
-          else:
-            raise docker.errors.BuildError(last_event or 'Unknown', logs)
+
+          # Print logs after finishing
+          log_lines = [l.get('stream', '') for l in logs]
+          eprint(''.join(log_lines))
 
           # Run tests if requested, and dump output
           # Could be improved by backgrounding, but would need better

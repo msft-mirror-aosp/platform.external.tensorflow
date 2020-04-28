@@ -16,14 +16,13 @@
 # Description:
 # SavedModel contrib libraries.
 
-load("//tensorflow:tensorflow.bzl", "py_test")
-
-package(
-    default_visibility = ["//tensorflow:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+package(default_visibility = ["//tensorflow:__subpackages__"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 py_library(
     name = "saved_model_py",
@@ -70,7 +69,6 @@ py_test(
     name = "reader_test",
     size = "small",
     srcs = ["python/saved_model/reader_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = ["no_windows"],  # TODO: needs investigation on Windows
     visibility = ["//visibility:private"],

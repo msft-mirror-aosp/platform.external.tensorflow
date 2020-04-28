@@ -47,8 +47,7 @@ void ConcatCPU(
     const std::vector<std::unique_ptr<typename TTypes<T, 2>::ConstMatrix>>&
         inputs,
     typename TTypes<T, 2>::Matrix* output);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
+#if GOOGLE_CUDA
 template <typename T>
 void ConcatGPU(
     OpKernelContext* c,
@@ -74,7 +73,7 @@ TF_CALL_bfloat16(REGISTER);
 TF_CALL_bool(REGISTER);
 TF_CALL_uint8(REGISTER);
 #undef REGISTER
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 #ifdef TENSORFLOW_USE_SYCL
 template <typename T>

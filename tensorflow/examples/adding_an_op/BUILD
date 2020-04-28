@@ -1,18 +1,16 @@
 # Description:
 # Code examples referenced by adding_an_op
 
-load(
-    "//tensorflow/core/platform:default/build_config_root.bzl",
-    "tf_cuda_tests_tags",
-    "tf_exec_compatible_with",
-)
-load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
-load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
-
 package(
     default_visibility = ["//tensorflow:internal"],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
+
+load("//tensorflow:tensorflow.bzl", "tf_custom_op_library")
+load("//tensorflow:tensorflow.bzl", "tf_cuda_tests_tags")
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
+load("//tensorflow:tensorflow.bzl", "tf_exec_compatible_with")
 
 exports_files(["LICENSE"])
 
@@ -70,12 +68,8 @@ py_test(
     name = "zero_out_1_test",
     size = "small",
     srcs = ["zero_out_1_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
-    tags = [
-        "no_pip",
-        "notap",
-    ],
+    tags = ["notap"],
     deps = [
         ":zero_out_op_1",
         "//tensorflow:tensorflow_py",
@@ -86,12 +80,8 @@ py_test(
     name = "zero_out_2_test",
     size = "small",
     srcs = ["zero_out_2_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
-    tags = [
-        "no_pip",
-        "notap",
-    ],
+    tags = ["notap"],
     deps = [
         ":zero_out_grad_2",
         ":zero_out_op_2",
@@ -103,12 +93,8 @@ py_test(
     name = "zero_out_3_test",
     size = "small",
     srcs = ["zero_out_3_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
-    tags = [
-        "no_pip",
-        "notap",
-    ],
+    tags = ["notap"],
     deps = [
         ":zero_out_op_3",
         "//tensorflow:tensorflow_py",
@@ -134,12 +120,8 @@ py_test(
     size = "small",
     srcs = ["cuda_op_test.py"],
     exec_compatible_with = tf_exec_compatible_with({"tags": tf_cuda_tests_tags()}),
-    python_version = "PY2",
     srcs_version = "PY2AND3",
-    tags = tf_cuda_tests_tags() + [
-        "notap",
-        "no_pip",
-    ],
+    tags = tf_cuda_tests_tags() + ["notap"],
     deps = [
         ":cuda_op",
         "//tensorflow:tensorflow_py",
@@ -150,7 +132,6 @@ py_test(
     name = "fact_test",
     size = "small",
     srcs = ["fact_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = ["//tensorflow:tensorflow_py"],
 )

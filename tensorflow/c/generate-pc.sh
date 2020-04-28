@@ -63,26 +63,12 @@ cat << EOF > tensorflow.pc
 prefix=${TF_PREFIX}
 exec_prefix=\${prefix}
 libdir=\${exec_prefix}/${LIBDIR}
-includedir=\${prefix}/include/tensorflow
+includedir=\${prefix}/include
 
 Name: TensorFlow
 Version: ${TF_VERSION}
 Description: Library for computation using data flow graphs for scalable machine learning
 Requires:
-Libs: -L\${libdir} -ltensorflow -ltensorflow_framework
-Cflags: -I\${includedir}
-EOF
-
-cat << EOF > tensorflow_cc.pc
-prefix=${TF_PREFIX}
-exec_prefix=\${prefix}
-libdir=\${exec_prefix}/${LIBDIR}
-includedir=\${prefix}/include/tensorflow
-
-Name: TensorFlow
-Version: ${TF_VERSION}
-Description: Library for computation using data flow graphs for scalable machine learning
-Requires:
-Libs: -L\${libdir} -ltensorflow_cc -ltensorflow_framework
+Libs: -L\${libdir} -ltensorflow
 Cflags: -I\${includedir}
 EOF

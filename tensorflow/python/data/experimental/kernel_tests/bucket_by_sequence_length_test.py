@@ -95,11 +95,11 @@ class BucketBySequenceLengthTest(test_base.DatasetTestBase,
 
     # Expected sum of all batches with an equal sequence length.
     # <seq-length>: <expected-total-sum>
-    expected_sums = {}
+    expected_sums = dict()
 
     # Expected batch sizes of batches depending on the sequence length.
     # <seq-length>: [batch1_size, ..., batchN_size]
-    expected_batch_sizes = {}
+    expected_batch_sizes = dict()
 
     for length, batch_size, bucket_elements in zip(lengths, batch_sizes,
                                                    n_bucket_elements):
@@ -155,10 +155,10 @@ class BucketBySequenceLengthTest(test_base.DatasetTestBase,
       generated_lengths = []
 
       # <seq-length>: <total-sum>
-      generated_sums = {}
+      generated_sums = dict()
 
       # <seq-length>: [<batch_size>, ...]
-      generated_batch_sizes = {}
+      generated_batch_sizes = dict()
 
       for length, batch_size, bucket_elements in zip(lengths, batch_sizes,
                                                      n_bucket_elements):

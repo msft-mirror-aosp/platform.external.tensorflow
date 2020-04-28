@@ -1,14 +1,13 @@
 # Description:
 #   Contains a Python wrapper for the StatSummarizer C++ class.
 
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
-
-package(
-    default_visibility = ["//tensorflow:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+package(default_visibility = ["//tensorflow:__subpackages__"])
+
+load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 py_library(
     name = "stat_summarizer_py",

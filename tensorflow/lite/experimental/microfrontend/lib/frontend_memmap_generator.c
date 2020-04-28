@@ -22,8 +22,7 @@ int main(int argc, char** argv) {
   if (argc != 3) {
     fprintf(stderr,
             "%s requires exactly two parameters - the names of the header and "
-            "source files to save\n",
-            argv[0]);
+            "source files to save\n");
     return 1;
   }
   struct FrontendConfig frontend_config;

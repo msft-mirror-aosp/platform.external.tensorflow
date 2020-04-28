@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Implementation of ClusterResolvers for GCE instance groups."""
+"""Implementation of Cluster Resolvers for GCE Instance Groups."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -33,12 +33,12 @@ except ImportError:
 
 @tf_export('distribute.cluster_resolver.GCEClusterResolver')
 class GCEClusterResolver(ClusterResolver):
-  """ClusterResolver for Google Compute Engine.
+  """Cluster Resolver for Google Compute Engine.
 
   This is an implementation of cluster resolvers for the Google Compute Engine
   instance group platform. By specifying a project, zone, and instance group,
   this will retrieve the IP address of all the instances within the instance
-  group and return a ClusterResolver object suitable for use for distributed
+  group and return a Cluster Resolver object suitable for use for distributed
   TensorFlow.
   """
 

@@ -2,8 +2,9 @@
 
 package(
     default_visibility = ["//tensorflow/contrib/session_bundle:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
@@ -14,7 +15,6 @@ py_binary(
     srcs = [
         "export_half_plus_two.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow:tensorflow_py",

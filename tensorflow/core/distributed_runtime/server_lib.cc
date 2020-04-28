@@ -64,7 +64,7 @@ Status ServerFactory::GetFactory(const ServerDef& server_def,
   return errors::NotFound(
       "No server factory registered for the given ServerDef: ",
       server_def.DebugString(), "\nThe available server factories are: [ ",
-      absl::StrJoin(server_names, ", "), " ]");
+      str_util::Join(server_names, ", "), " ]");
 }
 
 // Creates a server based on the given `server_def`, and stores it in

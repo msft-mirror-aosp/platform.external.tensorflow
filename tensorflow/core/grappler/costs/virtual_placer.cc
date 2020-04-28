@@ -23,12 +23,14 @@ limitations under the License.
 namespace tensorflow {
 namespace grappler {
 
-VirtualPlacer::VirtualPlacer(
-    const std::unordered_map<string, DeviceProperties>& devices)
-    : devices_(devices),
-      // Default job name for canonical device name. Needs to be set before the
-      // first call to to_lfqn_or_empty()
-      default_job_name_lowercase_("localhost") {
+VirtualPlacer::VirtualPlacer(const Cluster* cluster) {
+  CHECK(cluster);
+
+  // Default job name for canonical device name. Needs to be set before the
+  // first call to to_lfqn_or_empty()
+  default_job_name_lowercase_ = "localhost";
+
+  devices_ = cluster->GetDevices();
   lfqn_map_.reserve(devices_.size());
   for (const auto& kv : devices_) {
     const auto lfqn = to_lfqn_or_empty(kv.first);
@@ -66,7 +68,7 @@ VirtualPlacer::VirtualPlacer(
       if (parsed) {
         // Parsed devices are stored to cpu_devices or gpu_devices map,
         // addressed (and ordered) by device id.
-        const auto type = absl::AsciiStrToLower(parsed_name.type);
+        const auto type = str_util::Lowercase(parsed_name.type);
         if (type == "gpu") {
           gpu_devices[parsed_name.id] = cluster_device_name;
         } else if (type == "cpu") {
@@ -141,7 +143,7 @@ string VirtualPlacer::get_canonical_device_name(const NodeDef& node) const {
 
 string VirtualPlacer::to_lfqn_or_empty(const string& device_name) const {
   DeviceNameUtils::ParsedName parsed_name;
-  const auto lowercase_name = absl::AsciiStrToLower(device_name);
+  const auto lowercase_name = str_util::Lowercase(device_name);
   bool parsed = DeviceNameUtils::ParseFullName(lowercase_name, &parsed_name);
   if (!parsed) {
     parsed = DeviceNameUtils::ParseLocalName(lowercase_name, &parsed_name);
@@ -163,7 +165,7 @@ string VirtualPlacer::to_lfqn_or_empty(const string& device_name) const {
   }
 
   // Have to do this, because parser returns uppercase types for CPU and GPU.
-  parsed_name.type = absl::AsciiStrToLower(parsed_name.type);
+  parsed_name.type = str_util::Lowercase(parsed_name.type);
 
   string lfqn = strings::StrCat(
       "/job:", parsed_name.job, "/replica:", parsed_name.replica,

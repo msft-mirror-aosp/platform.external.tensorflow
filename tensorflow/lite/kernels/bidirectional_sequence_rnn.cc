@@ -23,7 +23,6 @@ limitations under the License.
 #include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/kernels/activation_functor.h"
 #include "tensorflow/lite/kernels/internal/kernel_utils.h"
-#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/op_macros.h"
 
@@ -32,7 +31,17 @@ namespace ops {
 namespace builtin {
 namespace bidirectional_sequence_rnn {
 
-// LINT.IfChange
+namespace {
+
+int8_t* GetInt8DataPtr(const TfLiteTensor* tensor, const bool is_uint8) {
+  if (is_uint8) {
+    return reinterpret_cast<int8_t*>(tensor->data.uint8);
+  } else {
+    return tensor->data.int8;
+  }
+}
+
+}  // namespace
 
 constexpr int kInputTensor = 0;
 // Forward and backward cell tensors.
@@ -54,8 +63,6 @@ constexpr int kBwAuxWeightsTensor = 11;  // Optional.
 // Output tensors.
 constexpr int kFwOutputTensor = 0;
 constexpr int kBwOutputTensor = 1;  // Only if merge_outputs is false.
-
-// LINT.ThenChange(//tensorflow/lite/tools/optimize/quantize_weights.cc)
 
 // Temporary tensors.
 enum TemporaryTensor {
@@ -161,7 +168,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                       bw_aux_input_weights->dims->data[1]);
   }
 
-  if (IsHybridOp(input, fw_input_weights)) {
+  const bool is_hybrid_op = ((fw_input_weights->type == kTfLiteUInt8 ||
+                              fw_input_weights->type == kTfLiteInt8) &&
+                             input->type == kTfLiteFloat32);
+
+  if (is_hybrid_op) {
     int* scratch_tensor_index = reinterpret_cast<int*>(node->user_data);
 
     TfLiteIntArrayFree(node->temporaries);
@@ -361,8 +372,7 @@ TfLiteStatus EvalFloat(const TfLiteTensor* input, const TfLiteTensor* bw_input,
             input->data.f + b * input_size * max_time + s * input_size;
         const float* aux_input_ptr_batch =
             (aux_input != nullptr)
-                ? aux_input->data.f + b * aux_input_size * max_time +
-                      s * aux_input_size
+                ? aux_input->data.f + b * input_size * max_time + s * input_size
                 : nullptr;
         float* output_ptr_batch = fw_output_offset + s * fw_output_step;
 
@@ -385,8 +395,7 @@ TfLiteStatus EvalFloat(const TfLiteTensor* input, const TfLiteTensor* bw_input,
             input->data.f + b * input_size * max_time + s * input_size;
         const float* aux_input_ptr_batch =
             (aux_input != nullptr)
-                ? aux_input->data.f + b * aux_input_size * max_time +
-                      s * aux_input_size
+                ? aux_input->data.f + b * input_size * max_time + s * input_size
                 : nullptr;
         float* output_ptr_batch = bw_output_offset + s * bw_output_step;
 
@@ -416,6 +425,7 @@ TfLiteStatus EvalHybrid(
     TfLiteTensor* fw_hidden_state, TfLiteTensor* fw_output,
     TfLiteTensor* bw_hidden_state_quantized, TfLiteTensor* bw_hidden_state,
     TfLiteTensor* bw_output) {
+  const bool is_uint8_hybrid = fw_input_weights->type == kTfLiteUInt8;
   const bool time_major = params->time_major;
   const int batch_size =
       (time_major) ? input->dims->data[1] : input->dims->data[0];
@@ -426,40 +436,46 @@ TfLiteStatus EvalHybrid(
 
   const int fw_num_units = fw_input_weights->dims->data[0];
   const float* fw_bias_ptr = fw_bias->data.f;
-  const int8_t* fw_input_weights_ptr = GetTensorData<int8_t>(fw_input_weights);
+  const int8_t* fw_input_weights_ptr =
+      GetInt8DataPtr(fw_input_weights, is_uint8_hybrid);
   float fw_input_weights_scale = fw_input_weights->params.scale;
   const int8_t* fw_recurrent_weights_ptr =
-      GetTensorData<int8_t>(fw_recurrent_weights);
+      GetInt8DataPtr(fw_recurrent_weights, is_uint8_hybrid);
   float fw_recurrent_weights_scale = fw_recurrent_weights->params.scale;
 
   const int bw_num_units = bw_input_weights->dims->data[0];
   const float* bw_bias_ptr = bw_bias->data.f;
-  const int8_t* bw_input_weights_ptr = GetTensorData<int8_t>(bw_input_weights);
+  const int8_t* bw_input_weights_ptr =
+      GetInt8DataPtr(bw_input_weights, is_uint8_hybrid);
   float bw_input_weights_scale = bw_input_weights->params.scale;
   const int8_t* bw_recurrent_weights_ptr =
-      GetTensorData<int8_t>(bw_recurrent_weights);
+      GetInt8DataPtr(bw_recurrent_weights, is_uint8_hybrid);
   float bw_recurrent_weights_scale = bw_recurrent_weights->params.scale;
 
   // Set the auxiliary pointers and scales if needed.
-  const int8_t* aux_fw_input_weights_ptr = nullptr;
+  int8_t* aux_fw_input_weights_ptr = nullptr;
   float aux_fw_input_weights_scale = 0.0f;
-  const int8_t* aux_bw_input_weights_ptr = nullptr;
+  int8_t* aux_bw_input_weights_ptr = nullptr;
   float aux_bw_input_weights_scale = 0.0f;
   int8_t* aux_quantized_input_ptr = nullptr;
   if (aux_input_size > 0) {
-    aux_fw_input_weights_ptr = GetTensorData<int8_t>(aux_fw_input_weights);
+    aux_fw_input_weights_ptr =
+        GetInt8DataPtr(aux_fw_input_weights, is_uint8_hybrid);
     aux_fw_input_weights_scale = aux_fw_input_weights->params.scale;
-    aux_bw_input_weights_ptr = GetTensorData<int8_t>(aux_bw_input_weights);
+    aux_bw_input_weights_ptr =
+        GetInt8DataPtr(aux_bw_input_weights, is_uint8_hybrid);
     aux_bw_input_weights_scale = aux_bw_input_weights->params.scale;
-    aux_quantized_input_ptr = GetTensorData<int8_t>(aux_input_quantized);
+    aux_quantized_input_ptr =
+        GetInt8DataPtr(aux_input_quantized, is_uint8_hybrid);
   }
 
   // Initialize temporary storage for quantized values.
-  int8_t* quantized_input_ptr = GetTensorData<int8_t>(input_quantized);
+  int8_t* quantized_input_ptr =
+      GetInt8DataPtr(input_quantized, is_uint8_hybrid);
   int8_t* fw_quantized_hidden_state_ptr =
-      GetTensorData<int8_t>(fw_hidden_state_quantized);
+      GetInt8DataPtr(fw_hidden_state_quantized, is_uint8_hybrid);
   int8_t* bw_quantized_hidden_state_ptr =
-      GetTensorData<int8_t>(bw_hidden_state_quantized);
+      GetInt8DataPtr(bw_hidden_state_quantized, is_uint8_hybrid);
   float* scaling_factors_ptr = scaling_factors->data.f;
 
   const int fw_output_step =

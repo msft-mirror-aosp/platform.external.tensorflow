@@ -42,8 +42,7 @@ class HierarchicalTreeBroadcaster : public CollectiveImplementationInterface {
   Status InitializeCollectiveContext(CollectiveContext* col_ctx) override;
 
   // No-op for hierarchical tree broadcaster.
-  Status InitializeCollectiveGroupRuntimeDetails(
-      CollGroupRuntimeDetails*) override {
+  Status InitializeInstanceBeforeGroupDiscovery(CollectiveParams*) override {
     return Status::OK();
   }
 

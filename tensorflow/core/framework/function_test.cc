@@ -556,7 +556,7 @@ TEST(TFunc, IntsOnDeviceArgSet) {
 }
 
 static void HasError(const Status& s, const string& substr) {
-  EXPECT_TRUE(absl::StrContains(s.ToString(), substr))
+  EXPECT_TRUE(str_util::StrContains(s.ToString(), substr))
       << ">>" << s << "<<, expected substring >>" << substr << "<<";
 }
 
@@ -966,31 +966,33 @@ TEST(Canonicalize, Basic) {
             "MatMul[T=double,transpose_a=false,transpose_b=true]");
 }
 
-TEST(FunctionLibraryDefinitionTest, Contains) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
-
-  EXPECT_FALSE(lib_def.Contains("XTimes16"));
-  EXPECT_TRUE(lib_def.Contains("XTimesTwo"));
-}
-
 TEST(FunctionLibraryDefinitionTest, Find) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
+  FunctionDefLibrary proto;
+  *proto.add_function() = test::function::XTimesTwo();
+  FunctionLibraryDefinition lib_def(OpRegistry::Global(), proto);
 
   EXPECT_EQ(lib_def.Find("XTimes16"), nullptr);
 
+  auto expect = R"P(
+XTimesTwo[T:{float, double, int32, int64}](x:T) -> (y:T) {
+  two = Const[dtype=int64, value=Tensor<type: int64 shape: [] values: 2>]()
+  scale = Cast[DstT=$T, SrcT=int64](two:output:0)
+  y = Mul[T=$T](x, scale:y:0)
+  return y = y:z:0
+}
+)P";
   auto found = lib_def.Find("XTimesTwo");
   ASSERT_NE(found, nullptr);
-  EXPECT_EQ(test::function::XTimesTwo().DebugString(), found->DebugString());
+  EXPECT_EQ(expect, DebugString(*found));
 }
 
 TEST(FunctionLibraryDefinitionTest, LookUp) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
+  FunctionDefLibrary proto;
+  *proto.add_function() = test::function::XTimesTwo();
+  FunctionLibraryDefinition lib_def(OpRegistry::Global(), proto);
 
   const OpDef* op_def;
-  EXPECT_FALSE(lib_def.LookUpOpDef("XTimes16", &op_def).ok());
+  EXPECT_TRUE(!lib_def.LookUpOpDef("XTimes16", &op_def).ok());
 
   TF_EXPECT_OK(lib_def.LookUpOpDef("XTimesTwo", &op_def));
   ASSERT_NE(op_def, nullptr);
@@ -1005,17 +1007,29 @@ TEST(FunctionLibraryDefinitionTest, LookUp) {
 }
 
 TEST(FunctionLibraryDefinitionTest, AddFunctionDef) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
+  // Add one function to the proto lib before constructing 'lib_def'.
+  FunctionDefLibrary proto;
+  *proto.add_function() = test::function::XTimesTwo();
+  FunctionLibraryDefinition lib_def(OpRegistry::Global(), proto);
 
-  // Test lookup of existing function.
-  const OpDef* op_def;
-  TF_EXPECT_OK(lib_def.LookUpOpDef("XTimesTwo", &op_def));
-  ASSERT_NE(op_def, nullptr);
-  EXPECT_EQ(op_def->DebugString(),
+  // Add a new function def to the library.
+  TF_EXPECT_OK(lib_def.AddFunctionDef(test::function::WXPlusB()));
+
+  // Test lookup of first function.
+  const OpDef* first;
+  TF_EXPECT_OK(lib_def.LookUpOpDef("XTimesTwo", &first));
+  ASSERT_NE(first, nullptr);
+  EXPECT_EQ(first->DebugString(),
             test::function::XTimesTwo().signature().DebugString());
 
-  // Test that adding a function with same name as existing op fails.
+  // Test lookup of second function.
+  const OpDef* second;
+  TF_EXPECT_OK(lib_def.LookUpOpDef("WXPlusB", &second));
+  ASSERT_NE(second, nullptr);
+  EXPECT_EQ(second->DebugString(),
+            test::function::WXPlusB().signature().DebugString());
+
+  // Can't add function with same name as existing op
   FunctionDef fdef = test::function::XTimesTwo();
   fdef.mutable_signature()->set_name("Add");
   Status s = lib_def.AddFunctionDef(fdef);
@@ -1024,8 +1038,9 @@ TEST(FunctionLibraryDefinitionTest, AddFunctionDef) {
             "Cannot add function 'Add' because an op with the same name "
             "already exists.");
 
-  // Test that adding the same functions again does not produce an error.
+  // Already-added functions don't produce error
   TF_EXPECT_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
+  TF_EXPECT_OK(lib_def.AddFunctionDef(test::function::WXPlusB()));
 }
 
 TEST(FunctionLibraryDefinitionTest, AddGradientDef) {
@@ -1049,20 +1064,6 @@ TEST(FunctionLibraryDefinitionTest, AddGradientDef) {
   EXPECT_EQ(s.error_message(),
             "Cannot assign gradient function 'XTimes16' to 'XTimesTwo' because "
             "it already has gradient function 'XTimesFour'");
-}
-
-TEST(FunctionLibraryDefinitionTest, RemoveFunction) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
-
-  Status s = lib_def.RemoveFunction("XTimes16");
-  EXPECT_FALSE(s.ok());
-  EXPECT_EQ(s.error_message(),
-            "Tried to remove non-existent function 'XTimes16'.");
-
-  EXPECT_TRUE(lib_def.Contains("XTimesTwo"));
-  TF_EXPECT_OK(lib_def.RemoveFunction("XTimesTwo"));
-  EXPECT_FALSE(lib_def.Contains("XTimesTwo"));
 }
 
 TEST(FunctionLibraryDefinitionTest, AddLibrary) {
@@ -1231,29 +1232,35 @@ TEST(FunctionLibraryDefinitionTest, AddLibraryDefinition_Atomic_GradConflict) {
 }
 
 TEST(FunctionLibraryDefinitionTest, ToProto) {
-  FunctionLibraryDefinition lib_def1(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def1.AddFunctionDef(test::function::XTimesTwo()));
-  TF_CHECK_OK(lib_def1.AddFunctionDef(test::function::WXPlusB()));
+  FunctionDefLibrary proto1;
+  *proto1.add_function() = test::function::XTimesTwo();
+  *proto1.add_function() = test::function::WXPlusB();
+  FunctionLibraryDefinition lib_def1(OpRegistry::Global(), proto1);
 
-  FunctionDefLibrary proto = lib_def1.ToProto();
-  EXPECT_EQ(proto.function_size(), 2);
+  // Call 'ToProto' and make sure both protos have the same function lib size.
+  FunctionDefLibrary proto2 = lib_def1.ToProto();
+  EXPECT_EQ(proto1.function_size(), proto2.function_size());
 
   // Initialize 'lib_def2' with proto returned by 'ToProto' call.
-  FunctionLibraryDefinition lib_def2(OpRegistry::Global(), proto);
+  FunctionLibraryDefinition lib_def2(OpRegistry::Global(), proto2);
 
-  // Test that the functions exists in both libraries.
-  for (auto name : {"XTimesTwo", "WXPlusB"}) {
-    const OpDef *f1, *f2;
-    TF_EXPECT_OK(lib_def1.LookUpOpDef(name, &f1));
-    TF_EXPECT_OK(lib_def2.LookUpOpDef(name, &f2));
-    EXPECT_EQ(f1->DebugString(), f2->DebugString());
-  }
+  // Test that the first function exists in both libraries.
+  const OpDef *f1, *f2, *f3, *f4;
+  TF_EXPECT_OK(lib_def1.LookUpOpDef("XTimesTwo", &f1));
+  TF_EXPECT_OK(lib_def2.LookUpOpDef("XTimesTwo", &f2));
+  EXPECT_EQ(f1->DebugString(), f2->DebugString());
+
+  // Test that the second function exists in both libraries.
+  TF_EXPECT_OK(lib_def1.LookUpOpDef("WXPlusB", &f3));
+  TF_EXPECT_OK(lib_def2.LookUpOpDef("WXPlusB", &f4));
+  EXPECT_EQ(f3->DebugString(), f4->DebugString());
 }
 
-TEST(FunctionLibraryDefinitionTest, ListFunctionNames) {
-  FunctionLibraryDefinition lib_def(OpRegistry::Global(), {});
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::XTimesTwo()));
-  TF_CHECK_OK(lib_def.AddFunctionDef(test::function::WXPlusB()));
+TEST(FunctionLibraryDefinitionTest, FunctionNames) {
+  FunctionDefLibrary proto;
+  *proto.add_function() = test::function::XTimesTwo();
+  *proto.add_function() = test::function::WXPlusB();
+  const FunctionLibraryDefinition lib_def(OpRegistry::Global(), proto);
 
   const std::vector<string> function_names = lib_def.ListFunctionNames();
   const std::vector<string> expected = {"XTimesTwo", "WXPlusB"};

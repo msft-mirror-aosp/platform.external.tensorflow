@@ -16,19 +16,13 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/gpu/kernel_thunk.h"
 
 #include "absl/memory/memory.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "tensorflow/compiler/xla/service/gpu/gpu_executable.h"
 #include "tensorflow/compiler/xla/service/gpu/hlo_execution_profiler.h"
-#include "tensorflow/compiler/xla/service/gpu/stream_executor_util.h"
-#include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/types.h"
 #include "tensorflow/compiler/xla/util.h"
-#include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
-#include "tensorflow/stream_executor/device_memory.h"
-#include "tensorflow/stream_executor/kernel.h"
 
 namespace xla {
 namespace gpu {
@@ -45,6 +39,16 @@ KernelThunk::KernelThunk(absl::Span<const BufferAllocation* const> args,
 Status KernelThunk::Initialize(const GpuExecutable& executable,
                                se::StreamExecutor* executor) {
   tensorflow::mutex_lock lock(mutex_);
+  if (!loader_spec_) {
+    loader_spec_.reset(new se::MultiKernelLoaderSpec(args_.size()));
+    loader_spec_->AddCudaPtxInMemory(executable.ptx(), kernel_name_);
+
+    if (!executable.cubin().empty()) {
+      loader_spec_->AddCudaCubinInMemory(
+          reinterpret_cast<const char*>(executable.cubin().data()),
+          kernel_name_);
+    }
+  }
 
   // Load the kernel into the device if necessary.
   //
@@ -53,12 +57,10 @@ Status KernelThunk::Initialize(const GpuExecutable& executable,
   // profiles.
   auto it = kernel_cache_.find(executor);
   if (kernel_cache_.end() == it) {
-    TF_ASSIGN_OR_RETURN(
-        std::unique_ptr<se::KernelBase> kernel,
-        CreateKernel(kernel_name_, args_.size(), executable.text(),
-                     executable.binary(), executor));
-
-    kernel_cache_.emplace(executor, std::move(kernel));
+    it = kernel_cache_.emplace(executor, se::KernelBase(executor)).first;
+    if (!executor->GetKernel(*loader_spec_, &it->second)) {
+      return InternalError("Unable to load kernel %s", kernel_name_);
+    }
   }
 
   return Status::OK();
@@ -69,9 +71,11 @@ void KernelThunk::SetLaunchDimensions(const LaunchDimensions& launch_dims) {
   launch_dimensions_ = launch_dims;
 }
 
-Status KernelThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status KernelThunk::ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                                    se::Stream* stream,
+                                    HloExecutionProfiler* profiler) {
   // Load the kernel.
-  se::StreamExecutor* executor = params.stream->parent();
+  se::StreamExecutor* executor = stream->parent();
   LaunchDimensions launch_dimensions;
   const se::KernelBase* kernel = nullptr;
 
@@ -81,23 +85,27 @@ Status KernelThunk::ExecuteOnStream(const ExecuteParams& params) {
     CHECK(it != kernel_cache_.end())
         << "Initialize() not called for StreamExecutor " << executor;
     launch_dimensions = launch_dimensions_;
-    kernel = it->second.get();
+    kernel = &it->second;
   }
 
   VLOG(3) << "Launching " << kernel->name();
-  absl::InlinedVector<se::DeviceMemoryBase, 4> buffer_args;
+  // Launch the kernel with potentially multiple blocks and threads.
+  static constexpr int kKernelArgsLimit = 1024;
+  auto kernel_args = absl::make_unique<se::KernelArgsArray<kKernelArgsLimit>>();
   for (const BufferAllocation* arg : args_) {
-    se::DeviceMemoryBase buf =
-        params.buffer_allocations->GetDeviceAddress(arg->index());
-    VLOG(3) << "  Arg: alloc #" << arg->index() << ": " << buf.opaque() << "  ("
+    const auto& buf = buffer_allocations.GetDeviceAddress(arg->index());
+    kernel_args->add_device_memory_argument(buf);
+    VLOG(3) << "  Arg: alloc #" << arg->index() << ": " << buf.opaque() << " ("
             << buf.size() << "B)";
-    buffer_args.push_back(buf);
   }
-  auto op_profiler =
-      params.profiler->MakeScopedInstructionProfiler(hlo_instruction());
-  return ExecuteKernelOnStream(*kernel, buffer_args,
-                               launch_dimensions.threads_per_block(),
-                               launch_dimensions.block_count(), params.stream);
+  auto op_profiler = profiler->MakeScopedInstructionProfiler(hlo_instruction());
+  if (!stream->parent()->Launch(
+          stream, se::ThreadDim(launch_dimensions.threads_per_block()),
+          se::BlockDim(launch_dimensions.block_count()), *kernel,
+          *kernel_args)) {
+    return InternalError("Unable to launch kernel %s", kernel_name_);
+  }
+  return Status::OK();
 }
 
 }  // namespace gpu

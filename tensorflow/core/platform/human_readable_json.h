@@ -26,11 +26,7 @@ namespace tensorflow {
 //
 // This string may not be strictly JSON-compliant, but it must be parseable by
 // HumanReadableJSONToProto.
-//
-// When ignore_accuracy_loss = true, this function may ignore JavaScript
-// accuracy loss with large integers.
-Status ProtoToHumanReadableJson(const protobuf::Message& proto, string* result,
-                                bool ignore_accuracy_loss);
+Status ProtoToHumanReadableJson(const protobuf::Message& proto, string* result);
 
 // Converts a string produced by ProtoToHumanReadableJSON to a protobuf.  Not
 // guaranteed to work for general JSON.

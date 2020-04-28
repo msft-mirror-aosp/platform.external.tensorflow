@@ -179,10 +179,10 @@ class ScatterTest(test.TestCase):
             np_scatter = _TF_OPS_TO_NUMPY[tf_scatter]
           np_scatter(new, indices, updates)
           # Scatter via tensorflow
-          ref = variables.Variable(old)
-          self.evaluate(ref.initializer)
-          self.evaluate(tf_scatter(ref, indices, updates))
-          self.assertAllClose(self.evaluate(ref), new)
+          ref = variables.VariableV1(old, use_resource=False)
+          ref.initializer.run()
+          tf_scatter(ref, indices, updates).eval()
+          self.assertAllClose(ref.eval(), new)
 
   def _VariableRankTests(self,
                          tf_scatter,
@@ -192,125 +192,157 @@ class ScatterTest(test.TestCase):
     if tf_scatter != state_ops.scatter_div:
       vtypes.append(np.int32)
 
+    if (tf_scatter == state_ops.scatter_min or
+        tf_scatter == state_ops.scatter_max):
+      vtypes.append(np.float16)
+
     for vtype in vtypes:
       for itype in (np.int32, np.int64):
         self._VariableRankTest(tf_scatter, vtype, itype, repeat_indices,
                                updates_are_scalar)
 
+  @test_util.run_deprecated_v1
   def testVariableRankUpdate(self):
     self._VariableRankTests(state_ops.scatter_update, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankAdd(self):
     self._VariableRankTests(state_ops.scatter_add, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankSub(self):
     self._VariableRankTests(state_ops.scatter_sub, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMul(self):
     self._VariableRankTests(state_ops.scatter_mul, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankDiv(self):
     self._VariableRankTests(state_ops.scatter_div, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMin(self):
     self._VariableRankTests(state_ops.scatter_min, False)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMax(self):
     self._VariableRankTests(state_ops.scatter_max, False)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesAdd(self):
     self._VariableRankTests(state_ops.scatter_add, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesSub(self):
     self._VariableRankTests(state_ops.scatter_sub, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMul(self):
     self._VariableRankTests(state_ops.scatter_mul, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesDiv(self):
     self._VariableRankTests(state_ops.scatter_div, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMin(self):
     self._VariableRankTests(state_ops.scatter_min, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMax(self):
     self._VariableRankTests(state_ops.scatter_max, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankUpdateScalar(self):
     self._VariableRankTests(state_ops.scatter_update, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankAddScalar(self):
     self._VariableRankTests(state_ops.scatter_add, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankSubScalar(self):
     self._VariableRankTests(state_ops.scatter_sub, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMulScalar(self):
     self._VariableRankTests(state_ops.scatter_mul, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankDivScalar(self):
     self._VariableRankTests(state_ops.scatter_div, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMinScalar(self):
     self._VariableRankTests(state_ops.scatter_min, False, True)
 
+  @test_util.run_deprecated_v1
   def testVariableRankMaxScalar(self):
     self._VariableRankTests(state_ops.scatter_max, False, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesAddScalar(self):
     self._VariableRankTests(state_ops.scatter_add, True, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesSubScalar(self):
     self._VariableRankTests(state_ops.scatter_sub, True, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMulScalar(self):
     self._VariableRankTests(state_ops.scatter_mul, True, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesDivScalar(self):
     self._VariableRankTests(state_ops.scatter_div, True, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMinScalar(self):
     self._VariableRankTests(state_ops.scatter_min, True, True)
 
+  @test_util.run_deprecated_v1
   def testRepeatIndicesMaxScalar(self):
     self._VariableRankTests(state_ops.scatter_max, True, True)
 
+  @test_util.run_deprecated_v1
   def testBooleanScatterUpdate(self):
     if not test.is_gpu_available():
-      with self.session(use_gpu=False):
+      with self.session(use_gpu=False) as session:
         var = variables.Variable([True, False])
         update0 = state_ops.scatter_update(var, 1, True)
         update1 = state_ops.scatter_update(
             var, constant_op.constant(
                 0, dtype=dtypes.int64), False)
-        self.evaluate(var.initializer)
+        var.initializer.run()
 
-        self.evaluate([update0, update1])
+        session.run([update0, update1])
 
         self.assertAllEqual([False, True], self.evaluate(var))
 
+  @test_util.run_deprecated_v1
   def testScatterOutOfRangeCpu(self):
     for op, _ in _TF_OPS_TO_NUMPY.items():
       params = np.array([1, 2, 3, 4, 5, 6]).astype(np.float32)
       updates = np.array([-3, -4, -5]).astype(np.float32)
       if not test.is_gpu_available():
         with self.session(use_gpu=False):
-          ref = variables.Variable(params)
-          self.evaluate(ref.initializer)
+          ref = variables.VariableV1(params, use_resource=False)
+          ref.initializer.run()
 
           # Indices all in range, no problem.
           indices = np.array([2, 0, 5])
-          self.evaluate(op(ref, indices, updates))
+          op(ref, indices, updates).eval()
 
           # Test some out of range errors.
           indices = np.array([-1, 0, 5])
           with self.assertRaisesOpError(
               r'indices\[0\] = -1 is not in \[0, 6\)'):
-            self.evaluate(op(ref, indices, updates))
+            op(ref, indices, updates).eval()
 
           indices = np.array([2, 0, 6])
           with self.assertRaisesOpError(r'indices\[2\] = 6 is not in \[0, 6\)'):
-            self.evaluate(op(ref, indices, updates))
+            op(ref, indices, updates).eval()
 
   # TODO(fpmc): Re-enable this test when gpu_pip test actually runs on a GPU.
   def _disabledTestScatterOutOfRangeGpu(self):
@@ -323,7 +355,7 @@ class ScatterTest(test.TestCase):
       # We don't test the implementation; just test there's no failures.
       with test_util.force_gpu():
         ref = variables.Variable(params)
-        self.evaluate(ref.initializer)
+        ref.initializer.run()
 
         # Indices all in range, no problem.
         indices = np.array([2, 0, 5])

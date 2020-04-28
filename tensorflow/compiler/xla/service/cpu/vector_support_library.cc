@@ -107,19 +107,13 @@ llvm::Value* VectorSupportLibrary::Div(llvm::Value* lhs, llvm::Value* rhs) {
 llvm::Value* VectorSupportLibrary::Clamp(llvm::Value* a,
                                          const llvm::APFloat& low,
                                          const llvm::APFloat& high) {
-  CHECK(!low.isNaN());
-  CHECK(!high.isNaN());
-  CHECK(low.compare(high) == llvm::APFloat::cmpLessThan);
-
   AssertCorrectTypes({a});
   llvm::Type* type = a->getType();
+  CHECK(low.compare(high) == llvm::APFloat::cmpLessThan);
   CHECK(scalar_type_->isFloatingPointTy());
-
-  llvm::Value* low_value = GetConstantFloat(type, low);
-  llvm::Value* high_value = GetConstantFloat(type, high);
-  a = b_->CreateSelect(b_->CreateFCmpUGE(a, low_value), a, low_value);
-  a = b_->CreateSelect(b_->CreateFCmpULE(a, high_value), a, high_value);
-  return a;
+  return llvm_ir::EmitFloatMin(
+      llvm_ir::EmitFloatMax(a, GetConstantFloat(type, low), b_),
+      GetConstantFloat(type, high), b_);
 }
 
 llvm::Value* VectorSupportLibrary::FCmpEQMask(llvm::Value* lhs,

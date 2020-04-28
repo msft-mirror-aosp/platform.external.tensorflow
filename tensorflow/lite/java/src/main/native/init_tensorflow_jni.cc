@@ -13,20 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <jni.h>
-
+#include "tensorflow/lite/java/src/main/native/init_tensorflow_jni.h"
 #include "tensorflow/lite/testing/init_tensorflow.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif  // __cplusplus
 
 JNIEXPORT void JNICALL Java_org_tensorflow_lite_TensorFlowLite_initTensorFlow(
     JNIEnv* env, jclass clazz) {
-  // Flex support not available in Android tree.
-  // ::tflite::InitTensorFlow();
+  ::tflite::InitTensorFlow();
 }
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif  // __cplusplus

@@ -146,3 +146,9 @@ TEST(MaximumOpTest, Int32WithBroadcastTest) {
 }
 }  // namespace
 }  // namespace tflite
+
+int main(int argc, char** argv) {
+  ::tflite::LogToStderr();
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

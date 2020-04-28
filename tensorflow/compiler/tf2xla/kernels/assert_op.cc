@@ -43,7 +43,7 @@ class AssertOp : public XlaOpKernel {
   TF_DISALLOW_COPY_AND_ASSIGN(AssertOp);
 };
 
-REGISTER_XLA_OP(Name("Assert").CompilationOnly(), AssertOp);
+REGISTER_XLA_OP(Name("Assert"), AssertOp);
 
 }  // anonymous namespace
 }  // namespace tensorflow

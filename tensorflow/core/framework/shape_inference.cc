@@ -334,7 +334,7 @@ string InferenceContext::DebugString(ShapeHandle s) {
   if (RankKnown(s)) {
     std::vector<string> vals;
     for (auto d : s->dims_) vals.push_back(DebugString(d));
-    return strings::StrCat("[", absl::StrJoin(vals, ","), "]");
+    return strings::StrCat("[", str_util::Join(vals, ","), "]");
   } else {
     return "?";
   }
@@ -360,7 +360,7 @@ string InferenceContext::DebugString(
   for (const ShapeAndType& s : shape_and_types) {
     pieces.push_back(DebugString(s));
   }
-  return strings::StrCat("[", absl::StrJoin(pieces, ","), "]");
+  return strings::StrCat("[", str_util::Join(pieces, ","), "]");
 }
 
 Status InferenceContext::WithRank(ShapeHandle shape, int64 rank,
@@ -1176,15 +1176,15 @@ Status InferenceContext::AttachContext(const Status& status) {
 
   string error_context = strings::StrCat(
       " for '", node_def_->name(), "' (op: '", node_def_->op(),
-      "') with input shapes: ", absl::StrJoin(input_shapes, ", "));
+      "') with input shapes: ", str_util::Join(input_shapes, ", "));
   if (!input_from_tensors_str.empty()) {
     strings::StrAppend(&error_context, " and with computed input tensors: ",
-                       absl::StrJoin(input_from_tensors_str, ", "));
+                       str_util::Join(input_from_tensors_str, ", "));
   }
   if (!input_from_tensors_as_shape_str.empty()) {
     strings::StrAppend(&error_context,
                        " and with input tensors computed as partial shapes: ",
-                       absl::StrJoin(input_from_tensors_as_shape_str, ","));
+                       str_util::Join(input_from_tensors_as_shape_str, ","));
   }
 
   strings::StrAppend(&error_context, ".");

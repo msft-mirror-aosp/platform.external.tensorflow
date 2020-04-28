@@ -66,7 +66,7 @@ def watch_variable(tape, variable):
   if context:
     variables = [strategy.extended.value_container(variable)]
   else:
-    variables = strategy.experimental_local_results(variable)
+    variables = strategy.unwrap(variable)
   for var in variables:
     pywrap_tensorflow.TFE_Py_TapeWatchVariable(tape._tape, var)  # pylint: disable=protected-access
 
@@ -82,7 +82,7 @@ def variable_accessed(variable):
   if context:
     variables = [strategy.extended.value_container(variable)]
   else:
-    variables = strategy.experimental_local_results(variable)
+    variables = strategy.unwrap(variable)
   for var in variables:
     pywrap_tensorflow.TFE_Py_TapeVariableAccessed(var)
 
@@ -104,27 +104,24 @@ def variables_accessed(variables):
   else:
     for variable in variables:
       if variable.trainable:
-        accessed.extend(strategy.experimental_local_results(variable))
+        accessed.extend(strategy.unwrap(variable))
 
   for var in accessed:
     pywrap_tensorflow.TFE_Py_TapeVariableAccessed(var)
 
 
 def pop_tape(tape):
-  """Pops the given tape in the stack."""
+  """Pops the top tape in the stack, if any."""
   pywrap_tensorflow.TFE_Py_TapeSetRemove(tape._tape)  # pylint: disable=protected-access
 
 
 @contextlib.contextmanager
 def stop_recording():
-  is_stopped = pywrap_tensorflow.TFE_Py_TapeSetIsStopped()
   try:
-    if not is_stopped:
-      pywrap_tensorflow.TFE_Py_TapeSetStopOnThread()
+    pywrap_tensorflow.TFE_Py_TapeSetStopOnThread()
     yield
   finally:
-    if not is_stopped:
-      pywrap_tensorflow.TFE_Py_TapeSetRestartOnThread()
+    pywrap_tensorflow.TFE_Py_TapeSetRestartOnThread()
 
 
 def should_record(tensors):

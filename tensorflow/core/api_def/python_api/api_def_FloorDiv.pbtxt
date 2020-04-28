@@ -2,6 +2,5 @@ op {
   graph_op_name: "FloorDiv"
   endpoint {
     name: "floor_div"
-    deprecation_version: 2
   }
 }

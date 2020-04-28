@@ -62,8 +62,12 @@ class SparseSoftmaxOp : public OpKernel {
                 errors::InvalidArgument(
                     "Input should have rank >= 2, but received shape: ",
                     shape_t->SummarizeValue(3)));
+    OP_REQUIRES(context,
+                indices_t->dim_size(0) < std::numeric_limits<int>::max(),
+                errors::InvalidArgument(
+                    "Number of non-zero elements exceeds int32 range"));
 
-    const int64 nnz = indices_t->dim_size(0);
+    const int nnz = static_cast<int>(indices_t->dim_size(0));
     const int rank = static_cast<int>(indices_t->dim_size(1));
     SparseTensor st;
     OP_REQUIRES_OK(

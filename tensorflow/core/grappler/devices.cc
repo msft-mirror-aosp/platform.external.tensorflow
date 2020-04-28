@@ -27,8 +27,7 @@ limitations under the License.
 namespace tensorflow {
 namespace grappler {
 
-int GetNumAvailableGPUs(
-    const std::pair<int, int>& min_cuda_compute_capability) {
+int GetNumAvailableGPUs() {
   int num_eligible_gpus = 0;
 #if GOOGLE_CUDA
   if (ValidateGPUMachineManager().ok()) {
@@ -36,32 +35,24 @@ int GetNumAvailableGPUs(
     if (gpu_manager != nullptr) {
       int num_gpus = gpu_manager->VisibleDeviceCount();
       for (int i = 0; i < num_gpus; i++) {
-        auto desc_status = gpu_manager->DescriptionForDevice(i);
-        if (desc_status.ok()) {
-          auto desc = desc_status.ConsumeValueOrDie();
-          int cc_major = 0;
-          int cc_minor = 0;
-          desc->cuda_compute_capability(&cc_major, &cc_minor);
-          std::pair<int, int> cuda_compute_capability(cc_major, cc_minor);
+        auto exec_status = gpu_manager->ExecutorForDevice(i);
+        if (exec_status.ok()) {
+          se::StreamExecutor* se = exec_status.ValueOrDie();
+          const se::DeviceDescription& desc = se->GetDeviceDescription();
           int min_gpu_core_count = 8;
-          if (desc->core_count() >= min_gpu_core_count &&
-              cuda_compute_capability >= min_cuda_compute_capability) {
+          if (desc.core_count() >= min_gpu_core_count) {
             num_eligible_gpus++;
           }
         }
       }
     }
   }
-  LOG(INFO)
-      << "Number of eligible GPUs (core count >= 8, compute capability >= "
-      << min_cuda_compute_capability.first << "."
-      << min_cuda_compute_capability.second << "): " << num_eligible_gpus;
+  LOG(INFO) << "Number of eligible GPUs (core count >= 8): "
+            << num_eligible_gpus;
 #else
-  LOG(INFO)
-      << "Number of eligible GPUs (core count >= 8, compute capability >= "
-      << min_cuda_compute_capability.first << "."
-      << min_cuda_compute_capability.second << "): " << num_eligible_gpus
-      << " (Note: TensorFlow was not compiled with CUDA support)";
+  LOG(INFO) << "Number of eligible GPUs (core count >= 8): "
+            << num_eligible_gpus
+            << " (Note: TensorFlow was not compiled with CUDA support)";
 #endif  // GOOGLE_CUDA
   return num_eligible_gpus;
 }

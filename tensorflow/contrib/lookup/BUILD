@@ -1,14 +1,13 @@
 # Description:
 #   contains parts of TensorFlow that are experimental or unstable and which are not supported.
 
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
-
-package(
-    default_visibility = ["//tensorflow:internal"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+package(default_visibility = ["//tensorflow:internal"])
+
+load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 # TODO(yleon): Refactor after one we switching to the V2 kernels.
 py_library(

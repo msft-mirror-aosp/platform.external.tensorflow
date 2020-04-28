@@ -22,8 +22,6 @@ namespace data {
 
 class IteratorContext;
 
-namespace experimental {
-
 namespace sql {
 // This interface allows a user to connect to a database, execute a query, and
 // iterate over the result set, putting the results into an output tensor.
@@ -66,7 +64,6 @@ class QueryConnection {
 };
 
 }  // namespace sql
-}  // namespace experimental
 }  // namespace data
 }  // namespace tensorflow
 

@@ -709,12 +709,7 @@ Status QuantizeNodes(const GraphDef& input_graph_def,
           if (op_info.unquantized_inputs.count(i)) {
             continue;
           }
-          if (i >= input_types.size()) {
-            LOG(ERROR) << "input_types has incorrect size "
-                       << input_types.size() << " <= " << i
-                       << ". Assuming everything else is floats.";
-          }
-          if (i < input_types.size() && input_types[i] != DT_FLOAT) {
+          if (input_types[i] != DT_FLOAT) {
             are_all_float = false;
           }
         }

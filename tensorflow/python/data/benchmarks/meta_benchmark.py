@@ -40,19 +40,19 @@ class MetaBenchmark(test.Benchmark):
     options.experimental_optimization.apply_default_optimizations = False
     return dataset_ops.Dataset.range(10000**2).with_options(options)
 
-  def benchmark_fast_dataset_with_only_cpp_iterations(self):
+  def benchmarkFastDatasetWithOnlyCppIterations(self):
     dataset = self.setup_fast_dataset()
     self.run_benchmark_with_only_cpp_iterations(dataset)
 
-  def benchmark_fast_dataset_with_session_run(self):
+  def benchmarkFastDatasetWithSessionRun(self):
     dataset = self.setup_fast_dataset()
     self.run_benchmark_with_session_run(dataset)
 
-  def benchmark_fast_dataset_with_session_callable(self):
+  def benchmarkFastDatasetWithSessionCallable(self):
     dataset = self.setup_fast_dataset()
     self.run_benchmark_with_session_run(dataset, make_callable=True)
 
-  def benchmark_fast_dataset_in_eager(self):
+  def benchmarkFastDatasetInEager(self):
     with context.eager_mode():
       dataset = self.setup_fast_dataset()
       self.run_benchmark_in_eager(dataset)
@@ -63,19 +63,19 @@ class MetaBenchmark(test.Benchmark):
     # sleep for 1e-3s per iteration
     return dataset.apply(sleep.sleep(1000))
 
-  def benchmark_slow_dataset_with_only_cpp_iterations(self):
+  def benchmarkSlowDatasetWithOnlyCppIterations(self):
     dataset = self.setup_slow_dataset()
     self.run_benchmark_with_only_cpp_iterations(dataset)
 
-  def benchmark_slow_dataset_with_session_run(self):
+  def benchmarkSlowDatasetWithSessionRun(self):
     dataset = self.setup_slow_dataset()
     self.run_benchmark_with_session_run(dataset)
 
-  def benchmark_slow_dataset_with_session_callable(self):
+  def benchmarkSlowDatasetWithSessionCallable(self):
     dataset = self.setup_slow_dataset()
     self.run_benchmark_with_session_run(dataset, make_callable=True)
 
-  def benchmark_slow_dataset_in_eager(self):
+  def benchmarkSlowDatasetInEager(self):
     with context.eager_mode():
       dataset = self.setup_slow_dataset()
       self.run_benchmark_in_eager(dataset)

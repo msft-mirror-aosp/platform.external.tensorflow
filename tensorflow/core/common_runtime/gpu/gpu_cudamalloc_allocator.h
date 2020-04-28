@@ -37,8 +37,7 @@ class GPUcudaMallocAllocator : public Allocator {
   string Name() override { return "gpu_debug"; }
   void* AllocateRaw(size_t alignment, size_t num_bytes) override;
   void DeallocateRaw(void* ptr) override;
-  bool TracksAllocationSizes() const override;
-  absl::optional<AllocatorStats> GetStats() override;
+  bool TracksAllocationSizes() override;
 
  private:
   Allocator* base_allocator_ = nullptr;  // owned

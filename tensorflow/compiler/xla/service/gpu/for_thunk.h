@@ -39,7 +39,9 @@ class ForThunk : public Thunk {
 
   Status Initialize(const GpuExecutable& executable,
                     se::StreamExecutor* executor) override;
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const int64 loop_limit_;

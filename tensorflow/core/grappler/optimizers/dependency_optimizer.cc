@@ -38,19 +38,20 @@ namespace grappler {
 
 namespace {
 
-bool RemoveControlInput(NodeDef* node, const string& control_input_to_remove,
-                        NodeMap* node_map) {
-  for (int pos = node->input_size() - 1; pos >= 0; --pos) {
-    const string& input = node->input(pos);
-    if (input[0] != '^') break;
-    if (input == control_input_to_remove) {
+bool RemoveInput(NodeDef* node, const string& input, NodeMap* node_map) {
+  bool removed_input = false;
+  int pos = 0;
+  while (pos < node->input_size()) {
+    if (node->input(pos) == input) {
       node->mutable_input()->SwapElements(pos, node->input_size() - 1);
       node->mutable_input()->RemoveLast();
       node_map->RemoveOutput(NodeName(input), node->name());
-      return true;
+      removed_input = true;
+    } else {
+      ++pos;
     }
   }
-  return false;
+  return removed_input;
 }
 
 }  // namespace
@@ -76,7 +77,7 @@ bool DependencyOptimizer::SafeToRemoveIdentity(const NodeDef& node) const {
     return false;
   }
   for (const auto& consumer : node_map_->GetOutputs(node.name())) {
-    if (node.input_size() > 1 && (IsRetval(*consumer) || IsMerge(*consumer))) {
+    if (node.input_size() > 1 && IsMerge(*consumer)) {
       return false;
     }
     if (IsSwitch(*input)) {
@@ -212,7 +213,7 @@ bool DependencyOptimizer::BypassingNodeIsBeneficial(
   if ((is_identity || is_multi_input_identity_n) && num_cross_in > 0 &&
       num_cross_out > 0 && num_cross_after > 0) {
     // This identity node follows a device crossing, so it might be
-    // following a _Recv node after partitioning. Do not remove such nodes,
+    // following a _Recv node after partioning. Do not remove such nodes,
     // unless they only have consumers on the same device as themselves.
     return false;
   }
@@ -295,7 +296,6 @@ void DependencyOptimizer::OptimizeNode(int node_idx,
     }
     node->set_op("NoOp");
     node->clear_attr();
-    DedupControlInputs(node);
     nodes_to_simplify->PushBack(node_to_idx_[node]);
     return;
   }
@@ -350,6 +350,9 @@ void DependencyOptimizer::OptimizeNode(int node_idx,
 
   if (is_noop || ((is_identity || is_multi_input_identity) &&
                   SafeToRemoveIdentity(*node))) {
+    const auto& output_node_set = node_map_->GetOutputs(node_name);
+    const std::vector<NodeDef*> output_nodes(output_node_set.begin(),
+                                             output_node_set.end());
     const int num_inputs = node->input_size();
     std::vector<NodeDef*> input_nodes;
     for (int i = 0; i < num_inputs; ++i) {
@@ -360,9 +363,6 @@ void DependencyOptimizer::OptimizeNode(int node_idx,
       }
       input_nodes.push_back(input_node);
     }
-    const auto& output_node_set = node_map_->GetOutputs(node_name);
-    const std::vector<NodeDef*> output_nodes(output_node_set.begin(),
-                                             output_node_set.end());
 
     if (!BypassingNodeIsBeneficial(*node, input_nodes, output_nodes)) {
       return;
@@ -373,7 +373,6 @@ void DependencyOptimizer::OptimizeNode(int node_idx,
     for (auto consumer : output_nodes) {
       bool updated_consumer = false;
       VLOG(1) << "consumer before:\n" << consumer->DebugString();
-      // Remove dependency on node from consumer.
       for (int i = 0; i < num_inputs; ++i) {
         const NodeDef* input = input_nodes[i];
         // Forward dependency from input to consumer if it doesn't already
@@ -414,8 +413,9 @@ void DependencyOptimizer::OptimizeNode(int node_idx,
           }
         }
       }
-      updated_consumer |= RemoveControlInput(
-          consumer, AsControlDependency(node_name), node_map_.get());
+      // Remove dependency on node from consumer.
+      updated_consumer |= RemoveInput(consumer, AsControlDependency(node_name),
+                                      node_map_.get());
       if (updated_consumer) {
         nodes_to_simplify->PushBack(node_to_idx_[consumer]);
       }

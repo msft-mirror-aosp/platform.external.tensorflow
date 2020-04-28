@@ -34,8 +34,7 @@ class SimpleTensorAllocator {
       const tflite::Tensor& flatbuffer_tensor, int create_before,
       int destroy_after,
       const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers,
-      ErrorReporter* error_reporter, TfLiteTensor* result,
-      uint8_t* preallocated_memory = nullptr);
+      ErrorReporter* error_reporter, TfLiteTensor* result);
 
   uint8_t* AllocateMemory(size_t size, size_t alignment);
 

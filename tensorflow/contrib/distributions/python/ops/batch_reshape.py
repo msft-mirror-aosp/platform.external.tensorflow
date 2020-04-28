@@ -191,8 +191,10 @@ class BatchReshape(distribution_lib.Distribution):
         self.distribution.survival_function, x)
 
   def _entropy(self):
-    return self._call_and_reshape_output(self.distribution.entropy, [],
-                                         [tensor_shape.TensorShape([])])
+    return self._call_and_reshape_output(
+        self.distribution.entropy,
+        [],
+        [tensor_shape.scalar()])
 
   def _mean(self):
     return self._call_and_reshape_output(self.distribution.mean)
@@ -379,7 +381,7 @@ def calculate_reshape(original_shape, new_shape, validate=False, name=None):
     size_implicit_dim = (
         original_size // math_ops.maximum(1, -math_ops.reduce_prod(new_shape)))
     new_ndims = array_ops.shape(new_shape)
-    expanded_new_shape = array_ops.where_v2(  # Assumes exactly one `-1`.
+    expanded_new_shape = array_ops.where(  # Assumes exactly one `-1`.
         implicit_dim, array_ops.fill(new_ndims, size_implicit_dim), new_shape)
     validations = [] if not validate else [
         check_ops.assert_rank(

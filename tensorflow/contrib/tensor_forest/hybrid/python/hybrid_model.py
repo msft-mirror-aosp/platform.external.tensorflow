@@ -17,6 +17,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
+
 from tensorflow.contrib import layers
 from tensorflow.contrib.framework.python.ops import variables as framework_variables
 
@@ -27,7 +29,6 @@ from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import variables
 
 from tensorflow.python.training import adagrad
-from tensorflow.python.util.compat import collections_abc
 
 
 class HybridModel(object):
@@ -65,7 +66,7 @@ class HybridModel(object):
 
     # If this is a collection of layers, return the mean of their inference
     # results.
-    if isinstance(layer, collections_abc.Iterable):
+    if isinstance(layer, collections.Iterable):
       return math_ops.reduce_mean(
           array_ops.stack([l.inference_graph(data) for l in layer]), 0)
     # If this is a single layer, return its inference result.

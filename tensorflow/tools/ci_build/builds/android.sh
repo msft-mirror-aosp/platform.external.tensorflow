@@ -41,4 +41,9 @@ bazel --bazelrc=/dev/null build \
     --define=grpc_no_ares=true \
     ${TARGETS}
 
-# TODO(b/122377443): Restore Makefile builds after resolving r18b build issues.
+echo "========== Makefile Build Test =========="
+# Test Makefile build just to make sure it still works.
+if [ -z "$NDK_ROOT" ]; then
+   export NDK_ROOT=${ANDROID_NDK_HOME}
+fi
+tensorflow/contrib/makefile/build_all_android.sh

@@ -24,12 +24,14 @@ from tensorflow.python.ops.distributions import util as distribution_util
 from tensorflow.python.ops.linalg import linalg
 from tensorflow.python.util import deprecation
 
+
 __all__ = [
     "MultivariateNormalTriL",
 ]
 
 
-class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
+class MultivariateNormalTriL(
+    mvn_linop.MultivariateNormalLinearOperator):
   """The multivariate normal distribution on `R^k`.
 
   The Multivariate Normal distribution is defined over `R^k` and parameterized
@@ -61,7 +63,7 @@ class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
   ```
 
   where `scale_tril` is lower-triangular `k x k` matrix with non-zero diagonal,
-  i.e., `tf.linalg.tensor_diag_part(scale_tril) != 0`.
+  i.e., `tf.diag_part(scale_tril) != 0`.
 
   Additional leading dimensions (if any) will index batches.
 
@@ -89,7 +91,7 @@ class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
   cov = [[ 0.36,  0.12,  0.06],
          [ 0.12,  0.29, -0.13],
          [ 0.06, -0.13,  0.26]]
-  scale = tf.linalg.cholesky(cov)
+  scale = tf.cholesky(cov)
   # ==> [[ 0.6,  0. ,  0. ],
   #      [ 0.2,  0.5,  0. ],
   #      [ 0.1, -0.3,  0.4]])
@@ -124,19 +126,19 @@ class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
 
   # Instantiate a "learnable" MVN.
   dims = 4
-  with tf.compat.v1.variable_scope("model"):
+  with tf.variable_scope("model"):
     mvn = tfd.MultivariateNormalTriL(
-        loc=tf.compat.v1.get_variable(shape=[dims], dtype=tf.float32,
-        name="mu"),
+        loc=tf.get_variable(shape=[dims], dtype=tf.float32, name="mu"),
         scale_tril=tfd.fill_triangular(
-            tf.compat.v1.get_variable(shape=[dims * (dims + 1) / 2],
+            tf.get_variable(shape=[dims * (dims + 1) / 2],
                             dtype=tf.float32, name="chol_Sigma")))
   ```
 
   """
 
   @deprecation.deprecated(
-      "2018-10-01", "The TensorFlow Distributions library has moved to "
+      "2018-10-01",
+      "The TensorFlow Distributions library has moved to "
       "TensorFlow Probability "
       "(https://github.com/tensorflow/probability). You "
       "should update all references to use `tfp.distributions` "
@@ -163,7 +165,7 @@ class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
     ```
 
     where `scale_tril` is lower-triangular `k x k` matrix with non-zero
-    diagonal, i.e., `tf.linalg.tensor_diag_part(scale_tril) != 0`.
+    diagonal, i.e., `tf.diag_part(scale_tril) != 0`.
 
     Additional leading dimensions (if any) will index batches.
 
@@ -172,26 +174,24 @@ class MultivariateNormalTriL(mvn_linop.MultivariateNormalLinearOperator):
         implicitly `0`. When specified, may have shape `[B1, ..., Bb, k]` where
         `b >= 0` and `k` is the event size.
       scale_tril: Floating-point, lower-triangular `Tensor` with non-zero
-        diagonal elements. `scale_tril` has shape `[B1, ..., Bb, k, k]` where `b
-        >= 0` and `k` is the event size.
+        diagonal elements. `scale_tril` has shape `[B1, ..., Bb, k, k]` where
+        `b >= 0` and `k` is the event size.
       validate_args: Python `bool`, default `False`. When `True` distribution
         parameters are checked for validity despite possibly degrading runtime
         performance. When `False` invalid inputs may silently render incorrect
         outputs.
-      allow_nan_stats: Python `bool`, default `True`. When `True`, statistics
-        (e.g., mean, mode, variance) use the value "`NaN`" to indicate the
-        result is undefined. When `False`, an exception is raised if one or more
-        of the statistic's batch members are undefined.
+      allow_nan_stats: Python `bool`, default `True`. When `True`,
+        statistics (e.g., mean, mode, variance) use the value "`NaN`" to
+        indicate the result is undefined. When `False`, an exception is raised
+        if one or more of the statistic's batch members are undefined.
       name: Python `str` name prefixed to Ops created by this class.
 
     Raises:
       ValueError: if neither `loc` nor `scale_tril` are specified.
     """
     parameters = dict(locals())
-
     def _convert_to_tensor(x, name):
       return None if x is None else ops.convert_to_tensor(x, name=name)
-
     if loc is None and scale_tril is None:
       raise ValueError("Must specify one or both of `loc`, `scale_tril`.")
     with ops.name_scope(name) as name:

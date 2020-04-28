@@ -53,9 +53,10 @@ TEST(MapAndFilterFusionTest, FuseMapAndFilter) {
 
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map", output));
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("filter", output));
-  EXPECT_EQ(graph_utils::FindAllGraphNodesWithOp("MapDataset", output).size(),
-            2);
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("FilterDataset", output));
+  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("MapDataset", output));
+
+  EXPECT_TRUE(
+      graph_utils::ContainsNodeWithOp("FilterByLastComponentDataset", output));
 }
 
 TEST(MapAndFilterFusionTest, FuseParallelMapAndFilter) {
@@ -83,15 +84,14 @@ TEST(MapAndFilterFusionTest, FuseParallelMapAndFilter) {
 
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map", output));
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("filter", output));
-  ASSERT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDataset", output));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("MapDataset", output));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("FilterDataset", output));
-
+  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDataset", output))
+      << output.DebugString();
   auto& map_node = output.node(
       graph_utils::FindGraphNodeWithOp("ParallelMapDataset", output));
   EXPECT_FALSE(map_node.attr().at("sloppy").b()) << map_node.DebugString();
-  // input dataset + num_parallel_calls
-  EXPECT_EQ(map_node.input_size(), 2);
+  EXPECT_TRUE(
+      graph_utils::ContainsNodeWithOp("FilterByLastComponentDataset", output))
+      << output.DebugString();
 }
 
 TEST(MapAndFilterFusionTest, FuseMapAndFilterWithExtraChild) {
@@ -117,10 +117,26 @@ TEST(MapAndFilterFusionTest, FuseMapAndFilterWithExtraChild) {
 
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map", output));
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("filter", output));
-  EXPECT_EQ(graph_utils::FindAllGraphNodesWithOp("MapDataset", output).size(),
-            2);
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("FilterDataset", output));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("CacheDataset", output));
+  ASSERT_TRUE(graph_utils::ContainsNodeWithOp("MapDataset", output));
+  ASSERT_TRUE(
+      graph_utils::ContainsNodeWithOp("FilterByLastComponentDataset", output));
+  ASSERT_TRUE(graph_utils::ContainsNodeWithOp("CacheDataset", output));
+
+  int map_id = graph_utils::FindGraphNodeWithOp("MapDataset", output);
+  auto& map_node = output.node(map_id);
+  ASSERT_EQ(map_node.input_size(), 1);
+  EXPECT_EQ(map_node.input(0), "range");
+
+  int filter_by_component_id =
+      graph_utils::FindGraphNodeWithOp("FilterByLastComponentDataset", output);
+  auto& filter_by_component = output.node(filter_by_component_id);
+  ASSERT_EQ(filter_by_component.input_size(), 1);
+  EXPECT_EQ(filter_by_component.input(0), map_node.name());
+
+  int cache_id = graph_utils::FindGraphNodeWithOp("CacheDataset", output);
+  auto& cache_node = output.node(cache_id);
+  ASSERT_EQ(cache_node.input_size(), 2);
+  EXPECT_EQ(cache_node.input(0), filter_by_component.name());
 }
 
 TEST(MapAndFilterFusionTest, FuseParallelMapAndFilterWithExtraChild) {
@@ -150,15 +166,27 @@ TEST(MapAndFilterFusionTest, FuseParallelMapAndFilterWithExtraChild) {
 
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map", output));
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("filter", output));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("FilterDataset", output));
   ASSERT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDataset", output));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("CacheDataset", output));
+  ASSERT_TRUE(
+      graph_utils::ContainsNodeWithOp("FilterByLastComponentDataset", output));
+  ASSERT_TRUE(graph_utils::ContainsNodeWithOp("CacheDataset", output));
 
-  auto& map_node = output.node(
-      graph_utils::FindGraphNodeWithOp("ParallelMapDataset", output));
-  EXPECT_TRUE(map_node.attr().at("sloppy").b()) << map_node.DebugString();
-  // input dataset + num_parallel_calls
-  EXPECT_EQ(map_node.input_size(), 2);
+  int map_id = graph_utils::FindGraphNodeWithOp("ParallelMapDataset", output);
+  auto& map_node = output.node(map_id);
+  ASSERT_EQ(map_node.input_size(), 2);
+  EXPECT_EQ(map_node.input(0), "range");
+  EXPECT_EQ(map_node.input(1), "num_parallel_calls");
+
+  int filter_by_component_id =
+      graph_utils::FindGraphNodeWithOp("FilterByLastComponentDataset", output);
+  auto& filter_by_component = output.node(filter_by_component_id);
+  ASSERT_EQ(filter_by_component.input_size(), 1);
+  EXPECT_EQ(filter_by_component.input(0), map_node.name());
+
+  int cache_id = graph_utils::FindGraphNodeWithOp("CacheDataset", output);
+  auto& cache_node = output.node(cache_id);
+  ASSERT_EQ(cache_node.input_size(), 2);
+  EXPECT_EQ(cache_node.input(0), filter_by_component.name());
 }
 
 }  // namespace

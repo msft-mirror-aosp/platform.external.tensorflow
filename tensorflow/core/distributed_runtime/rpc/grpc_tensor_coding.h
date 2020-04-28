@@ -46,7 +46,7 @@ void EncodeRecvTensorResponseToByteBuffer(const RecvTensorResponse& proto,
 // "val" holds the tensor value to be encoded.
 //
 // Discards original contents of *result.
-void EncodeTensorToByteBuffer(bool is_dead, const Tensor& val, bool require_ack,
+void EncodeTensorToByteBuffer(bool is_dead, const Tensor& val,
                               ::grpc::ByteBuffer* result);
 
 }  // namespace grpc

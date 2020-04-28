@@ -22,28 +22,22 @@ import abc
 import six
 
 from tensorflow.python.data.util import structure
-from tensorflow.python.framework import composite_tensor
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
-from tensorflow.python.framework import tensor_spec
-from tensorflow.python.framework import type_spec
+from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import gen_dataset_ops
 from tensorflow.python.util.tf_export import tf_export
 
 
-@tf_export("data.experimental.Optional")
 @six.add_metaclass(abc.ABCMeta)
-class Optional(composite_tensor.CompositeTensor):
-  """Wraps a value that may/may not be present at runtime.
+class Optional(object):
+  """Wraps a nested structure of tensors that may/may not be present at runtime.
 
   An `Optional` can represent the result of an operation that may fail as a
   value, rather than raising an exception and halting execution. For example,
   `tf.data.experimental.get_next_as_optional` returns an `Optional` that either
-  contains the next value from a `tf.compat.v1.data.Iterator` if one exists, or
-  a "none" value that indicates the end of the sequence has been reached.
-
-  `Optional` can only be used by values that are convertible to `Tensor` or
-  `CompositeTensor`.
+  contains the next value from a `tf.data.Iterator` if one exists, or a "none"
+  value that indicates the end of the sequence has been reached.
   """
 
   @abc.abstractmethod
@@ -60,7 +54,7 @@ class Optional(composite_tensor.CompositeTensor):
 
   @abc.abstractmethod
   def get_value(self, name=None):
-    """Returns the value wrapped by this optional.
+    """Returns a nested structure of values wrapped by this optional.
 
     If this optional does not have a value (i.e. `self.has_value()` evaluates
     to `False`), this operation will raise `tf.errors.InvalidArgumentError`
@@ -70,7 +64,7 @@ class Optional(composite_tensor.CompositeTensor):
       name: (Optional.) A name for the created operation.
 
     Returns:
-      The wrapped value.
+      A nested structure of `tf.Tensor` and/or `tf.SparseTensor` objects.
     """
     raise NotImplementedError("Optional.get_value()")
 
@@ -89,16 +83,15 @@ class Optional(composite_tensor.CompositeTensor):
     """Returns an `Optional` that wraps the given value.
 
     Args:
-      value: A value to wrap. The value must be convertible to `Tensor` or
-        `CompositeTensor`.
+      value: A nested structure of `tf.Tensor` and/or `tf.SparseTensor` objects.
 
     Returns:
       An `Optional` that wraps `value`.
     """
     with ops.name_scope("optional") as scope:
       with ops.name_scope("value"):
-        value_structure = structure.type_spec_from_value(value)
-        encoded_value = structure.to_tensor_list(value_structure, value)
+        value_structure = structure.Structure.from_value(value)
+        encoded_value = value_structure._to_tensor_list(value)  # pylint: disable=protected-access
 
     return _OptionalImpl(
         gen_dataset_ops.optional_from_value(encoded_value, name=scope),
@@ -140,56 +133,60 @@ class _OptionalImpl(Optional):
     # in `Iterator.get_next()` and `StructuredFunctionWrapper`.
     with ops.name_scope(name, "OptionalGetValue",
                         [self._variant_tensor]) as scope:
-      return structure.from_tensor_list(
-          self._value_structure,
+      # pylint: disable=protected-access
+      return self._value_structure._from_tensor_list(
           gen_dataset_ops.optional_get_value(
               self._variant_tensor,
               name=scope,
-              output_types=structure.get_flat_tensor_types(
-                  self._value_structure),
-              output_shapes=structure.get_flat_tensor_shapes(
-                  self._value_structure)))
+              output_types=self._value_structure._flat_types,
+              output_shapes=self._value_structure._flat_shapes))
 
   @property
   def value_structure(self):
     return self._value_structure
 
-  @property
-  def _type_spec(self):
-    return OptionalSpec.from_value(self)
 
-
-@tf_export(
-    "OptionalSpec", v1=["OptionalSpec", "data.experimental.OptionalStructure"])
-class OptionalSpec(type_spec.TypeSpec):
+@tf_export("data.experimental.OptionalStructure")
+class OptionalStructure(structure.Structure):
   """Represents an optional potentially containing a structured value."""
-
-  __slots__ = ["_value_structure"]
 
   def __init__(self, value_structure):
     self._value_structure = value_structure
 
   @property
-  def value_type(self):
-    return _OptionalImpl
-
-  def _serialize(self):
-    return (self._value_structure,)
+  def _flat_shapes(self):
+    return [tensor_shape.scalar()]
 
   @property
-  def _component_specs(self):
-    return [tensor_spec.TensorSpec((), dtypes.variant)]
+  def _flat_types(self):
+    return [dtypes.variant]
 
-  def _to_components(self, value):
+  def is_compatible_with(self, other):
+    # pylint: disable=protected-access
+    return (isinstance(other, OptionalStructure) and
+            self._value_structure.is_compatible_with(other._value_structure))
+
+  def _to_tensor_list(self, value):
     return [value._variant_tensor]  # pylint: disable=protected-access
 
-  def _from_components(self, flat_value):
+  def _to_batched_tensor_list(self, value):
+    raise NotImplementedError(
+        "Unbatching for `tf.data.experimental.Optional` objects.")
+
+  def _from_tensor_list(self, flat_value):
+    if (len(flat_value) != 1 or flat_value[0].dtype != dtypes.variant or
+        not flat_value[0].shape.is_compatible_with(tensor_shape.scalar())):
+      raise ValueError(
+          "OptionalStructure corresponds to a single tf.variant scalar.")
+    return self._from_compatible_tensor_list(flat_value)
+
+  def _from_compatible_tensor_list(self, flat_value):
     # pylint: disable=protected-access
     return _OptionalImpl(flat_value[0], self._value_structure)
 
   @staticmethod
   def from_value(value):
-    return OptionalSpec(value.value_structure)
+    return OptionalStructure(value.value_structure)
 
   def _to_legacy_output_types(self):
     return self
@@ -199,3 +196,17 @@ class OptionalSpec(type_spec.TypeSpec):
 
   def _to_legacy_output_classes(self):
     return self
+
+  def _batch(self, batch_size):
+    raise NotImplementedError(
+        "Batching for `tf.data.experimental.Optional` objects.")
+
+  def _unbatch(self):
+    raise NotImplementedError(
+        "Unbatching for `tf.data.experimental.Optional` objects.")
+
+
+# pylint: disable=protected-access
+structure.Structure._register_custom_converter(Optional,
+                                               OptionalStructure.from_value)
+# pylint: enable=protected-access

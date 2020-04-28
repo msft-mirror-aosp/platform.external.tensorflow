@@ -140,7 +140,7 @@ class OpDefBuilder {
   // Note that currently (October 2016), python code still requires a
   // RegisterShape call to invoke this; see call_cpp_shape_fn in
   // python/framework/common_shapes.py
-  OpDefBuilder& SetShapeFn(OpShapeInferenceFn fn);
+  OpDefBuilder& SetShapeFn(Status (*fn)(shape_inference::InferenceContext*));
 
   // Sets op_reg_data->op_def to the requested OpDef and
   // op_reg_data->shape_inference_fn to the requested shape inference function,

@@ -1,14 +1,13 @@
 # Description:
 #   contains parts of TensorFlow that are experimental or unstable and which are not supported.
 
-load("//tensorflow:tensorflow.bzl", "py_test")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
-)
+package(default_visibility = ["//visibility:public"])
 
 exports_files(["LICENSE"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 py_library(
     name = "rate",
@@ -35,7 +34,6 @@ py_test(
     name = "rate_test",
     size = "small",
     srcs = ["rate_test.py"],
-    python_version = "PY2",
     tags = [
         "manual",  # TODO(b/120555555)
         "no_oss",  # TODO(b/120555555)

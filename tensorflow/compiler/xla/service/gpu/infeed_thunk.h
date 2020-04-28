@@ -40,7 +40,9 @@ class InfeedThunk : public Thunk {
   InfeedThunk(const InfeedThunk&) = delete;
   InfeedThunk& operator=(const InfeedThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const ShapeTree<BufferAllocation::Slice> infeed_slices_;

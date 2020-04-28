@@ -16,8 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_GRAPPLER_COSTS_VIRTUAL_PLACER_H_
 #define TENSORFLOW_CORE_GRAPPLER_COSTS_VIRTUAL_PLACER_H_
 
-#include <unordered_map>
-
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/protobuf/device_properties.pb.h"
 
@@ -30,8 +28,7 @@ class Cluster;
 // The virtual placer emulates the behavior of the TF placer.
 class VirtualPlacer {
  public:
-  explicit VirtualPlacer(
-      const std::unordered_map<string, DeviceProperties>& devices);
+  VirtualPlacer(const Cluster* cluster);
 
   const DeviceProperties& get_device(const NodeDef& node) const;
 

@@ -33,7 +33,6 @@ limitations under the License.
 namespace tensorflow {
 
 class Allocator;
-class GPUBFCAllocator;
 class PoolAllocator;
 class SharedCounter;
 
@@ -138,7 +137,6 @@ class GPUProcessState {
   struct AllocatorParts {
     std::unique_ptr<Allocator> allocator;
     std::unique_ptr<SharedCounter> counter;
-    GPUBFCAllocator* bfc_allocator;
     SubAllocator* sub_allocator;  // owned by allocator
     std::unique_ptr<Allocator> recording_allocator;
   };

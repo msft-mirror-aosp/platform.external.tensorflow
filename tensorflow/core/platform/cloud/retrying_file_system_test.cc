@@ -261,7 +261,8 @@ TEST(RetryingFileSystemTest, NewRandomAccessFile_AllRetriesFailed) {
   StringPiece result;
   char scratch[10];
   const auto& status = random_access_file->Read(0, 10, &result, scratch);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -425,7 +426,8 @@ TEST(RetryingFileSystemTest, NewWritableFile_AllRetriesFailed) {
 
   // Use it and check the results.
   const auto& status = writable_file->Sync();
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -455,7 +457,8 @@ TEST(RetryingFileSystemTest, NewReadOnlyMemoryRegionFromFile_AllRetriesFailed) {
   std::unique_ptr<ReadOnlyMemoryRegion> result;
   const auto& status =
       fs.NewReadOnlyMemoryRegionFromFile("filename.txt", &result);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -482,7 +485,8 @@ TEST(RetryingFileSystemTest, GetChildren_AllRetriesFailed) {
 
   std::vector<string> result;
   const auto& status = fs.GetChildren("gs://path", &result);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -510,7 +514,8 @@ TEST(RetryingFileSystemTest, GetMatchingPaths_AllRetriesFailed) {
 
   std::vector<string> result;
   const auto& status = fs.GetMatchingPaths("gs://path/dir", &result);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -536,7 +541,8 @@ TEST(RetryingFileSystemTest, DeleteFile_AllRetriesFailed) {
 
   std::vector<string> result;
   const auto& status = fs.DeleteFile("gs://path/file.txt");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -562,7 +568,8 @@ TEST(RetryingFileSystemTest, CreateDir_AllRetriesFailed) {
 
   std::vector<string> result;
   const auto& status = fs.CreateDir("gs://path/newdir");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -588,7 +595,8 @@ TEST(RetryingFileSystemTest, DeleteDir_AllRetriesFailed) {
 
   std::vector<string> result;
   const auto& status = fs.DeleteDir("gs://path/dir");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -615,7 +623,8 @@ TEST(RetryingFileSystemTest, GetFileSize_AllRetriesFailed) {
 
   uint64 size;
   const auto& status = fs.GetFileSize("gs://path/file.txt", &size);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -639,7 +648,8 @@ TEST(RetryingFileSystemTest, RenameFile_AllRetriesFailed) {
       std::move(base_fs), RetryConfig(0 /* init_delay_time_us */));
 
   const auto& status = fs.RenameFile("old_name", "new_name");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -665,7 +675,8 @@ TEST(RetryingFileSystemTest, Stat_AllRetriesFailed) {
 
   FileStatistics stat;
   const auto& status = fs.Stat("file_name", &stat);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -677,7 +688,8 @@ TEST(RetryingFileSystemTest, FileExists_AllRetriesFailed) {
       std::move(base_fs), RetryConfig(0 /* init_delay_time_us */));
 
   const auto& status = fs.FileExists("file_name");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -714,7 +726,8 @@ TEST(RetryingFileSystemTest, IsDirectory_AllRetriesFailed) {
       std::move(base_fs), RetryConfig(0 /* init_delay_time_us */));
 
   const auto& status = fs.IsDirectory("gs://path/dir");
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 
@@ -744,7 +757,8 @@ TEST(RetryingFileSystemTest, DeleteRecursively_AllRetriesFailed) {
 
   const auto& status =
       fs.DeleteRecursively("gs://path/dir", &undeleted_files, &undeleted_dirs);
-  EXPECT_TRUE(absl::StrContains(status.error_message(), "Retriable error #10"))
+  EXPECT_TRUE(
+      str_util::StrContains(status.error_message(), "Retriable error #10"))
       << status;
 }
 

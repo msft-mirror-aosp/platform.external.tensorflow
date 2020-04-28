@@ -287,7 +287,8 @@ TEST(InputBuffer, Seek) {
     TF_CHECK_OK(in.Seek(1 << 25));
     EXPECT_TRUE(errors::IsOutOfRange(in.ReadNBytes(1, &read)));
 
-    EXPECT_TRUE(absl::StrContains(in.Seek(-1).ToString(), "negative position"));
+    EXPECT_TRUE(
+        str_util::StrContains(in.Seek(-1).ToString(), "negative position"));
   }
 }
 

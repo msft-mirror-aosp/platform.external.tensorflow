@@ -40,7 +40,7 @@ class ExecutionCallback(enum.Enum):
   IGNORE: take no action.
   PRINT:  print a warning to `stdout`.
   RAISE:  raise an error (e.g. `InfOrNanError`).
-  WARN:   print a warning using `tf.compat.v1.logging.warn`.
+  WARN:   print a warning using `tf.logging.warn`.
   """
 
   IGNORE = "ignore"
@@ -179,7 +179,6 @@ def inf_nan_callback(op_type,
             "T", outputs[0].dtype.as_datatype_enum)
         # TODO(cais): Consider moving this into execute.py.
         # pylint: disable=protected-access
-        ctx.ensure_initialized()
         pywrap_tensorflow.TFE_Py_Execute(
             ctx._handle, output.device, "CheckNumerics", [output],
             check_numerics_op_attrs, 1)
@@ -252,7 +251,7 @@ def add_execution_callback(callback):
 
   Example:
   ```python
-  def print_even_callback(op_type, inputs, attrs, outputs, op_name):
+  def print_even_callback(op_type, op_name, attrs, inputs, outputs):
     # A callback that prints only the even output values.
     if outputs[0].numpy() % 2 == 0:
       print("Even output from %s: %s" % (op_name or op_type,  outputs))
@@ -268,16 +267,16 @@ def add_execution_callback(callback):
 
   Args:
     callback: a callable of the signature
-      `f(op_type, inputs, attrs, outputs, op_name)`.
+      `f(op_type, op_name, attrs, inputs, outputs)`.
       `op_type` is the type of the operation that was just executed (e.g.,
-         `MatMul`).
-      `inputs` is the `list` of input `Tensor`(s) to the op.
-      `attrs` contains the attributes of the operation as a `tuple` of
-         alternating attribute name and attribute value.
-      `outputs` is the `list` of output `Tensor`(s) from the op.
+        `MatMul`).
       `op_name` is the name of the operation that was just executed. This
-         name is set by the client who created the operation and can be `None`
-         if it is unset.
+        name is set by the client who created the operation and can be `None` if
+        it is unset.
+      `attrs` contains the attributes of the operation as a `tuple` of
+        alternating attribute name and attribute value.
+      `inputs` is the `list` of input `Tensor`(s) to the op.
+      `outputs` is the `list` of output `Tensor`(s) from the op.
        Return value(s) from the callback are ignored.
   """
   execute.execute = execute.execute_with_callbacks
@@ -353,10 +352,10 @@ def errstate(inf_or_nan=None):
 
   Example:
   ```
-  c = tf.math.log(0.)  # -inf
+  c = tf.log(0.)  # -inf
 
   with errstate(inf_or_nan=ExecutionCallback.RAISE):
-    tf.math.log(0.)  # <-- Raises InfOrNanError.
+    tf.log(0.)  # <-- Raises InfOrNanError.
   ```
 
   Args:

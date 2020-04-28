@@ -36,8 +36,6 @@ limitations under the License.
 
 %include "tensorflow/python/lib/core/bfloat16.i"
 
-%include "tensorflow/lite/toco/python/toco.i"
-
 %include "tensorflow/python/lib/io/file_io.i"
 %include "tensorflow/python/training/quantize_training.i"
 
@@ -57,5 +55,3 @@ limitations under the License.
 %include "tensorflow/python/grappler/cost_analyzer.i"
 %include "tensorflow/python/grappler/graph_analyzer.i"
 %include "tensorflow/python/grappler/model_analyzer.i"
-
-%include "tensorflow/python/util/traceme.i"

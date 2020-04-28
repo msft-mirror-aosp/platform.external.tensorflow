@@ -13,9 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <string.h>
-
-#include <memory>
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
@@ -31,13 +28,8 @@ constexpr int kInputTensor = 0;
 constexpr int kShapeTensor = 1;
 constexpr int kOutputTensor = 0;
 
-TfLiteIntArray* GetOutputShape(TfLiteContext*, TfLiteNode*);
-
-TfLiteStatus ResizeOutput(TfLiteContext* context, TfLiteNode* node) {
-  TfLiteIntArray* output_shape = GetOutputShape(context, node);
-  std::unique_ptr<TfLiteIntArray, void (*)(TfLiteIntArray*)>
-      scoped_output_shape(output_shape, TfLiteIntArrayFree);
-
+TfLiteStatus ResizeOutput(TfLiteContext* context, TfLiteNode* node,
+                          TfLiteIntArray* output_shape) {
   const TfLiteTensor* input = GetInput(context, node, kInputTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
@@ -64,11 +56,11 @@ TfLiteStatus ResizeOutput(TfLiteContext* context, TfLiteNode* node) {
   }
 
   TF_LITE_ENSURE_EQ(context, num_input_elements, num_output_elements);
-  return context->ResizeTensor(context, output, scoped_output_shape.release());
+  return context->ResizeTensor(context, output, output_shape);
 }
 
-inline TfLiteIntArray* GetOutputShapeFromTensor(TfLiteContext* context,
-                                                TfLiteNode* node) {
+TfLiteIntArray* GetOutputShapeFromTensor(TfLiteContext* context,
+                                         TfLiteNode* node) {
   const TfLiteTensor* shape = GetInput(context, node, kShapeTensor);
 
   TfLiteIntArray* output_shape = TfLiteIntArrayCreate(shape->dims->data[0]);
@@ -79,8 +71,8 @@ inline TfLiteIntArray* GetOutputShapeFromTensor(TfLiteContext* context,
   return output_shape;
 }
 
-inline TfLiteIntArray* GetOutputShapeFromParam(TfLiteContext* context,
-                                               TfLiteNode* node) {
+TfLiteIntArray* GetOutputShapeFromParam(TfLiteContext* context,
+                                        TfLiteNode* node) {
   auto* params = reinterpret_cast<TfLiteReshapeParams*>(node->builtin_data);
 
   // The function is returned above this line if the shape tensor is usable.
@@ -101,7 +93,7 @@ inline TfLiteIntArray* GetOutputShapeFromParam(TfLiteContext* context,
 }
 
 // Check if the shape tensor is valid. Shapes should be int32 vectors.
-inline bool ShapeIsVector(TfLiteContext* context, TfLiteNode* node) {
+bool ShapeIsVector(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* shape = GetInput(context, node, kShapeTensor);
   return (shape->dims->size == 1 && shape->type == kTfLiteInt32);
 }
@@ -126,7 +118,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   if (output->type != kTfLiteString) {
     if (NumInputs(node) == 1 ||
         IsConstantTensor(GetInput(context, node, kShapeTensor))) {
-      TF_LITE_ENSURE_OK(context, ResizeOutput(context, node));
+      TF_LITE_ENSURE_OK(
+          context, ResizeOutput(context, node, GetOutputShape(context, node)));
     } else {
       SetTensorToDynamic(output);
     }
@@ -142,7 +135,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   // a string tensor, or its shape cannot be calculated during Prepare(). In
   // either case, we now have all the information to calculate its shape.
   if (IsDynamicTensor(output)) {
-    TF_LITE_ENSURE_OK(context, ResizeOutput(context, node));
+    TF_LITE_ENSURE_OK(
+        context, ResizeOutput(context, node, GetOutputShape(context, node)));
   }
 
   // Note that string tensors are always "dynamic" in the sense that their size

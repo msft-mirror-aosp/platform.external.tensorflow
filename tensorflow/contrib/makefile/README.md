@@ -87,10 +87,8 @@ need to install the standalone toolchain, however.
 Assign your NDK location to $NDK_ROOT:
 
 ```bash
-export NDK_ROOT=/absolute/path/to/NDK/android-ndk-r14b
+export NDK_ROOT=/absolute/path/to/NDK/android-ndk-rxxx/
 ```
-
-Note : libtensorflow-core.a cannot be compiled with any ndk version above r14b.
 
 Download the graph if you haven't already:
 

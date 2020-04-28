@@ -31,8 +31,10 @@ namespace tensorflow {
 namespace tensorrt {
 namespace segment {
 
-// Vector of segments, each entry contains a set of node pointers.
-using SegmentNodesVector = std::vector<std::set<const Node*>>;
+// Vector of segments, each entry contains a set of node pointers and a device
+// name in the segment.
+using SegmentNodesVector =
+    std::vector<std::pair<std::set<const Node*>, string>>;
 
 struct SegmentOptions {
   // Segment must contain at least this many nodes.

@@ -355,7 +355,7 @@ class PoissonLogNormalQuadratureCompound(distribution_lib.Distribution):
         self.mixture_distribution.logits.shape)[:-1]
 
   def _event_shape(self):
-    return tensor_shape.TensorShape([])
+    return tensor_shape.scalar()
 
   def _sample_n(self, n, seed=None):
     # Get ids as a [n, batch_size]-shaped matrix, unless batch_shape=[] then get

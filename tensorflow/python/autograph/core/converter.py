@@ -63,9 +63,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
 import enum
 
+from tensorflow.python.autograph.core import config
 from tensorflow.python.autograph.pyct import anno
 from tensorflow.python.autograph.pyct import ast_util
 from tensorflow.python.autograph.pyct import cfg
@@ -75,8 +75,10 @@ from tensorflow.python.autograph.pyct import qual_names
 from tensorflow.python.autograph.pyct import templates
 from tensorflow.python.autograph.pyct import transformer
 from tensorflow.python.autograph.pyct.static_analysis import activity
+from tensorflow.python.autograph.pyct.static_analysis import live_values
 from tensorflow.python.autograph.pyct.static_analysis import liveness
 from tensorflow.python.autograph.pyct.static_analysis import reaching_definitions
+from tensorflow.python.autograph.pyct.static_analysis import type_info
 from tensorflow.python.util.tf_export import tf_export
 
 # TODO(mdan): These contexts can be refactored into first class objects.
@@ -88,20 +90,7 @@ from tensorflow.python.util.tf_export import tf_export
 
 @tf_export('autograph.experimental.Feature')
 class Feature(enum.Enum):
-  """This enumeration represents optional conversion options.
-
-  These conversion options are experimental. They are subject to change without
-  notice and offer no guarantees.
-
-  _Example Usage_
-
-  ```python
-  optionals= tf.autograph.experimental.Feature.EQUALITY_OPERATORS
-  @tf.function(experimental_autograph_options=optionals)
-  def f(i):
-    if i == 0:  # EQUALITY_OPERATORS allows the use of == here.
-      tf.print('i is zero')
-  ```
+  """Represents conversion options that can be toggled on or off.
 
   Attributes:
     ALL: Enable all features.
@@ -109,10 +98,11 @@ class Feature(enum.Enum):
     ASSERT_STATEMENTS: Convert Tensor-dependent assert statements to tf.Assert.
     BUILTIN_FUNCTIONS: Convert builtin functions applied to Tensors to
       their TF counterparts.
-    EQUALITY_OPERATORS: Whether to convert the comparison operators, like
-      equality. This is soon to be deprecated as support is being added to the
-      Tensor class.
+    ERROR_REWRITING: Rewrite errors that occur in the generated code to
+      indicate the source code to which the failing code corresponds.
     LISTS: Convert list idioms, like initializers, slices, append, etc.
+    LOGICAL_EXPRESSIONS: Convert data-dependent logical expressions applied to
+      Tensors to their TF counterparts.
     NAME_SCOPES: Insert name scopes that name ops according to context, like the
       function they were defined in.
   """
@@ -122,8 +112,9 @@ class Feature(enum.Enum):
   AUTO_CONTROL_DEPS = 'AUTO_CONTROL_DEPS'
   ASSERT_STATEMENTS = 'ASSERT_STATEMENTS'
   BUILTIN_FUNCTIONS = 'BUILTIN_FUNCTIONS'
-  EQUALITY_OPERATORS = 'EQUALITY_OPERATORS'
+  ERROR_REWRITING = 'ERROR_REWRITING'
   LISTS = 'LISTS'
+  LOGICAL_EXPRESSIONS = 'LOGICAL_EXPRESSIONS'
   NAME_SCOPES = 'NAME_SCOPES'
 
   @classmethod
@@ -139,18 +130,15 @@ class Feature(enum.Enum):
     return tuple(set(cls.all()) - set(exclude) - {cls.ALL})
 
 
-STANDARD_OPTIONS = None  # Forward definition.
-
-
 class ConversionOptions(object):
   """Immutable container for global conversion flags.
 
   Attributes:
     recursive: bool, whether to recursively convert any user functions or
       classes that the converted function may use.
-    user_requested: bool, whether the conversion was explicitly requested by
-      the user, as opposed to being performed as a result of other logic. This
-      value always auto-resets resets to False in child conversions.
+    force_conversion: bool, whether to force convertinng the target entity. When
+      force_conversion is turned off, the converter may decide to return the
+      function as-is.
     optional_features: Union[Feature, Set[Feature]], controls the use of
       optional features in the conversion process. See Feature for available
       options.
@@ -158,11 +146,11 @@ class ConversionOptions(object):
 
   def __init__(self,
                recursive=False,
-               user_requested=False,
+               force_conversion=False,
                internal_convert_user_code=True,
                optional_features=Feature.ALL):
     self.recursive = recursive
-    self.user_requested = user_requested
+    self.force_conversion = force_conversion
     # TODO(mdan): Rename to conversion_recursion_depth?
     self.internal_convert_user_code = internal_convert_user_code
 
@@ -173,48 +161,27 @@ class ConversionOptions(object):
     optional_features = frozenset(optional_features)
     self.optional_features = optional_features
 
-  def as_tuple(self):
-    return (self.recursive, self.user_requested,
-            self.internal_convert_user_code, self.optional_features)
-
-  def __hash__(self):
-    return hash(self.as_tuple())
-
-  def __eq__(self, other):
-    assert isinstance(other, ConversionOptions)
-    return self.as_tuple() == other.as_tuple()
-
-  def __str__(self):
-    return 'ConversionOptions[{}]'
-
   def uses(self, feature):
     return (Feature.ALL in self.optional_features or
             feature in self.optional_features)
 
-  def call_options(self):
-    """Returns the corresponding options to be used for recursive conversion."""
-    return ConversionOptions(
-        recursive=self.recursive,
-        user_requested=False,
-        internal_convert_user_code=self.recursive,
-        optional_features=self.optional_features)
-
-  def to_ast(self):
+  def to_ast(self, internal_convert_user_code=None):
     """Returns a representation of this object as an AST node.
 
     The AST node encodes a constructor that would create an object with the
     same contents.
 
+    Args:
+      internal_convert_user_code: Optional[bool], allows ovrriding the
+        corresponding value.
+
     Returns:
       ast.Node
     """
-    if self == STANDARD_OPTIONS:
-      return parser.parse_expression('ag__.STD')
-
     template = """
       ag__.ConversionOptions(
           recursive=recursive_val,
-          user_requested=user_requested_val,
+          force_conversion=force_conversion_val,
           optional_features=optional_features_val,
           internal_convert_user_code=internal_convert_user_code_val)
     """
@@ -223,25 +190,21 @@ class ConversionOptions(object):
       return parser.parse_expression('({})'.format(', '.join(
           'ag__.{}'.format(str(v)) for v in values)))
 
+    if internal_convert_user_code is None:
+      internal_convert_user_code = self.internal_convert_user_code
+
     expr_ast = templates.replace(
         template,
         recursive_val=parser.parse_expression(str(self.recursive)),
-        user_requested_val=parser.parse_expression(str(self.user_requested)),
+        force_conversion_val=parser.parse_expression(
+            str(self.force_conversion)),
         internal_convert_user_code_val=parser.parse_expression(
-            str(self.internal_convert_user_code)),
+            str(internal_convert_user_code)),
         optional_features_val=list_of_features(self.optional_features))
     return expr_ast[0].value
 
 
-STANDARD_OPTIONS = ConversionOptions(
-    recursive=True,
-    user_requested=False,
-    internal_convert_user_code=True,
-    optional_features=None)
-
-
-class ProgramContext(
-    collections.namedtuple('ProgramContext', ('options', 'autograph_module'))):
+class ProgramContext(object):
   """ProgramContext keeps track of converting function hierarchies.
 
   This object is mutable, and is updated during conversion. Not thread safe.
@@ -250,8 +213,24 @@ class ProgramContext(
     options: ConversionOptions
     autograph_module: Module, a reference to the autograph module. This needs to
       be specified by the caller to avoid circular dependencies.
+    required_imports: str, containing an import statement on each line. These
+      are all the imports necessary for the compiled code to run, in addition to
+      the closures of each entity, which are attached dynamically.
   """
-  pass
+
+  def __init__(
+      self,
+      options,
+      autograph_module,
+  ):
+    self.options = options
+    self.autograph_module = autograph_module
+
+  @property
+  def required_imports(self):
+    """Returns a block containing all imports required by the converted code."""
+    # TODO(mdan): Check that these don't clobber one another.
+    return '\n'.join(config.COMPILED_IMPORT_STATEMENTS)
 
 
 class EntityContext(transformer.Context):
@@ -262,15 +241,13 @@ class EntityContext(transformer.Context):
   Attributes:
     namer: Namer
     info: transformer.EntityInfo
-    program: ProgramContext,
-    targe_name: Text
+    program: ProgramContext
   """
 
-  def __init__(self, namer, entity_info, program_ctx, target_name=None):
+  def __init__(self, namer, entity_info, program_ctx):
     super(EntityContext, self).__init__(entity_info)
     self.namer = namer
     self.program = program_ctx
-    self.target_name = target_name
 
 
 class Base(transformer.Base):
@@ -384,6 +361,10 @@ def standard_analysis(node, context, is_initial=False):
   node = activity.resolve(node, context, None)
   node = reaching_definitions.resolve(node, context, graphs, AnnotatedDef)
   node = liveness.resolve(node, context, graphs)
+  node = live_values.resolve(node, context, config.PYTHON_LITERALS)
+  node = type_info.resolve(node, context)
+  # This second call allows resolving first-order class attributes.
+  node = live_values.resolve(node, context, config.PYTHON_LITERALS)
   if is_initial:
     anno.dup(
         node,

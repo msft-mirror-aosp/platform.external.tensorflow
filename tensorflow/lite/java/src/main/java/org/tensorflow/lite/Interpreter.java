@@ -22,9 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-// Use Android annotation instead
-import android.support.annotation.NonNull;
-// import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.NonNull;
 
 /**
  * Driver class to drive model inference with TensorFlow Lite.
@@ -388,18 +386,6 @@ public final class Interpreter implements AutoCloseable {
   public void modifyGraphWithDelegate(Delegate delegate) {
     checkNotClosed();
     wrapper.modifyGraphWithDelegate(delegate);
-  }
-
-  /**
-   * Advanced: Resets all variable tensors to the default value.
-   *
-   * <p>If a variable tensor doesn't have an associated buffer, it will be reset to zero.
-   *
-   * <p>WARNING: This is an experimental API and subject to change.
-   */
-  public void resetVariableTensors() {
-    checkNotClosed();
-    wrapper.resetVariableTensors();
   }
 
   /** Release resources associated with the {@code Interpreter}. */

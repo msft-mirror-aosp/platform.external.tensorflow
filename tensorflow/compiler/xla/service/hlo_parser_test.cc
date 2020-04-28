@@ -24,7 +24,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/pattern_matcher.h"
 #include "tensorflow/compiler/xla/service/pattern_matcher_gmock.h"
 #include "tensorflow/compiler/xla/window_util.h"
-#include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/test.h"
 
@@ -303,24 +302,6 @@ ENTRY %WhileWithScalarS32Result.v2 () -> s32[] {
 
 )"
 },
-// copy-start and copy-done
-{
-"CopyStartAndCopyDone",
-
-R"(HloModule CopyStartAndCopyDone_module
-
-ENTRY %CopyStartAndCopyDone (v1: f32[], v2: f32[2,3]) -> (f32[], f32[2,3]) {
-  %v1 = f32[] parameter(0)
-  %copy-start.1 = (f32[], u32[]) copy-start(f32[] %v1)
-  %copy-done.1 = f32[] copy-done((f32[], u32[]) %copy-start.1)
-  %v2 = f32[2,3]{1,0:S(1)} parameter(1)
-  %copy-start.2 = (f32[2,3]{1,0:S(2)}, u32[]) copy-start(f32[2,3]{1,0:S(1)} %v2)
-  %copy-done.2 = f32[2,3]{1,0:S(2)} copy-done((f32[2,3]{1,0:S(2)}, u32[]) %copy-start.2)
-  ROOT %tuple = (f32[], f32[2,3]{1,0:S(2)}) tuple(f32[] %copy-done.1, f32[2,3]{1,0:S(2)} %copy-done.2)
-}
-
-)"
-},
 // send and recv
 {
 "SendRecv",
@@ -378,18 +359,6 @@ R"(HloModule CallR0F32IdentityScalar_module
 ENTRY %CallR0F32IdentityScalar.v2 () -> f32[] {
   %constant = f32[] constant(42)
   ROOT %call = f32[] call(f32[] %constant), to_apply=%Identity.v1
-}
-
-)"
-},
-// CustomCall with backend_config.
-{
-"CustomCallWithOpaque",
-R"(HloModule custom_call
-
-ENTRY %CustomCall () -> f32[1,2,3] {
-  %constant = f32[1]{0} constant({12345})
-  ROOT %custom-call = f32[1,2,3]{0,2,1} custom-call(f32[1]{0} %constant), custom_call_target="foo\"bar", backend_config="this string is opaque"
 }
 
 )"
@@ -963,19 +932,6 @@ ENTRY %CustomCallWithLayoutConstraints (p0: (f32[2,2], f32[42,2,3]), p1: f32[123
 
 )"
 },
-// CustomCallWithHasSideEffect
-{
-"CustomCallWithHasSideEffect",
-R"(HloModule CustomCallWithHasSideEffect
-
-ENTRY %CustomCallWithHasSideEffect (p0: (f32[2,2], f32[42,2,3]), p1: f32[123,4]) -> (f32[1,2,3], f32[1,2,3]) {
-  %p0 = (f32[2,2]{0,1}, f32[42,2,3]{0,1,2}) parameter(0)
-  %p1 = f32[123,4]{0,1} parameter(1)
-  ROOT %custom-call = (f32[1,2,3]{0,2,1}, f32[1,2,3]{1,2,0}) custom-call((f32[2,2]{0,1}, f32[42,2,3]{0,1,2}) %p0, f32[123,4]{0,1} %p1), custom_call_target="baz", custom_call_has_side_effect=true
-}
-
-)"
-},
 // Parse c64 literal
 {
 "ParseC64Literal",
@@ -1331,6 +1287,18 @@ ENTRY CustomCall {
 
 )"
 },
+// CustomCall with opaque value.
+{
+"CustomCallWithOpaque",
+R"(HloModule custom_call
+
+ENTRY CustomCall {
+  constant = f32[1]{0} constant({12345})
+  ROOT custom-call = f32[1,2,3]{0,2,1} custom-call(constant), custom_call_target="foo\"bar", opaque="this string is opaque"
+}
+
+)"
+},
 // Variables with non-default names
 {
 "NonDefaultNames",
@@ -1398,7 +1366,7 @@ add {
 
 ENTRY AllReduceWithSubgroups {
   input = f32[128,32]{0,1} parameter(0)
-  ROOT all-reduce = f32[128,32]{0,1} all-reduce(input), replica_groups={{0,1},{2,3}}, to_apply=add
+  ROOT all-reduce = f32[128,32]{0,1} all-reduce(input), replica_groups={{0,1},{2,3}}, barrier="abc", to_apply=add
 }
 
 )"
@@ -1416,8 +1384,8 @@ add {
 
 ENTRY CRS {
   input = f32[8]{0} parameter(0)
-  crs.1 = f32[8]{0} all-reduce(input), channel_id=1, replica_groups={{0}}, to_apply=add
-  ROOT crs.0 = f32[8]{0} all-reduce(input), channel_id=1, replica_groups={{0}}, to_apply=add
+  crs.1 = f32[8]{0} all-reduce(input), replica_groups={{0}}, all_reduce_id=1, to_apply=add
+  ROOT crs.0 = f32[8]{0} all-reduce(input), replica_groups={{0}}, all_reduce_id=1, to_apply=add
 }
 
 )"
@@ -1465,17 +1433,6 @@ R"(HloModule replica-id
 
 ENTRY Replica-id {
   ROOT replica-id = u32[] replica-id()
-}
-
-)"
-},
-// partition-id
-{
-"PartitionId",
-R"(HloModule partition-id
-
-ENTRY PartitionId {
-  ROOT id = u32[] partition-id()
 }
 
 )"
@@ -1578,29 +1535,6 @@ ENTRY MinMaxValues {
 
 )"
 },
-
-// Bitcast-convert usage
-{
-"BitcastConvert",
-R"(HloModule BitcastConvert
-
-ENTRY BitcastConvertUsage {
-  p = f32[100]{0} parameter(0)
-  ROOT out = u32[100]{0} bitcast-convert(p)
-}
-
-)"
-},
-{
-"OuterDimensionPartitions",
-R"(HloModule OuterDimensionPartitions
-
-ENTRY Test {
-  ROOT foo = f32[100]{0} parameter(0), outer_dimension_partitions={0,10,20}
-}
-
-)"
-},
 });
   // clang-format on
 }
@@ -1623,13 +1557,13 @@ class HloParameterizedParserTest
     : public ::testing::Test,
       public ::testing::WithParamInterface<TestData> {
  protected:
-  // Expects "ToString(ParseAndReturnUnverifiedModule(string)) == string", that
-  // is, parses the string, asserts that it succeeded, stringifies the parsed
-  // module, and checks that it equals the original string.
+  // Expects "ToString(ParseHloString(string)) == string", that is, parses the
+  // string, asserts that it succeeded, stringifies the parsed module, and
+  // checks that it equals the original string.
   void ExpectEqual() {
     const string& original = GetParam().module_string;
     TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                            ParseAndReturnUnverifiedModule(original));
+                            ParseHloString(original));
     if (proto_round_trip) {
       TF_ASSERT_OK_AND_ASSIGN(module, HloModule::CreateFromProto(
                                           module->ToProto(), module->config()));
@@ -1681,13 +1615,13 @@ class HloParserTest : public ::testing::Test {
 
 TEST_F(HloParserTest, Empty) {
   const string original = "";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
 TEST_F(HloParserTest, Garbage) {
   const string original = "HloModule thi$ str1ng makes# N0 sen$e @all!*&^%$";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1701,7 +1635,7 @@ ENTRY %blabla (x: f32[], y: f32[]) -> f32[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1713,7 +1647,7 @@ ENTRY %blabla (x: g32[]) -> g32[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1726,7 +1660,7 @@ ENTRY %blabla (x: f32[]) -> pred[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1737,7 +1671,7 @@ ENTRY %blabla (x: f32[]) -> pred[] {
   %eq = pred[]{} compare(f32[]{} %x, f32[]{} %y), direction=EQ
 }
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1752,7 +1686,7 @@ ENTRY %SelectScalarS32True.v4 () -> s32[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   TF_EXPECT_OK(result.status());
   // Constant instructions have no name. The string will be parsed successfully
   // but the constant names will not be exactly the same.
@@ -1763,7 +1697,7 @@ TEST_F(HloParserTest, ConfigurationField) {
 ENTRY %configuration_test() -> s32[] {
   %constant = s32[] constant(42), backend_config="foo bar"
 })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   TF_ASSERT_OK(result.status());
   EXPECT_EQ("foo bar", result.ValueOrDie()
                            ->entry_computation()
@@ -1779,7 +1713,7 @@ ENTRY %some_2 () -> f32[2] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "expects nested array in rank 1, but sees larger");
@@ -1793,7 +1727,7 @@ ENTRY %some_2x3 () -> f32[2,3] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "expects nested array in rank 2, but sees 1");
@@ -1807,7 +1741,7 @@ ENTRY %some_2x3x2 () -> f32[2,3,2] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "expects 3 elements in the [0]th element");
@@ -1822,7 +1756,7 @@ ENTRY %ConstantF16Overflow.v4 () -> f16[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "is out of range for literal's primitive type F16");
@@ -1835,7 +1769,7 @@ TEST_F(HloParserTest, ConstantBf16NoOverflow) {
   ENTRY test {
     ROOT c = bf16[] constant(-65505)
   })";
-  EXPECT_EQ(Status::OK(), ParseAndReturnUnverifiedModule(original).status());
+  EXPECT_EQ(Status::OK(), ParseHloString(original).status());
 }
 
 TEST_F(HloParserTest, ConstantBf16Overflow) {
@@ -1845,9 +1779,8 @@ TEST_F(HloParserTest, ConstantBf16Overflow) {
   ENTRY test {
     ROOT c = bf16[] constant(1e100)
   })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "out of range");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "out of range");
 }
 
 TEST_F(HloParserTest, ConstantF16OverflowInSparseArray) {
@@ -1856,9 +1789,8 @@ TEST_F(HloParserTest, ConstantF16OverflowInSparseArray) {
     ENTRY test {
       ROOT c = f16[5]sparse{10} constant({[0]: 0, [1]: -65505})
     })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "is out of range for literal's primitive type F16");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "is out of range for literal's primitive type F16");
 }
 
 TEST_F(HloParserTest, ConstantUnsignedUnderflow) {
@@ -1867,7 +1799,7 @@ TEST_F(HloParserTest, ConstantUnsignedUnderflow) {
       ENTRY %ConstantUnsignedUnderflow () -> u64[] {
         ROOT %constant = u64[] constant(-1)
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "is out of range for literal's primitive type U64");
@@ -1879,7 +1811,7 @@ TEST_F(HloParserTest, ConstantUnsignedOverflow) {
       ENTRY %ConstantUnsignedOverflow () -> u32[] {
         ROOT %constant = u32[] constant(4294967296)
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
   ExpectHasSubstr(result.status().error_message(),
                   "is out of range for literal's primitive type U32");
@@ -1891,7 +1823,7 @@ TEST_F(HloParserTest, ConstantUnsignedInt64Overflow) {
       ENTRY %ConstantUnsignedOverflow () -> u64[] {
         ROOT %constant = u64[] constant(9223372036854775808)
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1901,7 +1833,7 @@ TEST_F(HloParserTest, ConstantC64Overflow) {
       ENTRY test () -> c64[] {
         ROOT c = c64[] constant((1e100, 0))
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1911,7 +1843,7 @@ TEST_F(HloParserTest, ConstantC64Underflow) {
       ENTRY test () -> c64[] {
         ROOT c = c64[] constant((0, -1e100))
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1921,7 +1853,7 @@ TEST_F(HloParserTest, ConstantF64Overflow) {
       ENTRY test {
         ROOT c = f64[] constant(1.8e308)
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1931,7 +1863,7 @@ TEST_F(HloParserTest, ConstantF64Underflow) {
       ENTRY test {
         ROOT c = f64[] constant(-1.8e308)
       })";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   EXPECT_NE(Status::OK(), result.status());
 }
 
@@ -1943,7 +1875,7 @@ ENTRY %ConstantWithExp.v4 () -> f32[] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   TF_EXPECT_OK(result.status());
   // The string will be parsed successfully but the output strings are not
   // exactly the same, because "3e2" is parsed into value 300 and will be
@@ -1958,7 +1890,7 @@ ENTRY %ShortConstant.v4 () -> f32[67,89] {
 }
 
 )";
-  auto result = ParseAndReturnUnverifiedModule(original);
+  auto result = ParseHloString(original);
   TF_EXPECT_OK(result.status());
   EXPECT_EQ(result.ValueOrDie()->ToString(HloPrintOptions()), original);
 }
@@ -1974,7 +1906,7 @@ ENTRY %Convolve1D1Window_0.v3 (input: f32[1,2,1], filter: f32[1,1,1]) -> f32[1,2
 }
 
 )";
-  TF_EXPECT_OK(ParseAndReturnUnverifiedModule(original).status());
+  TF_EXPECT_OK(ParseHloString(original).status());
 }
 
 TEST_F(HloParserTest, InvalidDimLabels) {
@@ -1990,17 +1922,17 @@ ENTRY %Convolve1D1Window_0.v3 (input: f32[1,2,1], filter: f32[1,1,1]) -> f32[1,2
 
 )";
 
-  ExpectHasSubstr(ParseAndReturnUnverifiedModule(
-                      absl::StrCat(prefix, ",dim_labels=00_01_10", suffix))
-                      .status()
-                      .error_message(),
-                  "expects dim labels pattern");
+  ExpectHasSubstr(
+      ParseHloString(absl::StrCat(prefix, ",dim_labels=00_01_10", suffix))
+          .status()
+          .error_message(),
+      "expects dim labels pattern");
 
-  ExpectHasSubstr(ParseAndReturnUnverifiedModule(
-                      absl::StrCat(prefix, ",dim_labels=010_1100->010", suffix))
-                      .status()
-                      .error_message(),
-                  "must have the same rank");
+  ExpectHasSubstr(
+      ParseHloString(absl::StrCat(prefix, ",dim_labels=010_1100->010", suffix))
+          .status()
+          .error_message(),
+      "must have the same rank");
 }
 
 TEST_F(HloParserTest, UnexpectedAttribute) {
@@ -2016,9 +1948,8 @@ ENTRY %TwoSendRecvBothWayRecvFist.v3 () -> f32[] {
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "unexpected attribute \"calls\"");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "unexpected attribute \"calls\"");
 }
 
 TEST_F(HloParserTest, MissingAttribute) {
@@ -2034,9 +1965,8 @@ ENTRY %TwoSendRecvBothWayRecvFist.v3 () -> f32[] {
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "attribute channel_id is expected but not seen");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "attribute channel_id is expected but not seen");
 }
 
 TEST_F(HloParserTest, PredecessorUndefined) {
@@ -2052,9 +1982,8 @@ ENTRY %TwoSendRecvBothWayRecvFist.v3 () -> f32[] {
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "'done' is not defined");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "'done' is not defined");
 }
 
 TEST_F(HloParserTest, SliceAllowOmitStride1) {
@@ -2066,7 +1995,7 @@ ENTRY %slice.v2 (p0: f32[3,3,4,4]) -> f32[3,3,2,4] {
 }
 
 )";
-  TF_EXPECT_OK(ParseAndReturnUnverifiedModule(original).status());
+  TF_EXPECT_OK(ParseHloString(original).status());
 }
 
 TEST_F(HloParserTest, PaddingConfigIsNotWindowPad) {
@@ -2080,9 +2009,8 @@ ENTRY %Convolve1D1Window_0.v3 (input: f32[1,2,1], filter: f32[1,1,1]) -> f32[1,2
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "expects padding_low and padding_high separated by '_'");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "expects padding_low and padding_high separated by '_'");
 }
 
 TEST_F(HloParserTest, CommaBetweenSubAttributes) {
@@ -2093,7 +2021,7 @@ ENTRY %test_comma.v4 () -> f32[] {
 }
 
 )";
-  TF_EXPECT_OK(ParseAndReturnUnverifiedModule(original).status());
+  TF_EXPECT_OK(ParseHloString(original).status());
 }
 
 TEST_F(HloParserTest, ComputationShapeDoesNotMatchRootShape) {
@@ -2103,10 +2031,9 @@ ENTRY %CustomCall () -> f32[1] {
   %constant = f32[1]{0} constant({12345})
   ROOT %foo = f32[1,2,3]{0,2,1} custom-call(f32[1]{0} %constant), custom_call_target="foo\"bar"
 })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Shape of computation CustomCall, f32[1], is not compatible "
-      "with that of its root instruction foo, f32[1,2,3]");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Shape of computation CustomCall, f32[1], is not compatible "
+                  "with that of its root instruction foo, f32[1,2,3]");
 }
 
 TEST_F(HloParserTest, EntryComputationWithLayout) {
@@ -2123,7 +2050,7 @@ ENTRY %Reduce (input: f32[8,16,256]) -> f32[8,16] {
   ROOT reduce = f32[8,16]{0,1} reduce(input, constant), dimensions={2}, to_apply=add_F32.v3
 })";
 
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
   auto program_layout = module.ValueOrDie()->entry_computation_layout();
   ASSERT_EQ(program_layout.parameter_count(), 1);
@@ -2146,7 +2073,7 @@ c1 {
 c2 {
   const2 = f32[1]{0} constant({67890})
 })";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
   EXPECT_EQ(module.ValueOrDie()->entry_computation()->name(), "c2");
 }
@@ -2157,7 +2084,7 @@ ENTRY consts {
   first = f32[1]{0} constant({12345})
   last = f32[1]{0} constant({67890})
 })";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
   EXPECT_EQ(
       module.ValueOrDie()->entry_computation()->root_instruction()->name(),
@@ -2177,7 +2104,7 @@ ENTRY /*comment*/ c1 {
 /* something else */
 
 )";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
 }
 
@@ -2196,7 +2123,7 @@ d
 
 */
 })";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
 }
 
@@ -2208,9 +2135,8 @@ ENTRY c1 {
 })";
   // Verify that the error message points to the beginning of the unterminated
   // comment.
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "/* unterminated\n^");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "/* unterminated\n^");
 }
 
 TEST_F(HloParserTest, SlashSlashComments) {
@@ -2220,7 +2146,7 @@ ENTRY c1 {
   // Foo bar
   ROOT const1 = f32[1]{0} constant({12345}) // Something else
 })";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
 }
 
@@ -2228,7 +2154,7 @@ TEST_F(HloParserTest, SlashSlashCommentMsDosEolFormat) {
   const string original =
       "HloModule slash_slash_comment:\r\n// Garbage\r\nENTRY c1 {\r\n// Foo "
       "bar\r\nROOT const1 = f32[1]{0} constant({12345}) // Something else\r\n}";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
 }
 
@@ -2236,7 +2162,7 @@ TEST_F(HloParserTest, SlashSlashCommentMacEolFormat) {
   const string original =
       "HloModule slash_slash_comment:\r// Garbage\rENTRY c1 {\r// Foo "
       "bar\rROOT const1 = f32[1]{0} constant({12345}) // Something else\r}";
-  auto module = ParseAndReturnUnverifiedModule(original);
+  auto module = ParseHloString(original);
   TF_ASSERT_OK(module.status());
 }
 
@@ -2248,9 +2174,8 @@ ENTRY c1 {
 ENTRY c2 {
   const2 = f32[1]{0} constant({67890})
 })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "expects only one ENTRY");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "expects only one ENTRY");
 }
 
 TEST_F(HloParserTest, MultipleRoots) {
@@ -2259,9 +2184,8 @@ ENTRY consts {
   ROOT const1 = f32[1]{0} constant({12345})
   ROOT const2 = f32[1]{0} constant({12345})
 })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "one computation should have only one ROOT");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "one computation should have only one ROOT");
 }
 
 TEST_F(HloParserTest, ComputationExists) {
@@ -2272,9 +2196,8 @@ comp {
 comp {
   const2 = f32[1]{0} constant({67890})
 })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      R"(was parsing 2:1: error: computation previously defined here
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  R"(was parsing 2:1: error: computation previously defined here
 comp {
 ^)");
 }
@@ -2296,7 +2219,7 @@ ENTRY entry {
   ROOT call1 = s32[] call(param), to_apply=tcallb
 })";
   ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
+      ParseHloString(original).status().error_message(),
       "was parsing 8:39: error: instruction does not exist: aparam");
 }
 
@@ -2314,8 +2237,7 @@ ENTRY ReduceR3ToR2 {
   ROOT result = f32[8,16]{1,0} reduce(p0, p1), dimensions={2}, to_apply=add
 }
 )";
-  TF_ASSERT_OK_AND_ASSIGN(auto module,
-                          ParseAndReturnUnverifiedModule(original));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(original));
   ASSERT_NE(module->entry_computation(), nullptr);
   EXPECT_THAT(module->entry_computation()->root_instruction(),
               GmockMatch(m::Reduce()));
@@ -2339,13 +2261,6 @@ TEST_F(HloParserTest, ParseConvolutionDimensionNumbers) {
   TF_ASSERT_OK_AND_ASSIGN(ConvolutionDimensionNumbers dnums,
                           ParseConvolutionDimensionNumbers(original));
   EXPECT_EQ(original, ConvolutionDimensionNumbersToString(dnums));
-}
-
-TEST_F(HloParserTest, ParseReplicaGroups) {
-  const string original = "{{0,1},{2,3}}";
-  TF_ASSERT_OK_AND_ASSIGN(std::vector<ReplicaGroup> replica_groups,
-                          ParseReplicaGroupsOnly(original));
-  EXPECT_EQ(original, ReplicaGroupsToString(replica_groups));
 }
 
 TEST_F(HloParserTest, ParsePaddingConfigNoInteriorPadding) {
@@ -2373,16 +2288,15 @@ ENTRY nontuple_infeed {
   token0 = token[] after-all()
   ROOT infeed = pred[] infeed(token0)
 })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "infeed must have a non-empty tuple shape");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "infeed must have a non-empty tuple shape");
 }
 
 TEST(HloParserSingleOpTest, SingleOp) {
   const string text =
       "%multiply = f32[2,4]{1,0} multiply(f32[2,4]{1,0} %broadcast, "
       "f32[2,4]{1,0} %x)";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_THAT(computation->root_instruction(),
@@ -2391,8 +2305,7 @@ TEST(HloParserSingleOpTest, SingleOp) {
 
 TEST(HloParserSingleOpTest, SingleOpNoShapeProducesError) {
   const string text = "multiply(f32[2,4]{1,0} %broadcast, f32[2,4]{1,0} %x)";
-  StatusOr<std::unique_ptr<HloModule>> module =
-      ParseAndReturnUnverifiedModule(text);
+  StatusOr<std::unique_ptr<HloModule>> module = ParseHloString(text);
   ASSERT_TRUE(!module.status().ok());
   LOG(INFO) << "Status: " << module.status();
   EXPECT_THAT(module.status().ToString(),
@@ -2401,8 +2314,7 @@ TEST(HloParserSingleOpTest, SingleOpNoShapeProducesError) {
 
 TEST(HloParserSingleOpTest, SingleOpNoOperandShapesProducesError) {
   const string text = "%multiply = f32[2,4]{1,0} multiply(%broadcast, %x)";
-  StatusOr<std::unique_ptr<HloModule>> module =
-      ParseAndReturnUnverifiedModule(text);
+  StatusOr<std::unique_ptr<HloModule>> module = ParseHloString(text);
   ASSERT_TRUE(!module.status().ok());
   LOG(INFO) << "Status: " << module.status();
   EXPECT_THAT(module.status().ToString(),
@@ -2412,7 +2324,7 @@ TEST(HloParserSingleOpTest, SingleOpNoOperandShapesProducesError) {
 TEST(HloParserSingleOpTest, SingleOpNoNames) {
   const string text =
       "%multiply = f32[2,4]{1,0} multiply(f32[2,4]{1,0}, f32[2,4]{1,0})";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_THAT(computation->root_instruction(),
@@ -2421,7 +2333,7 @@ TEST(HloParserSingleOpTest, SingleOpNoNames) {
 
 TEST(HloParserSingleOpTest, CanonicalOp) {
   const string text = "f32[2,4]{1,0} multiply(f32[2,4]{1,0}, f32[2,4]{1,0})";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_THAT(computation->root_instruction(),
@@ -2457,7 +2369,7 @@ TEST(HloParserSingleOpTest, CanonicalOpWithNested) {
   }
 })";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_EQ(
@@ -2482,7 +2394,7 @@ TEST(HloParserSingleOpTest, CanonicalOpIndexedConditionalInlinedBranches) {
 }
 })";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_EQ(
@@ -2500,7 +2412,7 @@ TEST(HloParserSingleOpTest, SingleOpWithNested) {
   ROOT %subtract = f32[3,2,1,1]{3,2,1,0} subtract(f32[3,2,1,1]{3,2,1,0} %param_0, f32[3,2,1,1]{3,2,1,0} %broadcast)
 })";
 
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_THAT(computation->root_instruction(),
@@ -2517,7 +2429,7 @@ TEST(HloParserSingleOpTest, SingleOpWithNested_DoesNotExist) {
 {
   result = f32[] add(f32[] x, f32[] y)
 })";
-  auto status = ParseAndReturnUnverifiedModule(text).status();
+  auto status = ParseHloString(text).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(),
               ::testing::HasSubstr("does not exist: x"));
@@ -2529,7 +2441,7 @@ TEST(HloParserSingleOpTest, SingleOpWithNested_NoLhs) {
 {
   f32[] add(f32[] x, f32[] y)
 })";
-  auto status = ParseAndReturnUnverifiedModule(text).status();
+  auto status = ParseHloString(text).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(), ::testing::HasSubstr("expects name"));
 }
@@ -2540,7 +2452,7 @@ TEST(HloParserSingleOpTest, SingleOpWithNested_NoOperandName) {
 {
   result = f32[] add(f32[], f32[])
 })";
-  auto status = ParseAndReturnUnverifiedModule(text).status();
+  auto status = ParseHloString(text).status();
   ASSERT_FALSE(status.ok());
   EXPECT_THAT(status.error_message(), ::testing::HasSubstr("expects name"));
 }
@@ -2548,7 +2460,7 @@ TEST(HloParserSingleOpTest, SingleOpWithNested_NoOperandName) {
 TEST(HloParserSingleOpTest, ConvolutionTrivialFeatureGroupCount) {
   const string text =
       R"(%convolution = f32[1,2,1]{2,0,1} convolution(f32[1,2,1]{2,0,1} %copy, f32[1,1,1]{2,1,0} %filter), window={size=1}, dim_labels=b0f_0io->b0f)";
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnUnverifiedModule(text));
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseHloString(text));
   const HloComputation* computation = module->entry_computation();
   ASSERT_NE(computation, nullptr);
   EXPECT_THAT(computation->root_instruction(),
@@ -2556,16 +2468,6 @@ TEST(HloParserSingleOpTest, ConvolutionTrivialFeatureGroupCount) {
   auto* convolution =
       Cast<HloConvolutionInstruction>(computation->root_instruction());
   EXPECT_EQ(convolution->feature_group_count(), 1);
-}
-
-TEST(HloParserSingleOpTest, MultipleOpsProducesError) {
-  const string text = R"(
-    param = f32[2,5,1,3] parameter(0)
-    transpose = f32[1,5,2,3] transpose(param), dimensions={2,1,0,3}
-  )";
-  auto status = ParseAndReturnUnverifiedModule(text).status();
-  ASSERT_FALSE(status.ok());
-  EXPECT_THAT(status.error_message(), ::testing::HasSubstr("Expected eof"));
 }
 
 TEST_F(HloParserTest, IsScheduledIsFalse) {
@@ -2582,7 +2484,7 @@ ENTRY %axpy.v5 (alpha: f32[], x: f32[2,4], y: f32[2,4]) -> f32[2,4] {
 }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnUnverifiedModule(text));
+                          ParseHloString(text));
   ASSERT_FALSE(module->has_schedule());
 }
 
@@ -2600,7 +2502,7 @@ ENTRY %axpy.v5 (alpha: f32[], x: f32[2,4], y: f32[2,4]) -> f32[2,4] {
 }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnUnverifiedModule(text));
+                          ParseHloString(text));
   ASSERT_FALSE(module->has_schedule());
 }
 
@@ -2618,7 +2520,7 @@ ENTRY %axpy.v5 (alpha: f32[], x: f32[2,4], y: f32[2,4]) -> f32[2,4] {
 }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnUnverifiedModule(text));
+                          ParseHloString(text));
   ASSERT_TRUE(module->has_schedule());
   TF_ASSERT_OK(module->schedule().Verify());
   EXPECT_EQ(module->schedule().sequences().size(), 1);
@@ -2647,7 +2549,7 @@ ENTRY %axpy.v5 (alpha: f32[], x: f32[2,4], y: f32[2,4]) -> f32[2,4] {
 }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnUnverifiedModule(text));
+                          ParseHloString(text));
   ASSERT_TRUE(module->has_schedule());
   TF_ASSERT_OK(module->schedule().Verify());
   EXPECT_EQ(module->schedule().sequences().size(), 1);
@@ -2671,9 +2573,8 @@ ENTRY %CustomCallWrongNumberofOperandConstraints (p0: f32[42,2,3], p1: f32[123,4
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Expected 2 operand layout constraints, 1 given");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Expected 2 operand layout constraints, 1 given");
 }
 
 TEST_F(HloParserTest, CustomCallIncompatibleOperandConstraints) {
@@ -2686,9 +2587,8 @@ ENTRY %CustomCallIncompatibleOperandConstraints (p0: f32[42,2,3], p1: f32[123,4]
 }
 
 )";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "operand 1 is not compatible with operand shape");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "operand 1 is not compatible with operand shape");
 }
 
 TEST_F(HloParserTest, AllowShapeWhitespace) {
@@ -2700,7 +2600,7 @@ ENTRY entry {
 }
 )";
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
-                          ParseAndReturnUnverifiedModule(text));
+                          ParseHloString(text));
 }
 
 TEST_F(HloParserTest, ShapeMismatchInOperand) {
@@ -2714,7 +2614,7 @@ ENTRY %entrycomp (p: f32[2,2]) -> f32[2,2] {
 }
 )";
 
-  ExpectHasSubstr(ParseAndReturnUnverifiedModule(text).status().error_message(),
+  ExpectHasSubstr(ParseHloString(text).status().error_message(),
                   "The declared operand shape f32[2,5]{1,0} is not compatible"
                   " with the shape of the operand instruction f32[2,2]{1,0}.");
 }
@@ -2725,9 +2625,8 @@ TEST_F(HloParserTest, OutOfRangeSparseIndex) {
     ENTRY test {
       ROOT c = f16[5]sparse{10} constant({[100]: 0})
     })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Invalid sparse index");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Invalid sparse index");
 }
 
 TEST_F(HloParserTest, NegativeSparseIndex) {
@@ -2736,9 +2635,8 @@ TEST_F(HloParserTest, NegativeSparseIndex) {
     ENTRY test {
       ROOT c = f16[5]sparse{10} constant({-1: 0})
     })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Invalid sparse index");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Invalid sparse index");
 }
 
 TEST_F(HloParserTest, SparseIndexWithRankTooLarge) {
@@ -2747,9 +2645,8 @@ TEST_F(HloParserTest, SparseIndexWithRankTooLarge) {
     ENTRY test {
       ROOT c = f16[5]sparse{10} constant({[0, 0]: 0})
     })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Invalid sparse index");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Invalid sparse index");
 }
 
 TEST_F(HloParserTest, SparseIndexWithRankTooSmall) {
@@ -2758,9 +2655,8 @@ TEST_F(HloParserTest, SparseIndexWithRankTooSmall) {
     ENTRY test {
       ROOT c = f16[5, 5]sparse{10} constant({[0]: 0})
     })";
-  ExpectHasSubstr(
-      ParseAndReturnUnverifiedModule(original).status().error_message(),
-      "Invalid sparse index");
+  ExpectHasSubstr(ParseHloString(original).status().error_message(),
+                  "Invalid sparse index");
 }
 
 TEST_F(HloParserTest, ParseShapeStringR2F32) {
@@ -2870,33 +2766,6 @@ TEST_F(HloParserTest, ParseShapeStringWithSparseLayout) {
       << "actual: " << ShapeUtil::HumanString(actual);
 }
 
-TEST_F(HloParserTest, ParseShapeStringWithMemorySpaceLayout) {
-  // Tile, element size, and memory space.
-  string shape_string = "pred[123,456]{1,0:T(2,128)E(1)S(3)}";
-  TF_ASSERT_OK_AND_ASSIGN(Shape actual, ParseShape(shape_string));
-  Shape expected = ShapeUtil::MakeShapeWithLayout(PRED, {123, 456}, {1, 0},
-                                                  {Tile({2, 128})}, 1, 3);
-  EXPECT_EQ(expected, actual)
-      << "expected: " << ShapeUtil::HumanStringWithLayout(expected)
-      << "actual:   " << ShapeUtil::HumanStringWithLayout(actual);
-
-  // Element size and memory space.
-  shape_string = "pred[123,456]{1,0:E(1)S(3)}";
-  TF_ASSERT_OK_AND_ASSIGN(actual, ParseShape(shape_string));
-  expected = ShapeUtil::MakeShapeWithLayout(PRED, {123, 456}, {1, 0}, {}, 1, 3);
-  EXPECT_EQ(expected, actual)
-      << "expected: " << ShapeUtil::HumanStringWithLayout(expected)
-      << "actual:   " << ShapeUtil::HumanStringWithLayout(actual);
-
-  // Memory space only.
-  shape_string = "pred[123,456]{1,0:S(3)}";
-  TF_ASSERT_OK_AND_ASSIGN(actual, ParseShape(shape_string));
-  expected = ShapeUtil::MakeShapeWithLayout(PRED, {123, 456}, {1, 0}, {}, 0, 3);
-  EXPECT_EQ(expected, actual)
-      << "expected: " << ShapeUtil::HumanStringWithLayout(expected)
-      << "actual:   " << ShapeUtil::HumanStringWithLayout(actual);
-}
-
 TEST_F(HloParserTest, ParseOpaqueType) {
   TF_ASSERT_OK_AND_ASSIGN(Shape actual, ParseShape("opaque[]"));
   Shape expected = ShapeUtil::MakeOpaqueShape();
@@ -2946,7 +2815,7 @@ TEST_F(HloParserTest, ParseDynamicTuple) {
 
 TEST_F(HloParserTest, NegativeParameterNumber) {
   const string hlo_string = "par0 = f32[3,5] parameter(-1)";
-  auto result = ParseAndReturnUnverifiedModule(hlo_string);
+  auto result = ParseHloString(hlo_string);
   ASSERT_FALSE(result.status().ok());
   EXPECT_THAT(result.status().error_message(),
               ::testing::HasSubstr("parameter number must be >= 0"));
@@ -2956,95 +2825,11 @@ TEST_F(HloParserTest, WrongNumberOfParameterLeafBuffersInReplication) {
   const string hlo_string =
       "par0 = (f32[3,5], f32[]) parameter(0), "
       "parameter_replication={true,false,true}";
-  auto result = ParseAndReturnUnverifiedModule(hlo_string);
+  auto result = ParseHloString(hlo_string);
   ASSERT_FALSE(result.status().ok());
   EXPECT_THAT(result.status().error_message(),
               ::testing::HasSubstr("parameter has 2 leaf buffers, but "
                                    "parameter_replication has 3 elements"));
-}
-
-TEST_F(HloParserTest, CheckIndexedConditionalDimension) {
-  const char* const hlo_string = R"(
-  HloModule Module
-
-  branch0 {
-    tparam = f32[4] parameter(0)
-    ROOT tgte1 = f32[4] ceil(tparam)
-  }
-
-  branch1 {
-    fparam = f32[4] parameter(0)
-    ROOT fgte1 = f32[4] floor(fparam)
-  }
-
-  ENTRY entry {
-    p0 = f32[4] parameter(0)
-    b0 = s32[2] parameter(1)
-    ROOT conditional = f32[4] conditional(b0, p0, p0),
-      branch_computations={branch0, branch1}
-  }
-  )";
-  auto result = ParseAndReturnUnverifiedModule(hlo_string);
-  EXPECT_NE(Status::OK(), result.status());
-  EXPECT_THAT(result.status().error_message(),
-              ::testing::HasSubstr("The first operand must be a scalar"));
-}
-
-TEST_F(HloParserTest, CheckIndexedConditionalElementType) {
-  const char* const hlo_string = R"(
-  HloModule Module
-
-  branch0 {
-    tparam = f32[4] parameter(0)
-    ROOT tgte1 = f32[4] ceil(tparam)
-  }
-
-  branch1 {
-    fparam = f32[4] parameter(0)
-    ROOT fgte1 = f32[4] floor(fparam)
-  }
-
-  ENTRY entry {
-    p0 = f32[4] parameter(0)
-    b0 = f32[] parameter(1)
-    ROOT conditional = f32[4] conditional(b0, p0, p0),
-      branch_computations={branch0, branch1}
-  }
-  )";
-  auto result = ParseAndReturnUnverifiedModule(hlo_string);
-  EXPECT_NE(Status::OK(), result.status());
-  EXPECT_THAT(result.status().error_message(),
-              ::testing::HasSubstr(
-                  "The first operand must be a scalar of PRED or S32"));
-}
-
-TEST_F(HloParserTest,
-       CheckPredicatedConditionalRequiresTrueAndFalseComputation) {
-  const char* const hlo_string = R"(
-  HloModule Module
-
-  branch0 {
-    tparam = f32[4] parameter(0)
-    ROOT tgte1 = f32[4] ceil(tparam)
-  }
-
-  branch1 {
-    fparam = f32[4] parameter(0)
-    ROOT fgte1 = f32[4] floor(fparam)
-  }
-
-  ENTRY entry {
-    p0 = f32[4] parameter(0)
-    b0 = pred[] parameter(1)
-    ROOT conditional = f32[4] conditional(b0, p0, p0),
-      branch_computations={branch0, branch1}
-  }
-  )";
-  auto result = ParseAndReturnUnverifiedModule(hlo_string);
-  EXPECT_NE(Status::OK(), result.status());
-  EXPECT_THAT(
-      result.status().error_message(),
-      ::testing::HasSubstr("unexpected attribute \"branch_computations\""));
 }
 
 }  // namespace

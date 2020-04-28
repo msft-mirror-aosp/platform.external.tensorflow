@@ -63,7 +63,9 @@ void WarnIfInCallback(std::function<void()> f);
 // Events are recorded.
 class EventMgr {
  public:
-  virtual ~EventMgr();
+  EventMgr(se::StreamExecutor* se, const GPUOptions& gpu_options);
+
+  ~EventMgr();
 
   // Releases the references on the elements of "tensors" as soon as
   // all events currently enqueued on "stream" have completed.
@@ -105,9 +107,7 @@ class EventMgr {
   }
 
  private:
-  friend class TEST_EventMgr;
   friend class TEST_EventMgrHelper;
-  friend class EventMgrFactory;
   se::StreamExecutor* const exec_;
   const int64 deferred_bytes_threshold_;
   const int32 polling_active_delay_usecs_;
@@ -124,8 +124,6 @@ class EventMgr {
   };
 
   typedef gtl::InlinedVector<InUse, 4> ToFreeVector;
-
-  EventMgr(se::StreamExecutor* se, const GPUOptions& gpu_options);
 
   void FreeMemory(const ToFreeVector& to_free) {
     for (const auto& iu : to_free) {
@@ -202,21 +200,6 @@ class EventMgr {
 
   // The main PollLoop for the event manager runs in this threadpool.
   thread::ThreadPool threadpool_;
-};
-
-// Manages all the EventMgr instances.
-class EventMgrFactory {
- public:
-  static EventMgrFactory* Singleton();
-
-  EventMgr* GetEventMgr(se::StreamExecutor* se, const GPUOptions& gpu_options);
-
- private:
-  mutex mu_;
-
-  // Maintain one EventMgr per physical device (StreamExecutor is
-  // per-physical-device).
-  std::map<se::StreamExecutor*, EventMgr*> event_mgr_map_ GUARDED_BY(mu_);
 };
 
 }  // namespace tensorflow

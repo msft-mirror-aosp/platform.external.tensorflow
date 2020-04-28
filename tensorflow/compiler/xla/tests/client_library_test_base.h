@@ -105,7 +105,7 @@ class ClientLibraryTestBase : public ::testing::Test {
       const Shape* shape_with_output_layout = nullptr);
 
   // This executes the computation via the reference client (which connects a
-  // interpreter backend). The result is used as the expected value of the
+  // interpreter backend). The result is used as the expected values of the
   // computation.
   StatusOr<Literal> ExecuteAndTransferReference(
       const XlaComputation& computation,
@@ -385,9 +385,6 @@ class ClientLibraryTestBase : public ::testing::Test {
   StatusOr<std::pair<Literal, Literal>> ComputeValueAndReference(
       XlaBuilder* builder, absl::Span<const Literal> arguments);
 
-  // Converts an f32 literal to bf16 if use_bfloat16_ is true.
-  Literal MaybeConvertLiteralToBfloat16(const Literal& literal);
-
   LocalClient* client_;
   LocalClient* ref_client_;  // To compute reference result.
   ExecutionOptions execution_options_;
@@ -405,7 +402,8 @@ class ClientLibraryTestBase : public ::testing::Test {
                                const string& error_message)>& verify_output,
       const Shape* output_with_layout = nullptr);
 
-  // Converts an f32 shape to bf16 if use_bfloat16_ is true.
+  // Converts an f32 shape/literal to bf16 if use_bfloat16_ is true.
+  Literal MaybeConvertLiteralToBfloat16(const Literal& literal);
   Shape MaybeConvertShapeToBfloat16(const Shape& shape);
 
   // Whether to run tests with all float-type input/output converted to

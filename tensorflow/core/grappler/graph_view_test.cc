@@ -98,7 +98,7 @@ TEST_F(GraphViewTest, OpPortIdToArgIdSparseSplit) {
 
 TEST_F(GraphViewTest, ParseSingleExample) {
   tensorflow::Scope s = tensorflow::Scope::NewRootScope();
-  Output a = ops::Const<tstring>(s.WithOpName("a"), "", {});
+  Output a = ops::Const<string>(s.WithOpName("a"), "", {});
   Output b = ops::Const<int64>(s.WithOpName("b"), 1, {1, 1});
   ops::ParseSingleExample c(s.WithOpName("c"), a, {b, b}, 2, {"w", "x"},
                             {"y", "z"}, {DT_INT64, DT_INT64}, {{1}, {1}});
@@ -386,9 +386,8 @@ BENCHMARK(BM_GraphViewGetNode)
 
 static void BM_GraphViewGetFanout(int iters, int num_fanins, int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -403,9 +402,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetFanout);
 
 static void BM_GraphViewGetFanin(int iters, int num_fanins, int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -421,9 +419,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetFanin);
 static void BM_GraphViewGetRegularFanin(int iters, int num_fanins,
                                         int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -438,9 +435,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetRegularFanin);
 
 static void BM_GraphViewGetFanouts(int iters, int num_fanins, int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -455,9 +451,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetFanouts);
 
 static void BM_GraphViewGetFanins(int iters, int num_fanins, int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -473,9 +468,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetFanins);
 static void BM_GraphViewGetFanoutEdges(int iters, int num_fanins,
                                        int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();
@@ -491,9 +485,8 @@ RUN_FANIN_FANOUT_BENCHMARK(BM_GraphViewGetFanoutEdges);
 static void BM_GraphViewGetFaninEdges(int iters, int num_fanins,
                                       int num_fanouts) {
   testing::StopTiming();
-  const GraphDef graph_def = test::CreateFaninFanoutNodeGraph(
-      num_fanins, num_fanouts, num_fanins, num_fanouts,
-      /*fanout_unique_index=*/true);
+  const GraphDef graph_def =
+      test::CreateFaninFanoutNodeGraph(num_fanins, num_fanouts);
   GraphView graph_view(&graph_def);
 
   testing::StartTiming();

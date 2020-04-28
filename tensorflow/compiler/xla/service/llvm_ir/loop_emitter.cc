@@ -47,14 +47,14 @@ LoopEmitter::LoopEmitter(const ElementGenerator& target_element_generator,
       shape_(target_array.GetShape()),
       b_(b) {}
 
-static LoopEmitter::BodyEmitter MakeBodyEmitterForMultiOutput(
+static LoopEmitter::BodyEmitter MakeBodyEmitterForMultiOutputFusion(
     const ElementGenerator& target_element_generator,
     const std::vector<IrArray>& target_arrays, llvm::IRBuilder<>* b) {
   return [=](const llvm_ir::IrArray::Index array_index) {
     TF_ASSIGN_OR_RETURN(llvm::Value * target_element,
                         target_element_generator(array_index));
     CHECK(target_element->getType()->isStructTy())
-        << "This BodyEmitter is for multi-output, but target element "
+        << "This BodyEmitter is for multi-output fusion, but target element "
            "generator does not produce values of struct type.";
     CHECK_EQ(target_element->getType()->getStructNumElements(),
              target_arrays.size());
@@ -70,7 +70,7 @@ static LoopEmitter::BodyEmitter MakeBodyEmitterForMultiOutput(
 LoopEmitter::LoopEmitter(const ElementGenerator& target_element_generator,
                          absl::Span<const IrArray> target_arrays,
                          llvm::IRBuilder<>* b)
-    : body_emitter_(MakeBodyEmitterForMultiOutput(
+    : body_emitter_(MakeBodyEmitterForMultiOutputFusion(
           target_element_generator,
           std::vector<IrArray>(target_arrays.begin(), target_arrays.end()), b)),
       shape_(target_arrays[0].GetShape()),

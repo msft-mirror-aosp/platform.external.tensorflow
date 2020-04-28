@@ -37,8 +37,9 @@ TfLiteStatus ComparisonPrepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input2 = GetInput(context, node, kInputTensor2);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
-  // Don't support string.
-  TF_LITE_ENSURE(context, input1->type != kTfLiteString);
+  // Don't support string and bool.
+  TF_LITE_ENSURE(context,
+                 input1->type != kTfLiteString || input1->type != kTfLiteBool);
   // Currently only support tensors have the same type.
   TF_LITE_ENSURE_TYPES_EQ(context, input1->type, input2->type);
   output->type = kTfLiteBool;

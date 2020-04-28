@@ -23,8 +23,10 @@ limitations under the License.
 
 namespace tensorflow {
 namespace data {
-namespace experimental {
 namespace {
+
+// See documentation in ../../ops/dataset_ops.cc for a high-level
+// description of the following op.
 
 class SlidingWindowDatasetOp : public UnaryDatasetOpKernel {
  public:
@@ -106,10 +108,6 @@ class SlidingWindowDatasetOp : public UnaryDatasetOpKernel {
         return n;
       }
       return n / window_shift_;
-    }
-
-    Status CheckExternalState() const override {
-      return input_->CheckExternalState();
     }
 
    protected:
@@ -269,7 +267,7 @@ class SlidingWindowDatasetOp : public UnaryDatasetOpKernel {
           input_impl_.reset();
         }
         // Restore buffer.
-        int64 buffer_size = 0;
+        int64 buffer_size;
         TF_RETURN_IF_ERROR(
             reader->ReadScalar(strings::StrCat("buffer_size"), &buffer_size));
         buffer_.resize(buffer_size);
@@ -304,13 +302,10 @@ class SlidingWindowDatasetOp : public UnaryDatasetOpKernel {
   };
 };
 
-REGISTER_KERNEL_BUILDER(Name("SlidingWindowDataset").Device(DEVICE_CPU),
-                        SlidingWindowDatasetOp);
 REGISTER_KERNEL_BUILDER(
     Name("ExperimentalSlidingWindowDataset").Device(DEVICE_CPU),
     SlidingWindowDatasetOp);
 
 }  // namespace
-}  // namespace experimental
 }  // namespace data
 }  // namespace tensorflow

@@ -190,8 +190,13 @@ const void* MemmappedFileSystem::GetMemoryWithOffset(uint64 offset) const {
   return reinterpret_cast<const uint8*>(mapped_memory_->data()) + offset;
 }
 
-constexpr const char MemmappedFileSystem::kMemmappedPackagePrefix[];
-constexpr const char MemmappedFileSystem::kMemmappedPackageDefaultGraphDef[];
+#if defined(_MSC_VER)
+constexpr char* MemmappedFileSystem::kMemmappedPackagePrefix;
+constexpr char* MemmappedFileSystem::kMemmappedPackageDefaultGraphDef;
+#else
+constexpr char MemmappedFileSystem::kMemmappedPackagePrefix[];
+constexpr char MemmappedFileSystem::kMemmappedPackageDefaultGraphDef[];
+#endif
 
 Status MemmappedFileSystem::InitializeFromFile(Env* env,
                                                const string& filename) {
@@ -230,7 +235,8 @@ Status MemmappedFileSystem::InitializeFromFile(Env* env,
     if (!directory_
              .insert(std::make_pair(
                  element_iter->name(),
-                 FileRegion(element_iter->offset(), element_iter->length())))
+                 FileRegion(element_iter->offset(),
+                            prev_element_offset - element_iter->offset())))
              .second) {
       return errors::DataLoss("Corrupted memmapped model file: ", filename,
                               " Duplicate name of internal component ",
@@ -242,7 +248,7 @@ Status MemmappedFileSystem::InitializeFromFile(Env* env,
 }
 
 bool MemmappedFileSystem::IsMemmappedPackageFilename(const string& filename) {
-  return absl::StartsWith(filename, kMemmappedPackagePrefix);
+  return str_util::StartsWith(filename, kMemmappedPackagePrefix);
 }
 
 namespace {

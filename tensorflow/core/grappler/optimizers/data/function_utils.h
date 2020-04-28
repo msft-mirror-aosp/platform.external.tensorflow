@@ -61,11 +61,7 @@ void ReplaceReferences(const string& from, const string& to, FunctionDef* func);
 // is unique, and maps to output_tensor_name in the ret dict.
 void AddFunctionOutputWithUniqueName(StringPiece prefix,
                                      StringPiece output_tensor_name,
-                                     FunctionDef* fdef, DataType dtype);
-
-// Adds an input to a FunctionDef.
-OpDef_ArgDef* AddFunctionInput(const string& name, FunctionDef* fdef,
-                               DataType dtype);
+                                     FunctionDef* function, DataType dt);
 
 // Adds a node to a FunctionDef.
 NodeDef* AddNode(StringPiece name, StringPiece op,

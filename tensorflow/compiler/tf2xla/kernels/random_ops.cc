@@ -25,7 +25,6 @@ limitations under the License.
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/compiler/xla/client/lib/arithmetic.h"
-#include "tensorflow/compiler/xla/client/lib/comparators.h"
 #include "tensorflow/compiler/xla/client/lib/constants.h"
 #include "tensorflow/compiler/xla/client/lib/loops.h"
 #include "tensorflow/compiler/xla/client/xla_builder.h"
@@ -136,9 +135,7 @@ class RandomShuffleOp : public XlaOpKernel {
       xla::XlaOp curr = input;
       for (int i = 0; i < rounds; ++i) {
         xla::XlaOp keys = xla::RngUniform(zero, max_value, key_shape);
-        xla::XlaOp sorted = xla::Sort(
-            {keys, curr}, xla::CreateScalarLtComputation(
-                              {xla::U32, ctx->input_xla_type(0)}, builder));
+        xla::XlaOp sorted = xla::Sort(keys, {curr});
         curr = xla::GetTupleElement(sorted, 1);
       }
 
@@ -293,43 +290,8 @@ class TruncatedNormalOp : public XlaOpKernel {
 
 REGISTER_XLA_OP(Name("TruncatedNormal")
                     .CompileTimeConstantInput("shape")
-                    .TypeConstraint("dtype", {DT_FLOAT, DT_DOUBLE}),
+                    .TypeConstraint("dtype", DT_FLOAT),
                 TruncatedNormalOp);
-
-class ParameterizedTruncatedNormalOp : public XlaOpKernel {
- public:
-  explicit ParameterizedTruncatedNormalOp(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx) {}
-
-  void Compile(XlaOpKernelContext* ctx) override {
-    const DataType dtype = output_type(0);
-
-    TensorShape shape;
-    OP_REQUIRES_OK(ctx, ctx->ConstantInputAsShape(0, &shape));
-    xla::Shape xla_shape;
-    OP_REQUIRES_OK(ctx, TensorShapeToXLAShape(dtype, shape, &xla_shape));
-
-    xla::XlaBuilder* b = ctx->builder();
-
-    xla::XlaOp one = xla::One(b, xla_shape.element_type());
-    xla::XlaOp min_positive =
-        xla::MinPositiveNormalValue(b, xla_shape.element_type());
-    xla::XlaOp uniform = xla::RngUniform(min_positive, one, xla_shape);
-
-    xla::XlaOp means = ctx->Input(1);
-    xla::XlaOp stddevs = ctx->Input(2);
-    xla::XlaOp minvals = ctx->Input(3);
-    xla::XlaOp maxvals = ctx->Input(4);
-
-    ctx->SetOutput(0, ParameterizedTruncatedNormal(uniform, means, stddevs,
-                                                   minvals, maxvals));
-  }
-};
-
-REGISTER_XLA_OP(Name("ParameterizedTruncatedNormal")
-                    .CompileTimeConstantInput("shape")
-                    .TypeConstraint("dtype", {DT_FLOAT, DT_DOUBLE}),
-                ParameterizedTruncatedNormalOp);
 
 }  // namespace
 }  // namespace tensorflow

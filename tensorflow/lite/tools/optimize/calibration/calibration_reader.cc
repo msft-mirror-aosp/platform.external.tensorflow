@@ -32,8 +32,7 @@ TfLiteStatus CalibrationReader::GetTensorStatsAsMap(
   return kTfLiteOk;
 }
 
-TfLiteStatus CalibrationReader::AddCalibrationToModel(ModelT* model,
-                                                      bool update) const {
+TfLiteStatus CalibrationReader::AddCalibrationToModel(ModelT* model) const {
   if (!model || model->subgraphs.empty()) {
     return kTfLiteError;
   }
@@ -42,15 +41,6 @@ TfLiteStatus CalibrationReader::AddCalibrationToModel(ModelT* model,
     auto minmax = tensorid_stat.second;
     float min, max;
     TF_LITE_ENSURE_STATUS(minmax.Get(&min, &max));
-    if (update) {
-      auto tensor = subgraph->tensors[tensorid_stat.first].get();
-      if (tensor->quantization) {
-        const float existing_min = tensor->quantization->min[0];
-        const float existing_max = tensor->quantization->max[0];
-        min = min < existing_min ? min : existing_min;
-        max = max > existing_max ? max : existing_max;
-      }
-    }
     auto quant_params = absl::make_unique<tflite::QuantizationParametersT>();
     quant_params->min.push_back(min);
     quant_params->max.push_back(max);

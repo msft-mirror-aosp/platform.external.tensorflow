@@ -525,18 +525,15 @@ class TypedKernel : public KernelBase {
   // structure.
   void PackParams(KernelArgsArray<kNumberOfParameters> *args,
                   Params &... params) const {
-    PackOneParamFromList(args, params...);
+    PackOneParam(args, params...);
   }
 
   template <typename T, typename... RestOfParams>
-  void PackOneParamFromList(KernelArgsArray<kNumberOfParameters> *args,
-                            const T &arg, const RestOfParams &... rest) const {
+  void PackOneParam(KernelArgsArray<kNumberOfParameters> *args, const T &arg,
+                    const RestOfParams &... rest) const {
     PackOneParam(args, arg);
-    PackOneParamFromList(args, rest...);
+    PackOneParam(args, rest...);
   }
-
-  // Base case for variadic template expansion - nothing to do!
-  void PackOneParamFromList(KernelArgsArray<kNumberOfParameters> *args) const {}
 
   // Packs one (non-DeviceMemoryBase) parameter into the arg and sizes array.
   // The enable_if<> is for excluding DeviceMemoryBase args, which have a
@@ -583,6 +580,9 @@ class TypedKernel : public KernelBase {
           nullptr) const {
     args->add_shared_bytes(arg.size());
   }
+
+  // Base case for variadic template expansion - nothing to do!
+  void PackOneParam(KernelArgsArray<kNumberOfParameters> *args) const {}
 
   SE_DISALLOW_COPY_AND_ASSIGN(TypedKernel);
 };

@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <map>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 #include "tensorflow/core/framework/graph.pb.h"

@@ -32,7 +32,8 @@ class UniqueDatasetSerializationTest(
       return dataset_ops.Dataset.range(num_elements).map(
           lambda x: x % unique_elem_range).apply(unique.unique())
 
-    self.run_core_tests(lambda: build_dataset(200, 100), 100)
+    self.run_core_tests(lambda: build_dataset(200, 100),
+                        lambda: build_dataset(40, 100), 100)
 
 
 if __name__ == "__main__":

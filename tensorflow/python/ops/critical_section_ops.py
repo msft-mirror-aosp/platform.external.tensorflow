@@ -31,7 +31,6 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import gen_resource_variable_ops
 from tensorflow.python.ops import tensor_array_ops
 from tensorflow.python.util import nest
-from tensorflow.python.util import object_identity
 from tensorflow.python.util.tf_export import tf_export
 
 
@@ -125,7 +124,7 @@ class CriticalSection(object):
   will not ensure serial execution:
 
   ```python
-  v = tf.compat.v1.get_variable("v", initializer=0.0, use_resource=True)
+  v = tf.get_variable("v", initializer=0.0, use_resource=True)
   def accumulate(up):
     x = v.read_value()
     with tf.control_dependencies([x]):
@@ -144,7 +143,6 @@ class CriticalSection(object):
   def __init__(self, name=None, shared_name=None,
                critical_section_def=None, import_scope=None):
     """Creates a critical section."""
-    context.ensure_initialized()
     if critical_section_def and name is not None:
       raise ValueError("critical_section_def and shared_name are "
                        "mutually exclusive.")
@@ -244,7 +242,7 @@ class CriticalSection(object):
         # captured_resources is a list of resources that are directly
         # accessed only by ops created during fn(), not by any
         # ancestors of those ops in the graph.
-        captured_resources = object_identity.ObjectIdentitySet([
+        captured_resources = set([
             input_ for op in created_ops
             for input_ in op.inputs
             if input_.dtype == dtypes.resource

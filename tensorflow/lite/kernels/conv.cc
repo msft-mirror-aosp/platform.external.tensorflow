@@ -12,8 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/kernels/internal/optimized/integer_ops/conv.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -24,18 +22,14 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api_internal.h"
-#include "tensorflow/lite/kernels/cpu_backend_context.h"
 #include "tensorflow/lite/kernels/eigen_support.h"
-// b/131835803 forces us to include multithreaded_conv.h before optimized_ops.h
-#ifndef TFLITE_WITH_RUY
+#include "tensorflow/lite/kernels/gemm_support.h"
 #include "tensorflow/lite/kernels/internal/optimized/multithreaded_conv.h"
-#endif
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
-#include "tensorflow/lite/kernels/internal/reference/conv.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/conv.h"
+#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
-#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/tensor_utils.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/op_macros.h"
@@ -94,7 +88,7 @@ struct OpData {
   bool have_weights_been_transposed;
   bool need_im2col;
 
-  bool supports_multithreaded_kernel;
+  bool run_multithreaded_kernel;
 };
 
 inline PaddingType RuntimePaddingType(TfLitePadding padding) {
@@ -114,12 +108,14 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   // Instead, we allocate a new object to use as scratch space for im2col, and
   // to carry information from Prepare() to Eval().
   auto* data = new OpData;
+  gemm_support::IncrementUsageCounter(context);
   eigen_support::IncrementUsageCounter(context);
   return data;
 }
 
 void Free(TfLiteContext* context, void* buffer) {
   eigen_support::DecrementUsageCounter(context);
+  gemm_support::DecrementUsageCounter(context);
   delete reinterpret_cast<OpData*>(buffer);
 }
 
@@ -155,6 +151,14 @@ static TfLiteStatus AllocateTemporaryTensorsIfRequired(TfLiteContext* context,
   int filter_width = filter->dims->data[2];
   int filter_height = filter->dims->data[1];
 
+  // We don't always need to allocate im2col. It is only used in some versions
+  // of the optimized Conv. This test just mimics something that happens inside
+  // optimized_ops.h, in order to avoid a DCHECK(!im2col_data).
+  data->need_im2col =
+      (params->stride_width != 1 || params->stride_height != 1 ||
+       params->dilation_width_factor != 1 ||
+       params->dilation_height_factor != 1 || filter_width != 1 ||
+       filter_height != 1);
   // If we're using the optimized multithreaded EigenTensor implementation of
   // convolution, it expects the filter weights to be transposed compared to
   // the normal TF Lite buffer format. Typical TF Lite weights are
@@ -165,17 +169,7 @@ static TfLiteStatus AllocateTemporaryTensorsIfRequired(TfLiteContext* context,
   // This path is only used for float processing, so only create the buffer if
   // we're running with that data type.
   data->need_hwcn_weights = (input->type == kTfLiteFloat32 &&
-                             data->supports_multithreaded_kernel && !is_hybrid);
-
-  // We don't always need to allocate im2col. It is only used in some versions
-  // of the optimized Conv. This test just mimics something that happens inside
-  // optimized_ops.h, in order to avoid a DCHECK(!im2col_data).
-  data->need_im2col =
-      !data->need_hwcn_weights &&
-      (params->stride_width != 1 || params->stride_height != 1 ||
-       params->dilation_width_factor != 1 ||
-       params->dilation_height_factor != 1 || filter_width != 1 ||
-       filter_height != 1);
+                             data->run_multithreaded_kernel && !is_hybrid);
 
   int temporaries_count = 0;
   if (data->need_im2col) {
@@ -218,8 +212,7 @@ static TfLiteStatus AllocateTemporaryTensorsIfRequired(TfLiteContext* context,
   return kTfLiteOk;
 }
 
-TfLiteStatus Prepare(KernelType kernel_type, TfLiteContext* context,
-                     TfLiteNode* node) {
+TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   auto* params = reinterpret_cast<TfLiteConvParams*>(node->builtin_data);
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
 
@@ -265,12 +258,11 @@ TfLiteStatus Prepare(KernelType kernel_type, TfLiteContext* context,
       (input->type == kTfLiteFloat32 &&
        (filter->type == kTfLiteUInt8 || filter->type == kTfLiteInt8));
 
-  // The multi-threaded kernel supports neither dilation nor hybrid kernels.
-  data->supports_multithreaded_kernel =
-      (kernel_type == kMultithreadOptimized) &&
-      (context->recommended_num_threads != 1) && !is_hybrid &&
-      (params->dilation_width_factor == 1) &&
-      (params->dilation_height_factor == 1);
+  data->run_multithreaded_kernel = context->recommended_num_threads != 1;
+  // Hybrid kernels don't support multithreading yet.
+  if (is_hybrid) {
+    data->run_multithreaded_kernel = false;
+  }
 
   TF_LITE_ENSURE_STATUS(
       AllocateTemporaryTensorsIfRequired(context, node, is_hybrid));
@@ -285,11 +277,28 @@ TfLiteStatus Prepare(KernelType kernel_type, TfLiteContext* context,
 
   // Matching GetWindowedOutputSize in TensorFlow.
   auto padding = params->padding;
-  int out_width, out_height;
-  data->padding = ComputePaddingHeightWidth(
-      params->stride_height, params->stride_width,
-      params->dilation_height_factor, params->dilation_width_factor, height,
-      width, filter_height, filter_width, padding, &out_height, &out_width);
+  auto compute_out_size = [padding](int image_size, int filter_size, int stride,
+                                    int dilation_rate) -> int {
+    int effective_filter_size = (filter_size - 1) * dilation_rate + 1;
+    return padding == kTfLitePaddingSame
+               ? (image_size + stride - 1) / stride
+               : padding == kTfLitePaddingValid
+                     ? (image_size - effective_filter_size + stride) / stride
+                     : 0;
+  };
+
+  int out_width = compute_out_size(width, filter_width, params->stride_width,
+                                   params->dilation_width_factor);
+  int out_height =
+      compute_out_size(height, filter_height, params->stride_height,
+                       params->dilation_height_factor);
+
+  data->padding.height =
+      ComputePadding(params->stride_height, params->dilation_height_factor,
+                     height, filter_height, out_height);
+  data->padding.width =
+      ComputePadding(params->stride_width, params->dilation_width_factor, width,
+                     filter_width, out_width);
 
   TF_LITE_ENSURE(context, has_bias);
 
@@ -408,16 +417,13 @@ TfLiteStatus Prepare(KernelType kernel_type, TfLiteContext* context,
 }
 
 template <KernelType kernel_type>
-TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  return Prepare(kernel_type, context, node);
-}
-
-template <KernelType kernel_type>
 void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                    TfLiteConvParams* params, OpData* data, TfLiteTensor* input,
                    TfLiteTensor* filter, TfLiteTensor* bias,
                    TfLiteTensor* im2col, TfLiteTensor* hwcn_weights,
                    TfLiteTensor* output) {
+  gemmlowp::GemmContext* gemm_context = gemm_support::GetFromContext(context);
+
   auto input_offset = -input->params.zero_point;
   auto filter_offset = -filter->params.zero_point;
   auto output_offset = output->params.zero_point;
@@ -434,56 +440,67 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
     effective_kernel_type = kernel_type;
   }
 
-  ConvParams op_params;
-  op_params.padding_type = PaddingType::kSame;
-  op_params.padding_values.width = data->padding.width;
-  op_params.padding_values.height = data->padding.height;
-  op_params.stride_width = params->stride_width;
-  op_params.stride_height = params->stride_height;
-  op_params.dilation_width_factor = params->dilation_width_factor;
-  op_params.dilation_height_factor = params->dilation_height_factor;
-  op_params.input_offset = input_offset;
-  op_params.weights_offset = filter_offset;
-  op_params.output_offset = output_offset;
-  op_params.output_multiplier = data->output_multiplier;
-  op_params.output_shift = -data->output_shift;
-  op_params.quantized_activation_min = data->output_activation_min;
-  op_params.quantized_activation_max = data->output_activation_max;
   switch (effective_kernel_type) {
     case kReference: {
+      ConvParams op_params;
+      op_params.padding_type = PaddingType::kSame;
+      op_params.padding_values.width = data->padding.width;
+      op_params.padding_values.height = data->padding.height;
+      op_params.stride_width = params->stride_width;
+      op_params.stride_height = params->stride_height;
+      op_params.dilation_width_factor = params->dilation_width_factor;
+      op_params.dilation_height_factor = params->dilation_height_factor;
+      op_params.input_offset = input_offset;
+      op_params.weights_offset = filter_offset;
+      op_params.output_offset = output_offset;
+      op_params.output_multiplier = data->output_multiplier;
+      op_params.output_shift = -data->output_shift;
+      op_params.quantized_activation_min = data->output_activation_min;
+      op_params.quantized_activation_max = data->output_activation_max;
       reference_ops::Conv(
           op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
           GetTensorShape(filter), GetTensorData<uint8_t>(filter),
           GetTensorShape(bias), GetTensorData<int32_t>(bias),
           GetTensorShape(output), GetTensorData<uint8_t>(output),
-          GetTensorShape(im2col), GetTensorData<uint8_t>(im2col),
-          /* cpu_backend_context = */ nullptr);
+          GetTensorShape(im2col), GetTensorData<uint8_t>(im2col), gemm_context);
       break;
     }
     case kGenericOptimized:
     case kMultithreadOptimized:
     case kCblasOptimized: {
       // There is only one optimized implementation for Quantized Conv.
+      ConvParams op_params;
+      op_params.padding_type = PaddingType::kSame;
+      op_params.padding_values.width = data->padding.width;
+      op_params.padding_values.height = data->padding.height;
+      op_params.stride_width = params->stride_width;
+      op_params.stride_height = params->stride_height;
+      op_params.dilation_width_factor = params->dilation_width_factor;
+      op_params.dilation_height_factor = params->dilation_height_factor;
+      op_params.input_offset = input_offset;
+      op_params.weights_offset = filter_offset;
+      op_params.output_offset = output_offset;
+      op_params.output_multiplier = data->output_multiplier;
+      op_params.output_shift = -data->output_shift;
+      op_params.quantized_activation_min = data->output_activation_min;
+      op_params.quantized_activation_max = data->output_activation_max;
       optimized_ops::Conv(
           op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
           GetTensorShape(filter), GetTensorData<uint8_t>(filter),
           GetTensorShape(bias), GetTensorData<int32_t>(bias),
           GetTensorShape(output), GetTensorData<uint8_t>(output),
-          GetTensorShape(im2col), GetTensorData<uint8_t>(im2col),
-          CpuBackendContext::GetFromContext(context));
+          GetTensorShape(im2col), GetTensorData<uint8_t>(im2col), gemm_context);
       break;
     }
   }
 }
 
-template <KernelType kernel_type>
 void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                              TfLiteConvParams* params, OpData* data,
                              TfLiteTensor* input, TfLiteTensor* filter,
-                             TfLiteTensor* bias, TfLiteTensor* output,
-                             TfLiteTensor* im2col) {
+                             TfLiteTensor* bias, TfLiteTensor* output) {
   ConvParams op_params;
-  op_params.input_offset = -input->params.zero_point;
+  op_params.input_offset = input->params.zero_point;
   op_params.output_offset = output->params.zero_point;
   op_params.stride_height = params->stride_height;
   op_params.stride_width = params->stride_width;
@@ -492,32 +509,13 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
   op_params.padding_values.height = data->padding.height;
   op_params.padding_values.width = data->padding.width;
 
-  switch (kernel_type) {
-    case kReference: {
-      reference_integer_ops::ConvPerChannel(
-          op_params, data->per_channel_output_multiplier.data(),
-          data->per_channel_output_shift.data(), GetTensorShape(input),
-          GetTensorData<int8>(input), GetTensorShape(filter),
-          GetTensorData<int8>(filter), GetTensorShape(bias),
-          GetTensorData<int32>(bias), GetTensorShape(output),
-          GetTensorData<int8>(output));
-      break;
-    }
-    case kGenericOptimized:
-    case kMultithreadOptimized:
-    case kCblasOptimized: {
-      optimized_integer_ops::ConvPerChannel(
-          op_params, data->per_channel_output_multiplier.data(),
-          data->per_channel_output_shift.data(), GetTensorShape(input),
-          GetTensorData<int8>(input), GetTensorShape(filter),
-          GetTensorData<int8>(filter), GetTensorShape(bias),
-          GetTensorData<int32>(bias), GetTensorShape(output),
-          GetTensorData<int8>(output), GetTensorShape(im2col),
-          GetTensorData<int8>(im2col),
-          CpuBackendContext::GetFromContext(context));
-      break;
-    }
-  }
+  reference_integer_ops::ConvPerChannel(
+      op_params, data->per_channel_output_multiplier.data(),
+      data->per_channel_output_shift.data(), GetTensorShape(input),
+      GetTensorData<int8>(input), GetTensorShape(filter),
+      GetTensorData<int8>(filter), GetTensorShape(bias),
+      GetTensorData<int32>(bias), GetTensorShape(output),
+      GetTensorData<int8>(output));
 }
 
 template <KernelType kernel_type>
@@ -528,11 +526,15 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
   float output_activation_min, output_activation_max;
   CalculateActivationRange(params->activation, &output_activation_min,
                            &output_activation_max);
-  KernelType effective_kernel_type = kernel_type;
-  // Fall back to the optimized path if multi-threaded conv is unsupported.
+  KernelType effective_kernel_type;
   if ((kernel_type == kMultithreadOptimized) &&
-      !data->supports_multithreaded_kernel) {
+      (params->dilation_width_factor != 1 ||
+       params->dilation_height_factor != 1)) {
+    // kMultithreadOptimized does not support dilation.
+    // Therefore, fallback to optimized.
     effective_kernel_type = kGenericOptimized;
+  } else {
+    effective_kernel_type = kernel_type;
   }
   ConvParams op_params;
   op_params.padding_type = RuntimePaddingType(params->padding);
@@ -561,17 +563,10 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
                           GetTensorData<float>(filter), GetTensorShape(bias),
                           GetTensorData<float>(bias), GetTensorShape(output),
                           GetTensorData<float>(output), GetTensorShape(im2col),
-                          GetTensorData<float>(im2col),
-                          CpuBackendContext::GetFromContext(context));
+                          GetTensorData<float>(im2col));
       break;
     }
     case kMultithreadOptimized: {
-#ifdef TFLITE_WITH_RUY
-      // See Register_CONV_2D: we should never be here when tflite_with_ruy
-      // was enabled. We #if out this code in order to get the corresponding
-      // binary size benefits.
-      TFLITE_DCHECK(false);
-#else
       const float* filter_data;
       if (data->need_hwcn_weights) {
         filter_data = GetTensorData<float>(hwcn_weights);
@@ -586,7 +581,6 @@ void EvalFloat(TfLiteContext* context, TfLiteNode* node,
           GetTensorData<float>(output), GetTensorShape(im2col),
           GetTensorData<float>(im2col));
       break;
-#endif
     }
   }
 }
@@ -696,9 +690,12 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       if (filter->type == kTfLiteUInt8 || filter->type == kTfLiteInt8) {
         EvalHybrid<kernel_type>(context, node, params, data, input, filter,
                                 bias, im2col, hwcn_weights, output);
-      } else {
+      } else if (data->run_multithreaded_kernel) {
         EvalFloat<kernel_type>(context, node, params, data, input, filter, bias,
                                im2col, hwcn_weights, output);
+      } else {
+        EvalFloat<kGenericOptimized>(context, node, params, data, input, filter,
+                                     bias, im2col, hwcn_weights, output);
       }
       break;
     case kTfLiteUInt8:
@@ -706,8 +703,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                                  bias, im2col, hwcn_weights, output);
       break;
     case kTfLiteInt8:
-      EvalQuantizedPerChannel<kernel_type>(context, node, params, data, input,
-                                           filter, bias, output, im2col);
+      EvalQuantizedPerChannel(context, node, params, data, input, filter, bias,
+                              output);
       break;
     default:
       context->ReportError(context, "Type %d not currently supported.",
@@ -720,39 +717,32 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 }  // namespace conv
 
 TfLiteRegistration* Register_CONVOLUTION_REF() {
-  static TfLiteRegistration r = {conv::Init, conv::Free,
-                                 conv::Prepare<conv::kReference>,
+  static TfLiteRegistration r = {conv::Init, conv::Free, conv::Prepare,
                                  conv::Eval<conv::kReference>};
   return &r;
 }
 
 TfLiteRegistration* Register_CONVOLUTION_GENERIC_OPT() {
-  static TfLiteRegistration r = {conv::Init, conv::Free,
-                                 conv::Prepare<conv::kGenericOptimized>,
+  static TfLiteRegistration r = {conv::Init, conv::Free, conv::Prepare,
                                  conv::Eval<conv::kGenericOptimized>};
   return &r;
 }
 
 TfLiteRegistration* Register_CONVOLUTION_MULTITHREADED_OPT() {
-  static TfLiteRegistration r = {conv::Init, conv::Free,
-                                 conv::Prepare<conv::kMultithreadOptimized>,
+  static TfLiteRegistration r = {conv::Init, conv::Free, conv::Prepare,
                                  conv::Eval<conv::kMultithreadOptimized>};
   return &r;
 }
 
 TfLiteRegistration* Register_CONVOLUTION_CBLAS_OPT() {
-  static TfLiteRegistration r = {conv::Init, conv::Free,
-                                 conv::Prepare<conv::kCblasOptimized>,
+  static TfLiteRegistration r = {conv::Init, conv::Free, conv::Prepare,
                                  conv::Eval<conv::kCblasOptimized>};
   return &r;
 }
 
 TfLiteRegistration* Register_CONV_2D() {
-#if defined TFLITE_USE_APPLE_ACCELERATE_FOR_CONV
+#ifdef TFLITE_USE_APPLE_ACCELERATE_FOR_CONV
   return Register_CONVOLUTION_CBLAS_OPT();
-#elif defined TFLITE_WITH_RUY
-  // tflite_with_ruy optimizes the generic kernel type.
-  return Register_CONVOLUTION_GENERIC_OPT();
 #else
   return Register_CONVOLUTION_MULTITHREADED_OPT();
 #endif

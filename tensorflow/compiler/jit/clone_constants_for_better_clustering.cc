@@ -122,7 +122,7 @@ Status CloneConstantsForBetterClusteringPass::CloneSmallHostConstantInputs(
 
 Status CloneConstantsForBetterClusteringPass::Run(
     const GraphOptimizationPassOptions& options) {
-  if (GetGlobalJitLevelForGraph(options) == OptimizerOptions::OFF) {
+  if (GetGlobalJitLevel(options) == OptimizerOptions::OFF) {
     return Status::OK();
   }
 

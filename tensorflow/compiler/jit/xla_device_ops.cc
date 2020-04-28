@@ -40,7 +40,7 @@ void XlaAssignVariableOp::Compute(OpKernelContext* context) {
                   "Variable and value dtypes don't match; respectively, ",
                   DataTypeString(dtype_), " and ",
                   DataTypeString(context->input(1).dtype())));
-  core::RefCountPtr<Var> variable;
+  Var* variable = nullptr;
   const Tensor& value = context->input(1);
   // Note: every resource-variable-manipulating op assumes copy-on-write
   // semantics, and creates a copy of the variable's Tensor if its refcount is
@@ -58,6 +58,7 @@ void XlaAssignVariableOp::Compute(OpKernelContext* context) {
                                 (*ptr)->is_initialized = true;
                                 return Status::OK();
                               }));
+  core::ScopedUnref s(variable);
   mutex_lock ml(*variable->mu());
   OP_REQUIRES(context, variable->tensor()->dtype() == dtype_,
               errors::InvalidArgument(

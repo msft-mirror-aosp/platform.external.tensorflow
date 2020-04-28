@@ -1,9 +1,8 @@
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    default_visibility = ["//tensorflow:internal"],
-    licenses = ["notice"],  # Apache 2.0
-)
+package(default_visibility = ["//tensorflow:internal"])
+
+load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 py_library(
     name = "checkpoint",

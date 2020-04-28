@@ -26,7 +26,6 @@ limitations under the License.
 #include <jpeglib.h>
 #include <setjmp.h>
 #include <stdio.h>
-
 #include <fstream>
 #include <vector>
 

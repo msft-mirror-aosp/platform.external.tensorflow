@@ -1,29 +1,7 @@
 # Description:
 #   RPC communication interfaces and implementations for TensorFlow.
 
-load(
-    "//tensorflow:tensorflow.bzl",
-    "tf_cc_binary",
-    "tf_cc_test",
-    "tf_cuda_library",
-)
-load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
-load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_tests")
-
-# For platform specific build config
-load(
-    "//tensorflow/core/platform:default/build_config.bzl",
-    "tf_kernel_tests_linkstatic",
-)
-load(
-    "//tensorflow/core/platform:default/build_config_root.bzl",
-    "tf_cuda_tests_tags",
-)
-
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
@@ -34,6 +12,29 @@ filegroup(
         "**/*.h",
     ]),
 )
+
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_cuda_library",
+    "tf_cc_test",
+)
+load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_test")
+load("//tensorflow:tensorflow.bzl", "tf_cuda_cc_tests")
+load("//tensorflow:tensorflow.bzl", "tf_cc_binary")
+
+# For platform specific build config
+load(
+    "//tensorflow/core:platform/default/build_config.bzl",
+    "tf_kernel_tests_linkstatic",
+)
+load(
+    "//tensorflow/core:platform/default/build_config_root.bzl",
+    "tf_cuda_tests_tags",
+)
+
+package(default_visibility = [
+    "//tensorflow:internal",
+])
 
 cc_library(
     name = "grpc_util",
@@ -62,17 +63,15 @@ cc_library(
 
 cc_library(
     name = "grpc_state",
-    srcs = ["grpc_state.cc"],
+    srcs = [],
     hdrs = ["grpc_state.h"],
     deps = [
         ":grpc_client_cq_tag",
         ":grpc_util",
         "//tensorflow:grpc++",
         "//tensorflow/core:lib",
-        "//tensorflow/core:lib_internal",
         "//tensorflow/core/distributed_runtime:call_options",
         "//tensorflow/core/distributed_runtime:tensor_coding",
-        "@com_google_absl//absl/strings:str_format",
     ],
 )
 
@@ -158,7 +157,6 @@ cc_library(
         "//tensorflow/core/distributed_runtime:worker_cache_logger",
         "//tensorflow/core/distributed_runtime:worker_cache_partial",
         "//tensorflow/core/distributed_runtime:worker_interface",
-        "//tensorflow/core/distributed_runtime/rpc/eager:grpc_eager_client",
     ],
 )
 
@@ -167,9 +165,8 @@ cc_library(
     srcs = ["grpc_response_cache.cc"],
     hdrs = ["grpc_response_cache.h"],
     deps = [
-        "//tensorflow/core:framework",
+        ":grpc_util",
         "//tensorflow/core:lib",
-        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -192,6 +189,7 @@ tf_cuda_library(
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:worker_proto_cc",
         "//tensorflow/core/distributed_runtime:graph_mgr",
+        "//tensorflow/core/distributed_runtime:recent_request_ids",
         "//tensorflow/core/distributed_runtime:rendezvous_mgr_interface",
         "//tensorflow/core/distributed_runtime:worker",
         "//tensorflow/core/distributed_runtime:worker_cache",
@@ -225,7 +223,6 @@ cc_library(
         "//tensorflow/core:master_proto_cc",
         "//tensorflow/core/distributed_runtime:call_options",
         "//tensorflow/core/distributed_runtime:master_interface",
-        "//tensorflow/core/profiler/lib:traceme",
     ],
     alwayslink = 1,
 )
@@ -244,7 +241,6 @@ cc_library(
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:master_proto_cc",
         "//tensorflow/core/distributed_runtime:master",
-        "//tensorflow/core/profiler/lib:traceme",
     ],
     alwayslink = 1,
 )
@@ -295,7 +291,6 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
-        "//tensorflow/core/common_runtime/eager:context",
         "//tensorflow/core/distributed_runtime:collective_param_resolver_distributed",
         "//tensorflow/core/distributed_runtime:device_resolver_distributed",
         "//tensorflow/core/distributed_runtime:graph_mgr",
@@ -345,9 +340,8 @@ tf_cc_binary(
     ],
 )
 
-# Library version of grpc_testlib_server, to allow for custom testlib servers.
-cc_library(
-    name = "grpc_testlib_server_main",
+tf_cc_binary(
+    name = "grpc_testlib_server",
     testonly = 1,
     srcs = [
         "grpc_testlib_server.cc",
@@ -373,13 +367,6 @@ cc_library(
         "//tensorflow/core/kernels:reduction_ops",
         "//tensorflow/core/kernels:variable_ops",
     ],
-    alwayslink = 1,
-)
-
-tf_cc_binary(
-    name = "grpc_testlib_server",
-    testonly = 1,
-    deps = [":grpc_testlib_server_main"],
 )
 
 tf_cuda_library(
@@ -390,7 +377,7 @@ tf_cuda_library(
     data = [
         ":grpc_testlib_server",
     ],
-    visibility = ["//tensorflow:internal"],
+    visibility = ["//tensorflow:__subpackages__"],
     deps = [
         ":grpc_session",
         "//tensorflow/core:core_cpu",

@@ -26,33 +26,25 @@ namespace {
 
 // Writes the given literal to a file in the test temporary directory.
 void WriteLiteralToTempFile(const LiteralSlice& literal, const string& name) {
-  // Bazel likes for tests to write "debugging outputs" like these to
-  // TEST_UNDECLARED_OUTPUTS_DIR.  This plays well with tools that inspect test
-  // results, especially when they're run on remote machines.
-  string outdir;
-  const char* undeclared_outputs_dir = getenv("TEST_UNDECLARED_OUTPUTS_DIR");
-  if (undeclared_outputs_dir != nullptr) {
-    outdir = undeclared_outputs_dir;
-  } else {
-    outdir = tensorflow::testing::TmpDir();
-  }
-
-  auto* env = tensorflow::Env::Default();
+  auto get_hostname = [] {
+    char hostname[1024];
+    gethostname(hostname, sizeof hostname);
+    hostname[sizeof hostname - 1] = 0;
+    return string(hostname);
+  };
+  int64 now_usec = tensorflow::Env::Default()->NowMicros();
   string filename = tensorflow::io::JoinPath(
-      outdir, absl::StrFormat("tempfile-%d-%s", env->NowMicros(), name));
-  TF_CHECK_OK(tensorflow::WriteBinaryProto(env, absl::StrCat(filename, ".pb"),
+      tensorflow::testing::TmpDir(),
+      absl::StrFormat("tempfile-%s-%x-%s", get_hostname(), now_usec, name));
+  TF_CHECK_OK(tensorflow::WriteBinaryProto(tensorflow::Env::Default(), filename,
                                            literal.ToProto()));
-  TF_CHECK_OK(tensorflow::WriteStringToFile(env, absl::StrCat(filename, ".txt"),
-                                            literal.ToString()));
-  LOG(ERROR) << "wrote Literal to " << name << " file: " << filename
-             << ".{pb,txt}";
+  LOG(ERROR) << "wrote to " << name << " file: " << filename;
 }
 
 // Callback helper that dumps literals to temporary files in the event of a
 // miscomparison.
 void OnMiscompare(const LiteralSlice& expected, const LiteralSlice& actual,
-                  const LiteralSlice& mismatches,
-                  const ShapeIndex& /*shape_index*/) {
+                  const LiteralSlice& mismatches) {
   LOG(INFO) << "expected: " << ShapeUtil::HumanString(expected.shape()) << " "
             << literal_comparison::ToStringTruncated(expected);
   LOG(INFO) << "actual:   " << ShapeUtil::HumanString(actual.shape()) << " "

@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/ring_reducer.h"
 
 #include <algorithm>
-
 #include "absl/memory/memory.h"
 #include "tensorflow/core/common_runtime/base_collective_executor.h"
 #include "tensorflow/core/common_runtime/collective_rma_local.h"
@@ -35,7 +34,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/notification.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/test.h"
-#include "tensorflow/core/platform/unbounded_work_queue.h"
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/public/version.h"
 
@@ -46,9 +44,8 @@ namespace tensorflow {
 class FailTestRMA : public CollectiveRemoteAccessLocal {
  public:
   FailTestRMA(const DeviceMgr* dev_mgr, DeviceResolverInterface* dev_resolver,
-              std::shared_ptr<UnboundedWorkQueue> work_queue, int64 step_id,
-              int fail_after)
-      : CollectiveRemoteAccessLocal(dev_mgr, dev_resolver, work_queue, step_id),
+              int64 step_id, int fail_after)
+      : CollectiveRemoteAccessLocal(dev_mgr, dev_resolver, step_id),
         fail_after_(fail_after) {}
 
   bool MaybeFail(const StatusCallback& done) {
@@ -187,17 +184,14 @@ class RingReducerTest : public ::testing::Test {
       }
     }
     if (!dev_mgr_ || device_type == DEVICE_CPU) {
-      LOG(INFO) << "resetting dev_mgr for " << local_devices.size()
-                << " devices: ";
-      dev_mgr_ = absl::make_unique<DeviceMgr>(std::move(local_devices));
+      LOG(ERROR) << "resetting dev_mgr for " << local_devices.size()
+                 << " devices: ";
+      dev_mgr_.reset(new DeviceMgr(std::move(local_devices)));
     }
-    if (!gpu_ring_order_) {
-      gpu_ring_order_ = absl::make_unique<string>();
-    }
-    dev_resolver_ = absl::make_unique<DeviceResolverLocal>(dev_mgr_.get());
-    work_queue_ = std::make_shared<UnboundedWorkQueue>(Env::Default(), "test");
-    rma_ = new FailTestRMA(dev_mgr_.get(), dev_resolver_.get(), work_queue_,
-                           kStepId, fail_after);
+    if (!gpu_ring_order_) gpu_ring_order_.reset(new string());
+    dev_resolver_.reset(new DeviceResolverLocal(dev_mgr_.get()));
+    rma_ = new FailTestRMA(dev_mgr_.get(), dev_resolver_.get(), kStepId,
+                           fail_after);
     col_exec_ = new BaseCollectiveExecutor(
         &col_exec_mgr_, rma_, kStepId, dev_mgr_.get(), gpu_ring_order_.get());
     col_params_.name = "test_collective";
@@ -312,9 +306,8 @@ class RingReducerTest : public ::testing::Test {
     if (fail_after > 0) {
       // Confirm that every device terminated with the expected error status.
       for (int di = 0; di < static_cast<int>(instances_.size()); ++di) {
-        EXPECT_NE(
-            instances_[di]->status_.error_message().find("Deliberate failure"),
-            string::npos);
+        EXPECT_EQ("Deliberate failure",
+                  instances_[di]->status_.error_message());
       }
     } else {
       // Confirm that every device computed the same correct reduction value.
@@ -551,7 +544,6 @@ class RingReducerTest : public ::testing::Test {
   CollectiveExecutor* col_exec_;
   CollectiveRemoteAccessLocal* rma_;
   std::unique_ptr<DeviceResolverLocal> dev_resolver_;
-  std::shared_ptr<UnboundedWorkQueue> work_queue_;
   std::vector<DeviceInstance*> instances_;
   CollectiveParams col_params_;
   std::vector<std::unique_ptr<tensorflow::Device>> gpu_devices_;

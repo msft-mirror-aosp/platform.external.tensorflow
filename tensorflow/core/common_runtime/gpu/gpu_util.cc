@@ -100,7 +100,7 @@ Status PrepareCopy(Device* device, const DeviceContext* ctx, const Tensor& src,
   }
   if (!DMAHelper::CanUseDMA(&src)) {
     return errors::Internal("GPU copy from non-DMA ",
-                            DataTypeString(src.dtype()), " tensor");
+                            DataTypeString(src.dtype()), "tensor");
   }
   return Status::OK();
 }
@@ -151,8 +151,7 @@ void GPUUtil::SetProtoFromGPU(const Tensor& tensor, Device* dev,
   if (total_bytes > 0) {
     tracing::ScopedAnnotation annotation("SetProtoFromGPU");
     alloc = GPUProcessState::singleton()->GetGpuHostAllocator(0);
-    buf = static_cast<char*>(
-        alloc->AllocateRaw(Allocator::kAllocatorAlignment, total_bytes));
+    buf = alloc->Allocate<char>(total_bytes);
     if (LogMemory::IsEnabled()) {
       LogMemory::RecordRawAllocation("SetProtoFromGPU",
                                      LogMemory::PROTO_BUFFER_STEP_ID,
@@ -179,7 +178,7 @@ void GPUUtil::SetProtoFromGPU(const Tensor& tensor, Device* dev,
                                              LogMemory::PROTO_BUFFER_STEP_ID,
                                              buf, alloc, false);
           }
-          alloc->DeallocateRaw(buf);
+          alloc->Deallocate<char>(buf, total_bytes);
         }
         done(Status::OK());
       });
@@ -301,7 +300,7 @@ void GPUUtil::CopyGPUTensorToCPU(Device* gpu_device,
 void GPUUtil::CopyCPUTensorToGPU(const Tensor* cpu_tensor,
                                  const DeviceContext* device_context,
                                  Device* gpu_device, Tensor* gpu_tensor,
-                                 StatusCallback done, bool sync_dst_compute) {
+                                 StatusCallback done) {
   VLOG(1) << "CopyCPUTensorToGPU";
   const DeviceBase::GpuDeviceInfo* dev_info = nullptr;
   se::Stream* recv_stream = nullptr;
@@ -320,9 +319,7 @@ void GPUUtil::CopyCPUTensorToGPU(const Tensor* cpu_tensor,
     return;
   }
   // Wait for the recv-stream to make sure the buffer is truly available.
-  if (sync_dst_compute) {
-    recv_host_to_device_stream->ThenWaitFor(recv_stream);
-  }
+  recv_host_to_device_stream->ThenWaitFor(recv_stream);
 
   const int64 total_bytes = cpu_tensor->TotalBytes();
   // Note that 0-size tensors have no backing buffer.

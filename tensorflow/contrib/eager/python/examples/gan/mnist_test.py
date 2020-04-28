@@ -22,6 +22,7 @@ import time
 
 import tensorflow as tf
 
+import tensorflow.contrib.eager as tfe
 from tensorflow.contrib.eager.python.examples.gan import mnist
 
 NOISE_DIM = 100
@@ -36,14 +37,14 @@ def data_format():
 
 
 def device():
-  return '/gpu:0' if tf.test.is_gpu_available() else '/cpu:0'
+  return '/gpu:0' if tfe.num_gpus() else '/cpu:0'
 
 
 class MnistEagerGanBenchmark(tf.test.Benchmark):
 
   def _report(self, test_name, start, num_iters, batch_size):
     avg_time = (time.time() - start) / num_iters
-    dev = 'gpu' if tf.test.is_gpu_available() else 'cpu'
+    dev = 'gpu' if tfe.num_gpus() else 'cpu'
     name = 'eager_%s_%s_batch_%d_%s' % (test_name, dev, batch_size,
                                         data_format())
     extras = {'examples_per_sec': batch_size / avg_time}
@@ -67,9 +68,9 @@ class MnistEagerGanBenchmark(tf.test.Benchmark):
         generator = mnist.Generator(data_format())
         discriminator = mnist.Discriminator(data_format())
         with tf.variable_scope('generator'):
-          generator_optimizer = tf.compat.v1.train.AdamOptimizer(0.001)
+          generator_optimizer = tf.train.AdamOptimizer(0.001)
         with tf.variable_scope('discriminator'):
-          discriminator_optimizer = tf.compat.v1.train.AdamOptimizer(0.001)
+          discriminator_optimizer = tf.train.AdamOptimizer(0.001)
 
         with tf.contrib.summary.create_file_writer(
             tempfile.mkdtemp(), flush_millis=SUMMARY_FLUSH_MS).as_default():

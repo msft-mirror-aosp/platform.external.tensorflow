@@ -1,18 +1,17 @@
-load(
-    "//tensorflow/core/platform:default/build_config.bzl",
-    "tf_proto_library",
-    "tf_pyclif_proto_library",
-)
+package(default_visibility = ["//visibility:public"])
 
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files([
     "LICENSE",
     "generic_tree_model_proto.swig",
 ])
+
+load(
+    "//tensorflow/core:platform/default/build_config.bzl",
+    "tf_proto_library",
+    "tf_pyclif_proto_library",
+)
 
 tf_proto_library(
     name = "generic_tree_model",

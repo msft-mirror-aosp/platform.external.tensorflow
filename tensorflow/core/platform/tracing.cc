@@ -29,7 +29,7 @@ namespace tensorflow {
 namespace tracing {
 namespace {
 std::atomic<uint64> unique_arg{1};
-std::atomic<bool> enable_annotation;
+std::atomic<const TraceCollector*> trace_collector;
 }  // namespace
 
 const char* GetEventCategoryName(EventCategory category) {
@@ -61,12 +61,23 @@ uint64 GetArgForName(StringPiece name) {
   return Hash64(name.data(), name.size());
 }
 
-void ScopedAnnotation::Enable(bool enable) {
-  return enable_annotation.store(enable, std::memory_order_release);
+string TraceCollector::ConcatenateNames(StringPiece first, StringPiece second) {
+  std::string result;
+  bool has_two_parts = !first.empty() && !second.empty();
+  result.reserve(first.size() + second.size() +
+                 static_cast<int>(has_two_parts));
+  result.append(first.data(), first.size());
+  if (has_two_parts) result.append({':'});
+  result.append(second.data(), second.size());
+  return result;
 }
 
-const bool ScopedAnnotation::IsEnabled() {
-  return enable_annotation.load(std::memory_order_acquire);
+void SetTraceCollector(const TraceCollector* collector) {
+  return trace_collector.store(collector, std::memory_order_release);
+}
+
+const TraceCollector* GetTraceCollector() {
+  return trace_collector.load(std::memory_order_acquire);
 }
 
 }  // namespace tracing

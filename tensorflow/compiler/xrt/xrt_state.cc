@@ -18,23 +18,29 @@ limitations under the License.
 
 #include "tensorflow/compiler/xrt/xrt_state.h"
 
+#include <stdint.h>
 #include <map>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "absl/memory/memory.h"
+#include "absl/strings/str_cat.h"
+#include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/backend.h"
+#include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/status_macros.h"
-#include "tensorflow/compiler/xrt/xrt_memory_manager.h"
+#include "tensorflow/compiler/xla/statusor.h"
+#include "tensorflow/core/framework/resource_mgr.h"
+#include "tensorflow/core/lib/core/status.h"
+#include "tensorflow/core/lib/random/random.h"
+#include "tensorflow/core/platform/mutex.h"
+#include "tensorflow/core/platform/types.h"
+#include "tensorflow/stream_executor/stream_executor.h"
 
 namespace tensorflow {
-namespace {
 
-// Helper typedef to make ShapeTree ForEach helper lambda signatures more
-// readable. They need a type of const T& where in this case T is the
-// following pointer.
-typedef XRTBufferAllocation* XRTBufferAllocationPtr;
+namespace {
 
 class BufferAllocStats {
  public:
@@ -64,15 +70,23 @@ class BufferAllocStats {
   std::map<int64, Stats> stats_;
 };
 
+const char* kTupleContainer = "tuples";
+
+int64 get_uid() {
+  uint64 unsigned_rand = random::New64() & INT64_MAX;
+  return static_cast<int64>(unsigned_rand);
+}
+
 BufferAllocStats* GetAllocStats() {
   static BufferAllocStats* stats = new BufferAllocStats();
   return stats;
 }
 
 Status AllocateScopedShapedBuffer(
-    XRTMemoryManager* memory_manager, xla::Backend* backend, int device_ordinal,
-    const xla::Shape& shape, std::unique_ptr<xla::ScopedShapedBuffer>* buffer) {
+    xla::Backend* backend, int device_ordinal, const xla::Shape& shape,
+    std::unique_ptr<xla::ScopedShapedBuffer>* buffer) {
   auto transfer_manager = backend->transfer_manager();
+  auto allocator = backend->memory_allocator();
   TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal));
 
   // XLA may use a different representation on device than the representation on
@@ -93,19 +107,18 @@ Status AllocateScopedShapedBuffer(
   // it goes out of scope. That's useful if we return early as the result of an
   // error allocating one of the later buffers.
   *buffer = absl::make_unique<xla::ScopedShapedBuffer>(
-      shape, on_device_shape, backend->memory_allocator(), device_ordinal);
+      shape, on_device_shape, allocator, device_ordinal);
   for (auto& index_to_buffer : (*buffer)->buffers()) {
-    const xla::Shape& subshape =
+    xla::Shape subshape =
         xla::ShapeUtil::GetSubshape(on_device_shape, index_to_buffer.first);
     uint64 size = transfer_manager->GetByteSizeRequirement(subshape);
     TF_ASSIGN_OR_RETURN(
-        se::OwningDeviceMemory buffer,
-        memory_manager->Allocate(backend, device_ordinal, size));
+        xla::OwningDeviceMemory buffer,
+        allocator->Allocate(device_ordinal, size, /*retry_on_failure=*/false));
     // Move our buffer into shaped_buffer, which takes ownership of it.
-    index_to_buffer.second = buffer.Release();
+    index_to_buffer.second = buffer.Forget();
     VLOG(2) << "Allocated buffer at " << index_to_buffer.second.opaque()
-            << " index " << index_to_buffer.first.ToString() << " (" << size
-            << " bytes)";
+            << " index " << index_to_buffer.first.ToString();
   }
 
   TF_RETURN_IF_ERROR(
@@ -118,8 +131,9 @@ Status AllocateScopedShapedBuffer(
 
 XRTBufferAllocation::XRTBufferAllocation(const se::DeviceMemoryBase& allocation,
                                          int device_ordinal,
-                                         se::DeviceMemoryAllocator* allocator)
-    : allocation_(allocation),
+                                         xla::DeviceMemoryAllocator* allocator)
+    : size_(allocation.size()),
+      allocation_(allocation),
       device_ordinal_(device_ordinal),
       allocator_(allocator) {
   if (VLOG_IS_ON(2)) {
@@ -135,46 +149,46 @@ XRTBufferAllocation::~XRTBufferAllocation() {
     GetAllocStats()->ReportFree(device_ordinal_, allocation_.size());
   }
   // Deallocate explicitly allows allocation_ to be null.
-  TF_CHECK_OK(allocator_->Deallocate(device_ordinal_, allocation_));
-  VLOG(2) << "Freed buffer at " << allocation_.opaque() << " ("
-          << allocation_.size() << " bytes)";
+  Status s = allocator_->Deallocate(device_ordinal_, allocation_);
+  // Nothing to do but check fail here if memory datastructures are corrupted.
+  CHECK(s.ok());
+  VLOG(2) << "Freed buffer at " << allocation_.opaque();
 }
 
 const se::DeviceMemoryBase& XRTBufferAllocation::allocation() {
   return allocation_;
 }
 
+void XRTBufferAllocation::DiscardAllocation() {
+  // Replace the allocation with a null.
+  allocation_ = se::DeviceMemoryBase();
+}
+
 XRTTupleAllocation::XRTTupleAllocation(int device_ordinal,
-                                       se::DeviceMemoryAllocator* allocator,
+                                       xla::DeviceMemoryAllocator* allocator,
                                        const xla::Shape& on_host_shape,
                                        const xla::Shape& on_device_shape)
     : device_ordinal_(device_ordinal),
       allocator_(allocator),
       on_host_shape_(on_host_shape),
       on_device_shape_(on_device_shape),
-      buffers_(&on_device_shape_),
-      pin_count_(0) {}
+      buffers_(&on_device_shape_) {}
 
-XRTTupleAllocation::~XRTTupleAllocation() { ReleaseBuffers(); }
-
-void XRTTupleAllocation::ReleaseBuffers() {
-  for (auto& index_buffer : buffers_) {
-    if (index_buffer.second != nullptr) {
-      index_buffer.second->Unref();
-      index_buffer.second = nullptr;
-    }
+XRTTupleAllocation::~XRTTupleAllocation() {
+  for (auto& buffer : buffers_) {
+    buffer.second->Unref();
   }
 }
 
 /*static*/ Status XRTTupleAllocation::CreateAndTransfer(
-    const xla::LiteralBase& literal, XRTMemoryManager* memory_manager,
-    xla::Backend* backend, int device_ordinal,
+    const xla::LiteralBase& literal, xla::Backend* backend, int device_ordinal,
     XRTTupleAllocation** allocation) {
   auto transfer_manager = backend->transfer_manager();
+  auto allocator = backend->memory_allocator();
+
   std::unique_ptr<xla::ScopedShapedBuffer> scoped_buffer;
-  TF_RETURN_IF_ERROR(AllocateScopedShapedBuffer(memory_manager, backend,
-                                                device_ordinal, literal.shape(),
-                                                &scoped_buffer));
+  TF_RETURN_IF_ERROR(AllocateScopedShapedBuffer(
+      backend, device_ordinal, literal.shape(), &scoped_buffer));
   TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal));
   TF_RETURN_IF_ERROR(transfer_manager->TransferLiteralToDevice(
       stream.get(), literal, *scoped_buffer));
@@ -184,36 +198,11 @@ void XRTTupleAllocation::ReleaseBuffers() {
   // call. To avoid a leak, there must be no error-case returns from here until
   // the end of the method.
   auto shaped_buffer = scoped_buffer->release();
-  *allocation = new XRTTupleAllocation(
-      device_ordinal, backend->memory_allocator(),
-      shaped_buffer.on_host_shape(), shaped_buffer.on_device_shape());
+  *allocation = new XRTTupleAllocation(device_ordinal, allocator,
+                                       shaped_buffer.on_host_shape(),
+                                       shaped_buffer.on_device_shape());
   (*allocation)
-      ->InitializeFromShapedBuffer(shaped_buffer, backend->memory_allocator(),
-                                   device_ordinal);
-  (*allocation)->SetDeviceMemorySize();
-  return Status::OK();
-}
-
-/*static*/ Status XRTTupleAllocation::CreateUninitialized(
-    const xla::Shape& shape, XRTMemoryManager* memory_manager,
-    xla::Backend* backend, int device_ordinal,
-    XRTTupleAllocation** allocation) {
-  std::unique_ptr<xla::ScopedShapedBuffer> scoped_buffer;
-  TF_RETURN_IF_ERROR(AllocateScopedShapedBuffer(
-      memory_manager, backend, device_ordinal, shape, &scoped_buffer));
-
-  // By releasing the ScopedShapedBuffer we ensure that the underlying storage
-  // won't be freed when the buffer goes out of scope at the end of this
-  // call. To avoid a leak, there must be no error-case returns from here until
-  // the end of the method.
-  auto shaped_buffer = scoped_buffer->release();
-  *allocation = new XRTTupleAllocation(
-      device_ordinal, backend->memory_allocator(),
-      shaped_buffer.on_host_shape(), shaped_buffer.on_device_shape());
-  (*allocation)
-      ->InitializeFromShapedBuffer(shaped_buffer, backend->memory_allocator(),
-                                   device_ordinal);
-  (*allocation)->SetDeviceMemorySize();
+      ->InitializeFromShapedBuffer(shaped_buffer, allocator, device_ordinal);
   return Status::OK();
 }
 
@@ -227,24 +216,26 @@ void XRTTupleAllocation::ReleaseBuffers() {
                                        shaped_buffer.on_device_shape());
   (*allocation)
       ->InitializeFromShapedBuffer(shaped_buffer, allocator, device_ordinal);
-  (*allocation)->SetDeviceMemorySize();
   return Status::OK();
 }
 
-Status XRTTupleAllocation::ToLiteral(xla::Backend* backend,
+Status XRTTupleAllocation::ToLiteral(xla::Backend* backend, int device_ordinal,
                                      xla::MutableLiteralBase* literal) {
-  mutex_lock lock(lock_);
-  return literal_ == nullptr ? StoreToLiteral(backend, literal)
-                             : literal->CopyFrom(*literal_);
-}
-
-Status XRTTupleAllocation::StoreToLiteral(xla::Backend* backend,
-                                          xla::MutableLiteralBase* literal) {
   auto transfer_manager = backend->transfer_manager();
-  TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal()));
-  TF_ASSIGN_OR_RETURN(xla::ShapedBuffer shaped_buffer, ToShapedBuffer());
+  TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal));
+
+  // Validate the allocation buffers as if nulls gets to
+  // TransferLiteralFromDevice() a CHECK is issued.
+  xla::ShapedBuffer shaped_buffer = ToShapedBuffer();
+  for (auto& index_buffer : shaped_buffer.buffers()) {
+    if (index_buffer.second.is_null()) {
+      return errors::InvalidArgument("Literal buffer at index ",
+                                     index_buffer.first.ToString(),
+                                     " has been released");
+    }
+  }
   return transfer_manager->TransferLiteralFromDevice(stream.get(),
-                                                     shaped_buffer, literal);
+                                                     shaped_buffer, *literal);
 }
 
 Status XRTTupleAllocation::WriteLiteral(xla::Backend* backend,
@@ -255,101 +246,51 @@ Status XRTTupleAllocation::WriteLiteral(xla::Backend* backend,
         xla::ShapeUtil::HumanStringWithLayout(literal.shape()),
         " device=", xla::ShapeUtil::HumanStringWithLayout(on_host_shape()));
   }
-  mutex_lock lock(lock_);
-  if (literal_ != nullptr) {
-    // The allocation is currently swapped out, and we have a host literal for
-    // its content. Just update the host literal with the new value.
-    return literal_->CopyFrom(literal);
-  }
-  TF_ASSIGN_OR_RETURN(xla::ShapedBuffer shaped_buffer, ToShapedBuffer());
   auto transfer_manager = backend->transfer_manager();
   TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal()));
   return transfer_manager->TransferLiteralToDevice(stream.get(), literal,
-                                                   shaped_buffer);
+                                                   ToShapedBuffer());
 }
-
-xla::StatusOr<bool> XRTTupleAllocation::SwapOut(xla::Backend* backend,
-                                                bool swap_pinned) {
-  mutex_lock lock(lock_);
-  if (literal_ == nullptr && (!IsPinned() || swap_pinned)) {
-    xla::Literal literal(on_host_shape());
-    TF_RETURN_IF_ERROR(StoreToLiteral(backend, &literal));
-    ReleaseBuffers();
-    literal_ = absl::make_unique<xla::Literal>(std::move(literal));
-    return true;
-  }
-  return false;
-}
-
-xla::StatusOr<bool> XRTTupleAllocation::SwapIn(XRTMemoryManager* memory_manager,
-                                               xla::Backend* backend) {
-  // We need to call AllocateScopedShapedBuffer() outside the locks, since the
-  // XRTMemoryManager might end up calling back into the SwapOut() API.
-  // So we do a quick check before using the IsSwapped() API, and it can happen
-  // that the allocation becomes swapped in after the check. This means which we
-  // will end up doing an allocation, and then releasing it soon after (via its
-  // scoped variables). This is an unlikely scenario (two threads calling
-  // SwapIn() on the same allocation) though.
-  if (!IsSwapped()) {
-    return false;
-  }
-
-  auto transfer_manager = backend->transfer_manager();
-  std::unique_ptr<xla::ScopedShapedBuffer> scoped_buffer;
-  TF_RETURN_IF_ERROR(
-      AllocateScopedShapedBuffer(memory_manager, backend, device_ordinal(),
-                                 on_host_shape(), &scoped_buffer));
-  TF_ASSIGN_OR_RETURN(auto stream, backend->BorrowStream(device_ordinal()));
-
-  mutex_lock lock(lock_);
-  if (literal_ != nullptr) {
-    TF_RETURN_IF_ERROR(transfer_manager->TransferLiteralToDevice(
-        stream.get(), *literal_, *scoped_buffer));
-
-    auto shaped_buffer = scoped_buffer->release();
-    InitializeFromShapedBuffer(shaped_buffer, backend->memory_allocator(),
-                               device_ordinal());
-    literal_ = nullptr;
-    return true;
-  }
-  return false;
-}
-
-xla::StatusOr<bool> XRTTupleAllocation::PinAndSwapIn(
-    XRTMemoryManager* memory_manager, xla::Backend* backend) {
-  Pin();
-  return SwapIn(memory_manager, backend);
-}
-
-bool XRTTupleAllocation::IsSwapped() const {
-  mutex_lock lock(lock_);
-  return literal_ != nullptr;
-}
-
-int64 XRTTupleAllocation::Pin() { return pin_count_.fetch_add(1); }
-
-int64 XRTTupleAllocation::Unpin() { return pin_count_.fetch_sub(1); }
-
-bool XRTTupleAllocation::IsPinned() const { return pin_count_ != 0; }
 
 void XRTTupleAllocation::DiscardAllocation(
     const xla::ShapeIndex& buffer_index) {
   buffers_.element(buffer_index)->DiscardAllocation();
 }
 
-const xla::Shape& XRTTupleAllocation::on_host_shape() const {
-  return on_host_shape_;
-}
+const xla::Shape& XRTTupleAllocation::on_host_shape() { return on_host_shape_; }
 
-const xla::Shape& XRTTupleAllocation::on_device_shape() const {
+const xla::Shape& XRTTupleAllocation::on_device_shape() {
   return on_device_shape_;
 }
 
-int XRTTupleAllocation::device_ordinal() const { return device_ordinal_; }
+int XRTTupleAllocation::device_ordinal() { return device_ordinal_; }
 
-const se::DeviceMemoryBase& XRTTupleAllocation::root_allocation() const {
+const se::DeviceMemoryBase& XRTTupleAllocation::root_allocation() {
   return buffers_.element({})->allocation();
 }
+
+/*static*/ Status XRTTupleAllocation::Lookup(ResourceMgr* rm, int64 key,
+                                             XRTTupleAllocation** allocation) {
+  string key_string = absl::StrCat(key);
+  TF_RETURN_IF_ERROR(rm->Lookup(kTupleContainer, key_string, allocation));
+  return Status::OK();
+}
+
+/*static*/ Status XRTTupleAllocation::DeleteFromResourceManager(ResourceMgr* rm,
+                                                                int64 key) {
+  string key_string = absl::StrCat(key);
+  return rm->Delete<XRTTupleAllocation>(kTupleContainer, key_string);
+}
+
+/* static */ Status XRTTupleAllocation::ReleaseAllAllocations(ResourceMgr* rm) {
+  VLOG(1) << "Releasing all XRT held device memory";
+  return rm->Cleanup(kTupleContainer);
+}
+
+// Helper typedef to make ShapeTree ForEach helper lambda signatures more
+// readable. They need a type of const T& where in this case T is the
+// following pointer.
+typedef XRTBufferAllocation* XRTBufferAllocationPtr;
 
 /*static*/ Status XRTTupleAllocation::MakeSubBuffer(
     XRTTupleAllocation* parent, const xla::ShapeIndex& subshape,
@@ -385,26 +326,19 @@ const se::DeviceMemoryBase& XRTTupleAllocation::root_allocation() const {
                 parent_index.push_back(index[i]);
               }
               *buffer = parent->buffers_.element(parent_index);
-              *parent->buffers_.mutable_element(parent_index) = nullptr;
+              *parent->buffers_.mutable_element(parent_index) =
+                  new XRTBufferAllocation(se::DeviceMemoryBase(),
+                                          parent->device_ordinal(),
+                                          parent->allocator_);
             });
   }
-  (*allocation)->SetDeviceMemorySize();
-  return Status::OK();
-}
 
-void XRTTupleAllocation::SetDeviceMemorySize() {
-  size_t size = 0;
-  for (auto& index_buffer : buffers_) {
-    if (index_buffer.second != nullptr) {
-      size += index_buffer.second->allocation().size();
-    }
-  }
-  device_memory_size_ = size;
+  return Status::OK();
 }
 
 /* static */ Status XRTTupleAllocation::ExpandTreeOfTuples(
     const xla::ShapeTree<ExpandedTupleInput>& elements, int device_ordinal,
-    se::DeviceMemoryAllocator* allocator, xla::Shape* host_shape,
+    xla::DeviceMemoryAllocator* allocator, xla::Shape* host_shape,
     xla::Shape* device_shape) {
   // Initialize both host and device shape to be the 'spine' of the new tuple
   // shape, given by the shape of the tree of tuples.
@@ -444,7 +378,7 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
 }
 
 /*static*/ Status XRTTupleAllocation::MakeTuple(
-    XRTMemoryManager* memory_manager, xla::Backend* backend, int device_ordinal,
+    xla::Backend* backend, int device_ordinal,
     const xla::ShapeTree<ExpandedTupleInput>& elements,
     XRTTupleAllocation** allocation) {
   auto transfer_manager = backend->transfer_manager();
@@ -459,8 +393,8 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
   // The aliasing is determined below based on whether or not all the inputs are
   // released while being transferred. allocation_tmp is a local pointer that is
   // copied to *allocation at the end only if the method succeeds.
-  XRTTupleAllocation* allocation_tmp = new XRTTupleAllocation(
-      device_ordinal, allocator, host_shape, device_shape);
+  auto allocation_tmp = new XRTTupleAllocation(device_ordinal, allocator,
+                                               host_shape, device_shape);
   core::ScopedUnref allocation_unref(allocation_tmp);
   // First allocate device memory for the new tuple index tables, one at each
   // internal node of the elements tree. Do this in a separate pass into a
@@ -474,13 +408,13 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
   TF_RETURN_IF_ERROR(elements.ForEachElementWithStatus(
       [&](const xla::ShapeIndex& index, const ExpandedTupleInput& element) {
         if (!elements.IsLeaf(index)) {
-          const xla::Shape& subshape =
+          xla::Shape subshape =
               xla::ShapeUtil::GetSubshape(device_shape, index);
           uint64 size = transfer_manager->GetByteSizeRequirement(subshape);
-          TF_ASSIGN_OR_RETURN(
-              se::OwningDeviceMemory buffer,
-              memory_manager->Allocate(backend, device_ordinal, size));
-          VLOG(2) << "Allocated buffer at " << buffer->opaque() << " index "
+          TF_ASSIGN_OR_RETURN(xla::OwningDeviceMemory buffer,
+                              allocator->Allocate(device_ordinal, size,
+                                                  /*retry_on_failure=*/false));
+          VLOG(2) << "Allocated buffer at " << buffer.opaque() << " index "
                   << index.ToString();
           // Move the new buffer into new_tuple_buffers, which takes ownership
           // of it.
@@ -517,8 +451,10 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
         // validated that release_allocation_after_use is false if
         // element.allocation appears in more than one leaf.
         element.allocation->buffers_.ForEachMutableElement(
-            [&](const xla::ShapeIndex&, XRTBufferAllocationPtr* buffer) {
-              *buffer = nullptr;
+            [&](const xla::ShapeIndex& index, XRTBufferAllocationPtr* buffer) {
+              *buffer = new XRTBufferAllocation(
+                  se::DeviceMemoryBase(), element.allocation->device_ordinal(),
+                  element.allocation->allocator_);
             });
       } else {
         // Increment the refcount on each newly-aliased buffer.
@@ -534,7 +470,6 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
                                   allocator);
     }
   });
-  allocation_tmp->SetDeviceMemorySize();
   // Because the internal nodes of tuple_buffers are exactly the new index
   // tables, WriteTupleIndexTables will write only the new index tables and not
   // rewrite the index tables for the existing allocations.
@@ -548,47 +483,36 @@ void XRTTupleAllocation::SetDeviceMemorySize() {
   return Status::OK();
 }
 
-bool XRTTupleAllocation::IsExclusiveOwner() const {
-  for (const auto& index_buffer : buffers_) {
-    if (index_buffer.second != nullptr &&
-        !index_buffer.second->RefCountIsOne()) {
-      return false;
-    }
+Status XRTTupleAllocation::Intern(ResourceMgr* rm, int64* key) {
+  *key = get_uid();
+  string key_string = absl::StrCat(*key);
+  return rm->Create(kTupleContainer, key_string, this);
+}
+
+bool XRTTupleAllocation::IsExclusiveOwner() {
+  for (const auto& buffer : buffers_) {
+    if (!buffer.second->RefCountIsOne()) return false;
   }
   return true;
 }
 
-size_t XRTTupleAllocation::GetDeviceMemorySize() const {
-  return device_memory_size_;
-}
-
 void XRTTupleAllocation::InitializeFromShapedBuffer(
     const xla::ShapedBuffer& shaped_buffer,
-    se::DeviceMemoryAllocator* allocator, int device_ordinal) {
-  for (auto& index_buffer : buffers_) {
-    if (index_buffer.second != nullptr) {
-      index_buffer.second->Unref();
-    }
+    xla::DeviceMemoryAllocator* allocator, int device_ordinal) {
+  for (auto& buffer : buffers_) {
     // Make a reference-counted version of the allocated buffer.
-    index_buffer.second = new XRTBufferAllocation(
-        shaped_buffer.buffer(index_buffer.first), device_ordinal, allocator);
+    buffer.second = new XRTBufferAllocation(shaped_buffer.buffer(buffer.first),
+                                            device_ordinal, allocator);
   }
 }
 
-xla::StatusOr<xla::ShapedBuffer> XRTTupleAllocation::ToShapedBuffer() {
+xla::ShapedBuffer XRTTupleAllocation::ToShapedBuffer() {
   xla::ShapedBuffer shaped_buffer(on_host_shape(), on_device_shape(),
                                   allocator_->platform(), device_ordinal_);
-  for (const auto& index_buffer : buffers_) {
-    if (index_buffer.second == nullptr ||
-        index_buffer.second->allocation().is_null()) {
-      return errors::InvalidArgument("Literal buffer at index ",
-                                     index_buffer.first.ToString(),
-                                     " has been released");
-    }
-    shaped_buffer.set_buffer(index_buffer.second->allocation(),
-                             index_buffer.first);
+  for (const auto& buffer : buffers_) {
+    shaped_buffer.set_buffer(buffer.second->allocation(), buffer.first);
   }
-  return std::move(shaped_buffer);
+  return shaped_buffer;
 }
 
 Status XRTTupleAllocation::AliasBufferFrom(const XRTTupleAllocation& source,
@@ -596,69 +520,37 @@ Status XRTTupleAllocation::AliasBufferFrom(const XRTTupleAllocation& source,
                                            const xla::ShapeIndex& dest_index) {
   XRTBufferAllocation* source_buffer = source.buffers_.element(source_index);
   XRTBufferAllocation* dest_buffer = buffers_.element(dest_index);
-  if (dest_buffer != nullptr) {
-    // We allow the destination size being zero, because there are cases where
-    // we are coming in later filling in null/uninitialized device buffers. In
-    // all other cases, the size of the new buffer must match.
-    if (source_buffer->allocation().size() !=
-            dest_buffer->allocation().size() &&
-        dest_buffer->allocation().size() != 0) {
-      return errors::InvalidArgument(
-          "Source buffer at index ", source_index.ToString(),
-          " does not match the size of destination buffer at index ",
-          dest_index.ToString(), ": ", source_buffer->allocation().size(),
-          " vs ", dest_buffer->allocation().size());
-    }
-  } else {
-    const xla::Shape& source_subshape =
-        xla::ShapeUtil::GetSubshape(source.on_device_shape(), source_index);
-    const xla::Shape& dest_subshape =
-        xla::ShapeUtil::GetSubshape(on_device_shape(), dest_index);
-    if (!xla::ShapeUtil::Equal(source_subshape, dest_subshape)) {
-      return errors::InvalidArgument(
-          "Source and destination subshapes do not match: source=",
-          xla::ShapeUtil::HumanStringWithLayout(source_subshape),
-          " dest=", xla::ShapeUtil::HumanStringWithLayout(dest_subshape));
-    }
+  // We allow the destination size being zero, because there are cases where we
+  // are coming in later filling in null/uninitialized device buffers.
+  // In all other cases, the size of the new buffer must match.
+  if (source_buffer->size() != dest_buffer->size() &&
+      dest_buffer->size() != 0) {
+    return errors::InvalidArgument(
+        "Source buffer at index ", source_index.ToString(),
+        " does not match the size of destination buffer at index ",
+        dest_index.ToString(), ": ", source_buffer->size(), " vs ",
+        dest_buffer->size());
   }
   *buffers_.mutable_element(dest_index) = source_buffer;
   source_buffer->Ref();
-  if (dest_buffer != nullptr) {
-    // If we handed over the ownership of a buffer in ToDeviceMemoryTree(), we
-    // will be called here on the way back from execution, to alias back the
-    // buffer at that index. In that case the buffers will be the same. So we
-    // need to discard the memory at the destination buffer, before releasing
-    // the reference.
-    if (dest_buffer->allocation().IsSameAs(source_buffer->allocation()) &&
-        dest_buffer != source_buffer) {
-      dest_buffer->DiscardAllocation();
-    }
-    dest_buffer->Unref();
-  }
+  dest_buffer->Unref();
   return Status::OK();
 }
 
-xla::StatusOr<xla::ShapeTree<xla::MaybeOwningDeviceMemory>>
+xla::ShapeTree<xla::MaybeOwningDeviceMemory>
 XRTTupleAllocation::ToDeviceMemoryTree(
     const std::function<bool(const xla::ShapeIndex&)>& release_checker) {
   xla::ShapeTree<xla::MaybeOwningDeviceMemory> shaped_tree(on_device_shape());
-  for (const auto& index_buffer : buffers_) {
-    if (index_buffer.second == nullptr ||
-        index_buffer.second->allocation().is_null()) {
-      return errors::InvalidArgument("Literal buffer at index ",
-                                     index_buffer.first.ToString(),
-                                     " has been released");
-    }
-    if (!release_checker(index_buffer.first)) {
-      *shaped_tree.mutable_element(index_buffer.first) =
-          index_buffer.second->allocation();
+  for (const auto& buffer : buffers_) {
+    if (!release_checker(buffer.first)) {
+      *shaped_tree.mutable_element(buffer.first) = buffer.second->allocation();
     } else {
-      // We keep the ownership of the device memory here.
-      *shaped_tree.mutable_element(index_buffer.first) = se::OwningDeviceMemory(
-          index_buffer.second->allocation(), device_ordinal_, allocator_);
+      *shaped_tree.mutable_element(buffer.first) = xla::OwningDeviceMemory(
+          buffer.second->allocation(), device_ordinal_, allocator_);
+      DiscardAllocation(buffer.first);
     }
   }
-  return std::move(shaped_tree);
+  return shaped_tree;
 }
 
 }  // namespace tensorflow

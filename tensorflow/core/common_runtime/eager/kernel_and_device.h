@@ -50,7 +50,7 @@ class FunctionLibraryRuntime;
 // https://www.tensorflow.org/code/tensorflow/core/common_runtime/kernel_benchmark_testlib.h
 // and
 // https://www.tensorflow.org/code/tensorflow/core/kernels/ops_testutil.h
-class KernelAndDevice : public core::RefCounted {
+class KernelAndDevice {
  public:
   // Populates this with a kernel appropriate for 'ndef'.
   //
@@ -70,8 +70,9 @@ class KernelAndDevice : public core::RefCounted {
       : device_(flr == nullptr ? nullptr : flr->device()),
         host_cpu_device_(host_cpu_device),
         flr_(flr),
-        collective_executor_(std::move(collective_executor)),
-        runner_(runner) {}
+        runner_(runner),
+        default_runner_([](std::function<void()> f) { f(); }),
+        collective_executor_(std::move(collective_executor)) {}
 
   // Not thread safe.
   virtual ~KernelAndDevice() {}
@@ -79,14 +80,14 @@ class KernelAndDevice : public core::RefCounted {
   // TODO(ashankar): Handle list-valued inputs.
   virtual Status Run(const gtl::InlinedVector<TensorValue, 4>& inputs,
                      std::vector<Tensor>* outputs, NodeExecStats* stats,
-                     StepStats* step_stats, GraphCollector* graph_collector,
-                     CancellationManager* cancellation_manager) = 0;
+                     StepStats* step_stats,
+                     GraphCollector* graph_collector) = 0;
 
   virtual Status Run(ScopedStepContainer* step_container,
                      const gtl::InlinedVector<TensorValue, 4>& inputs,
                      std::vector<Tensor>* outputs, NodeExecStats* stats,
-                     StepStats* step_stats, GraphCollector* graph_collector,
-                     CancellationManager* cancellation_manager) = 0;
+                     StepStats* step_stats,
+                     GraphCollector* graph_collector) = 0;
 
   virtual Device* InputDevice(int i) const = 0;
   virtual Device* OutputDevice(int idx) const = 0;
@@ -110,18 +111,19 @@ class KernelAndDevice : public core::RefCounted {
   virtual DataType input_type(int i) const = 0;
   virtual int num_inputs() const = 0;
   virtual int num_outputs() const = 0;
-  virtual const string& name() const = 0;
 
  protected:
-  std::function<void(std::function<void()>)>* get_runner() const;
-
+  // TODO(apassos) Consider a shared cancellation manager. Note that this
+  // cancellation manager is not useful to actually cancel anything, and is
+  // provided here only for the few kernels which can't handle one being
+  // missing.
+  CancellationManager cm_;
   Device* const device_;               // can be null
   Device* const host_cpu_device_;      // non-null
   FunctionLibraryRuntime* const flr_;  // can be null
+  std::function<void(std::function<void()>)>* const runner_;
+  std::function<void(std::function<void()>)> default_runner_;
   const std::unique_ptr<CollectiveExecutor::Handle> collective_executor_;
-
- private:
-  std::function<void(std::function<void()>)>* const runner_;  // can be null
 };
 
 // Represents an op kernel and the device it will be run on.
@@ -138,20 +140,18 @@ class KernelAndDeviceOp final : public KernelAndDevice {
         rendez_(rendez),
         log_memory_(log_memory) {}
 
-  ~KernelAndDeviceOp() override {}
+  virtual ~KernelAndDeviceOp();
 
   Status Init(const NodeDef& ndef, GraphCollector* graph_collector) override;
 
   Status Run(const gtl::InlinedVector<TensorValue, 4>& inputs,
              std::vector<Tensor>* outputs, NodeExecStats* stats,
-             StepStats* step_stats, GraphCollector* graph_collector,
-             CancellationManager* cancellation_manager) override;
+             StepStats* step_stats, GraphCollector* graph_collector) override;
 
   Status Run(ScopedStepContainer* step_container,
              const gtl::InlinedVector<TensorValue, 4>& inputs,
              std::vector<Tensor>* outputs, NodeExecStats* stats,
-             StepStats* step_stats, GraphCollector* graph_collector,
-             CancellationManager* cancellation_manager) override;
+             StepStats* step_stats, GraphCollector* graph_collector) override;
 
   const OpKernel* kernel() const override { return kernel_.get(); }
 
@@ -165,13 +165,21 @@ class KernelAndDeviceOp final : public KernelAndDevice {
   }
   int num_inputs() const override { return kernel_->num_inputs(); }
   int num_outputs() const override { return kernel_->num_outputs(); }
-  const string& name() const override { return kernel_->name(); }
 
  private:
   std::unique_ptr<OpKernel> kernel_;
   Rendezvous* const rendez_;
   checkpoint::TensorSliceReaderCacheWrapper slice_reader_cache_;
   const bool log_memory_;
+
+  // For deferred ops, AsyncOpKernel::DoneCallback is called once the op is
+  // enqueued to device. The execution of the op may not finish when
+  // device_->Compute returns. We rely on no_deferred_ops_cv_ to know when the
+  // execution has finished.
+  // Available via OpKernelContext to every OpKernel invocation.
+  mutex num_deferred_ops_mu_;
+  condition_variable no_deferred_ops_cv_;
+  int64 num_deferred_ops_ GUARDED_BY(num_deferred_ops_mu_) = 0;
 };
 
 // Represents a multi-device function. Functions can also be run using
@@ -185,23 +193,14 @@ class KernelAndDeviceFunc final : public KernelAndDevice {
   KernelAndDeviceFunc(
       FunctionLibraryRuntime* flr, ProcessFunctionLibraryRuntime* pflr,
       std::vector<Device*> input_devices,
-      std::unordered_map<int, TensorShape> input_tensor_shapes,
-      std::unordered_map<int, DtypeAndPartialTensorShape>
-          input_resource_dtypes_and_shapes,
       std::function<void(std::function<void()>)>* runner,
       std::unique_ptr<CollectiveExecutor::Handle> collective_executor,
-      Device* host_cpu_device, const string& name,
-      std::function<Rendezvous*(const int64)> rendezvous_creator)
+      Device* host_cpu_device)
       : KernelAndDevice(flr, runner, std::move(collective_executor),
                         host_cpu_device),
         pflr_(pflr),
         handle_(kInvalidHandle),
-        input_devices_(std::move(input_devices)),
-        input_tensor_shapes_(std::move(input_tensor_shapes)),
-        input_resource_dtypes_and_shapes_(
-            std::move(input_resource_dtypes_and_shapes)),
-        name_(name),
-        rendezvous_creator_(std::move(rendezvous_creator)) {}
+        input_devices_(std::move(input_devices)) {}
 
   virtual ~KernelAndDeviceFunc();
 
@@ -209,13 +208,11 @@ class KernelAndDeviceFunc final : public KernelAndDevice {
 
   Status Run(const gtl::InlinedVector<TensorValue, 4>& inputs,
              std::vector<Tensor>* outputs, NodeExecStats* stats,
-             StepStats* step_stats, GraphCollector* graph_collector,
-             CancellationManager* cancellation_manager) override;
+             StepStats* step_stats, GraphCollector* graph_collector) override;
   Status Run(ScopedStepContainer* step_container,
              const gtl::InlinedVector<TensorValue, 4>& inputs,
              std::vector<Tensor>* outputs, NodeExecStats* stats,
-             StepStats* step_stats, GraphCollector* graph_collector,
-             CancellationManager* cancellation_manager) override;
+             StepStats* step_stats, GraphCollector* graph_collector) override;
 
   const OpKernel* kernel() const override { return nullptr; }
 
@@ -229,7 +226,6 @@ class KernelAndDeviceFunc final : public KernelAndDevice {
   }
   int num_inputs() const override { return input_dtypes_.size(); }
   int num_outputs() const override { return output_dtypes_.size(); }
-  const string& name() const override { return name_; };
 
  private:
   ProcessFunctionLibraryRuntime* const pflr_;  // non-null
@@ -240,15 +236,9 @@ class KernelAndDeviceFunc final : public KernelAndDevice {
   // CPU devices are not null. Resource handles' devices are actual backing
   // devices.
   std::vector<Device*> input_devices_;
-  std::unordered_map<int, TensorShape> input_tensor_shapes_;
-  std::unordered_map<int, DtypeAndPartialTensorShape>
-      input_resource_dtypes_and_shapes_;
 
   DataTypeVector input_dtypes_;
   DataTypeVector output_dtypes_;
-  string name_;
-
-  std::function<Rendezvous*(const int64)> rendezvous_creator_;
 };
 
 }  // namespace tensorflow

@@ -42,10 +42,7 @@ Status TryToInferTensorOutputFromInputShapes(const Edge& edge,
   const Node* node = edge.src();
   InferenceContext* c = refiner.GetContext(node);
   if (c == nullptr) {
-    // An input without context is a soft failure; we sometimes need to break
-    // control flow loops by running shape inference on a node without first
-    // adding its input.
-    return Status::OK();
+    return errors::FailedPrecondition("Node does not have context.");
   }
 
   if (node->type_string() == "Shape") {

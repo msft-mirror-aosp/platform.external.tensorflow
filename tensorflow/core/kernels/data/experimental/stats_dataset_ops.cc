@@ -20,7 +20,6 @@ limitations under the License.
 
 namespace tensorflow {
 namespace data {
-namespace experimental {
 namespace {
 
 // This op defines a `Dataset` that passes through its input elements and
@@ -78,10 +77,6 @@ class LatencyStatsDatasetOp : public UnaryDatasetOpKernel {
 
     int64 Cardinality() const override { return input_->Cardinality(); }
 
-    Status CheckExternalState() const override {
-      return input_->CheckExternalState();
-    }
-
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
                               DatasetGraphDefBuilder* b,
@@ -113,9 +108,8 @@ class LatencyStatsDatasetOp : public UnaryDatasetOpKernel {
         uint64 end = ctx->env()->NowMicros();
         auto stats_aggregator = ctx->stats_aggregator();
         if (stats_aggregator && !*end_of_sequence) {
-          int64 steps = num_elements();
-          stats_aggregator->AddToHistogram(
-              dataset()->tag_, {static_cast<double>(end - start)}, steps);
+          ctx->stats_aggregator()->AddToHistogram(
+              dataset()->tag_, {static_cast<double>(end - start)});
         }
         return s;
       }
@@ -193,10 +187,6 @@ class BytesProducedStatsDatasetOp : public UnaryDatasetOpKernel {
 
     int64 Cardinality() const override { return input_->Cardinality(); }
 
-    Status CheckExternalState() const override {
-      return input_->CheckExternalState();
-    }
-
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
                               DatasetGraphDefBuilder* b,
@@ -230,9 +220,8 @@ class BytesProducedStatsDatasetOp : public UnaryDatasetOpKernel {
           for (const Tensor& t : *out_tensors) {
             total_bytes += t.TotalBytes();
           }
-          int64 steps = num_elements();
-          stats_aggregator->AddToHistogram(
-              dataset()->tag_, {static_cast<double>(total_bytes)}, steps);
+          ctx->stats_aggregator()->AddToHistogram(
+              dataset()->tag_, {static_cast<double>(total_bytes)});
         }
         return s;
       }
@@ -267,19 +256,13 @@ class BytesProducedStatsDatasetOp : public UnaryDatasetOpKernel {
   };
 };
 
-REGISTER_KERNEL_BUILDER(Name("BytesProducedStatsDataset").Device(DEVICE_CPU),
-                        BytesProducedStatsDatasetOp);
+REGISTER_KERNEL_BUILDER(
+    Name("ExperimentalLatencyStatsDataset").Device(DEVICE_CPU),
+    LatencyStatsDatasetOp);
 REGISTER_KERNEL_BUILDER(
     Name("ExperimentalBytesProducedStatsDataset").Device(DEVICE_CPU),
     BytesProducedStatsDatasetOp);
 
-REGISTER_KERNEL_BUILDER(Name("LatencyStatsDataset").Device(DEVICE_CPU),
-                        LatencyStatsDatasetOp);
-REGISTER_KERNEL_BUILDER(
-    Name("ExperimentalLatencyStatsDataset").Device(DEVICE_CPU),
-    LatencyStatsDatasetOp);
-
 }  // namespace
-}  // namespace experimental
 }  // namespace data
 }  // namespace tensorflow

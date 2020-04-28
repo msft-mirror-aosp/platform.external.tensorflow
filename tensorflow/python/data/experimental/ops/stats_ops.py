@@ -30,7 +30,7 @@ def set_stats_aggregator(stats_aggregator, prefix="", counter_prefix=""):
   """Set the given `stats_aggregator` for aggregating the input dataset stats.
 
   Args:
-    stats_aggregator: A `tf.data.experimental.StatsAggregator` object.
+    stats_aggregator: A `tf.contrib.data.StatsAggregator` object.
     prefix: (Optional) String, all statistics recorded for the input `dataset`
       will have given `prefix` prepend with the name.
     counter_prefix: (Optional) String, all statistics recorded as `counters`
@@ -66,7 +66,9 @@ def bytes_produced_stats(tag):
 
   def _apply_fn(dataset):
     return _StatsDataset(
-        dataset, gen_experimental_dataset_ops.bytes_produced_stats_dataset, tag)
+        dataset,
+        gen_experimental_dataset_ops.experimental_bytes_produced_stats_dataset,
+        tag)
 
   return _apply_fn
 
@@ -89,7 +91,8 @@ def latency_stats(tag):
 
   def _apply_fn(dataset):
     return _StatsDataset(
-        dataset, gen_experimental_dataset_ops.latency_stats_dataset, tag)
+        dataset,
+        gen_experimental_dataset_ops.experimental_latency_stats_dataset, tag)
 
   return _apply_fn
 
@@ -104,5 +107,5 @@ class _StatsDataset(dataset_ops.UnaryUnchangedStructureDataset):
     variant_tensor = self._op_function(
         self._input_dataset._variant_tensor,  # pylint: disable=protected-access
         self._tag,
-        **self._flat_structure)
+        **dataset_ops.flat_structure(self))
     super(_StatsDataset, self).__init__(input_dataset, variant_tensor)

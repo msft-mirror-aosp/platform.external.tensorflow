@@ -95,7 +95,7 @@ class ZeroVarInitializer : public OpKernel {
   }
 
   void Compute(OpKernelContext* ctx) override {
-    core::RefCountPtr<Var> variable;
+    Var* variable = nullptr;
     OP_REQUIRES_OK(ctx, LookupOrCreateResource<Var>(
                             ctx, HandleFromInput(ctx, 0), &variable,
                             [this, ctx](Var** var_ptr) {
@@ -117,6 +117,7 @@ class ZeroVarInitializer : public OpKernel {
                               return Status::OK();
                             }));
 
+    core::ScopedUnref scoped(variable);
     mutex_lock ml(*variable->mu());
 
     OP_REQUIRES(ctx, !variable->is_initialized,

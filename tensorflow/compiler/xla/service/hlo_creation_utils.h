@@ -103,10 +103,6 @@ StatusOr<HloInstruction*> MakeGetTupleElementHlo(HloInstruction* operand,
 StatusOr<HloInstruction*> MakeConcatHlo(
     absl::Span<HloInstruction* const> operands, int64 dimension);
 
-// Creates a Convert HLO instruction that converts the given instruction to have
-// the given primitive type.
-HloInstruction* MakeConvertToHlo(HloInstruction* hlo, PrimitiveType type);
-
 // Creates a Dot HLO instruction and adds it to the computation containing `lhs`
 // and `rhs` (both must be in the same computation).
 StatusOr<HloInstruction*> MakeDotHlo(HloInstruction* lhs, HloInstruction* rhs,
@@ -128,12 +124,10 @@ StatusOr<HloInstruction*> MakeReduceHlo(HloInstruction* operand,
 
 // Creates a Select HLO instruction and adds it to the computation containing
 // the predicate. The on_true and on_false instructions must also be contained
-// in the same computation. If on_true and on_false are tuples, create a tuple
-// select instead. `pred` is broadcasted up from a scalar if necessary.
+// in the same computation.
 StatusOr<HloInstruction*> MakeSelectHlo(HloInstruction* pred,
                                         HloInstruction* on_true,
-                                        HloInstruction* on_false,
-                                        HloInstruction* derived_from = nullptr);
+                                        HloInstruction* on_false);
 
 // Creates a Sort HLO instruction and adds it to the computation containing the
 // operands. All operands must be in the same computation. Also creates a
@@ -156,14 +150,6 @@ StatusOr<HloInstruction*> MakeR1ConstantHlo(HloComputation* computation,
   }
   return computation->AddInstruction(
       HloInstruction::CreateConstant(std::move(literal)));
-}
-
-// Creates an R0 Constant HLO instruction of the PrimitiveType corresponding to
-// `NativeT` with the given value and adds it to the given computation.
-template <class NativeT>
-HloInstruction* MakeR0ConstantHlo(HloComputation* computation, NativeT value) {
-  return computation->AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<NativeT>(value)));
 }
 
 // -----------------------------------------------------------------------------

@@ -23,14 +23,13 @@ limitations under the License.
 #include <vector>
 
 #include "absl/base/macros.h"
-#include "absl/synchronization/mutex.h"
 #include "absl/types/optional.h"
-#include "tensorflow/stream_executor/device_memory_allocator.h"
 #include "tensorflow/stream_executor/lib/status.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
 #include "tensorflow/stream_executor/lib/threadpool.h"
 #include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/platform/logging.h"
+#include "tensorflow/stream_executor/platform/mutex.h"
 #include "tensorflow/stream_executor/platform/port.h"
 #include "tensorflow/stream_executor/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/rng.h"
@@ -71,15 +70,17 @@ class ScopedTracer;
 // StreamExecutor interface should not be invoked from a signal handler.
 class StreamExecutor {
  public:
+  explicit StreamExecutor(PlatformKind kind,
+                          const PluginConfig &plugin_config = PluginConfig());
+
   StreamExecutor(
       const Platform *platform,
-      std::unique_ptr<internal::StreamExecutorInterface> implementation,
-      int device_ordinal);
+      std::unique_ptr<internal::StreamExecutorInterface> implementation);
 
   ~StreamExecutor();
 
   port::Status Init();
-  port::Status Init(DeviceOptions device_options);
+  port::Status Init(int device_ordinal, DeviceOptions device_options);
 
   // Returns the platform that this StreamExecutor is acting upon.
   ABSL_DEPRECATED("Use platform() instead.")
@@ -100,8 +101,8 @@ class StreamExecutor {
   //    instantiation should not be loaded into more than once.
   //
   // If an error occurs, or there is no kernel available for the StreamExecutor
-  // platform, error status is returned.
-  port::Status GetKernel(const MultiKernelLoaderSpec &spec, KernelBase *kernel);
+  // platform, false is returned.
+  bool GetKernel(const MultiKernelLoaderSpec &spec, KernelBase *kernel);
 
   // Releases any state associated with the previously loaded kernel.
   void UnloadKernel(const KernelBase *kernel);
@@ -109,10 +110,9 @@ class StreamExecutor {
   // Loads a module for the platform this StreamExecutor is acting upon.
   //
   // `spec` describes the module to be loaded.  On success writes the handle for
-  // the loaded module to `module_handle` and returns Status::OK.
-  // Otherwise, returns the error which has occurred.
-  port::Status LoadModule(const MultiModuleLoaderSpec &spec,
-                          ModuleHandle *module_handle);
+  // the loaded module to `module_handle` and returns true.  Else returns false.
+  bool LoadModule(const MultiModuleLoaderSpec &spec,
+                  ModuleHandle *module_handle);
 
   // Unloads the module with handle `module_handle`.
   bool UnloadModule(ModuleHandle module_handle);
@@ -161,8 +161,18 @@ class StreamExecutor {
   //    sub-buffer after parent deallocation is expected to be safe. This will
   //    render your code non-platform-portable, however.
   template <typename T>
-  DeviceMemory<T> GetSubBuffer(DeviceMemory<T> *parent, uint64 element_offset,
-                               uint64 element_count);
+  DeviceMemory<T> AllocateSubBuffer(DeviceMemory<T> *parent,
+                                    uint64 element_offset,
+                                    uint64 element_count);
+
+  // As AllocateSubBuffer(), but returns a ScopedDeviceMemory<T>.
+  template <typename T>
+  ScopedDeviceMemory<T> AllocateOwnedSubBuffer(DeviceMemory<T> *parent,
+                                               uint64 element_offset,
+                                               uint64 element_count) {
+    return ScopedDeviceMemory<T>(
+        this, AllocateSubBuffer<T>(parent, element_offset, element_count));
+  }
 
   // Finds a symbol and returns device memory allocated to the symbol. The
   // symbol is searched in any kernels that were previously loaded through
@@ -186,6 +196,9 @@ class StreamExecutor {
   //
   // Resets the internal contents of mem to be null-representative, but this
   // null-out effect should not be relied upon in client code.
+  //
+  // TODO(jlebar): Change this to accept a DeviceMemoryBase by value, see
+  // discussion in cl/195744342.
   void Deallocate(DeviceMemoryBase *mem);
 
   // Retrieves a mapping of active opaque device memory pointer to a string
@@ -210,7 +223,7 @@ class StreamExecutor {
   // Memory allocated in this manner (or allocated and registered with
   // HostMemoryRegister() is required for use in asynchronous memcpy operations,
   // such as Stream::ThenMemcpy.
-  void *HostMemoryAllocate(uint64 size);
+  void *HostMemoryAllocate(uint64 bytes);
 
   // Deallocates a region of host memory allocated by HostMemoryAllocate().
   void HostMemoryDeallocate(void *location);
@@ -392,12 +405,11 @@ class StreamExecutor {
   // Create an RNN descriptor based on model shapes and configurations.
   // The caller retains the ownership of the descriptor.
   port::StatusOr<std::unique_ptr<dnn::RnnDescriptor>> createRnnDescriptor(
-      int num_layers, int hidden_size, int input_size, int cell_size,
-      int batch_size, dnn::RnnInputMode input_mode,
-      dnn::RnnDirectionMode direction_mode, dnn::RnnMode rnn_mode,
-      dnn::DataType data_type, const dnn::AlgorithmConfig &algorithm_config,
-      float dropout, uint64 seed, ScratchAllocator *state_allocator,
-      bool use_padded_io);
+      int num_layers, int hidden_size, int input_size, int batch_size,
+      dnn::RnnInputMode input_mode, dnn::RnnDirectionMode direction_mode,
+      dnn::RnnMode rnn_mode, dnn::DataType data_type,
+      const dnn::AlgorithmConfig &algorithm_config, float dropout, uint64 seed,
+      ScratchAllocator *state_allocator);
 
   // Create a RNN sequence descriptor that specifies either the input or output
   // sequence. The caller retains the ownership of the returned descriptor.
@@ -424,19 +436,6 @@ class StreamExecutor {
   // Returns a borrowed pointer to the underlying StreamExecutor implementation.
   internal::StreamExecutorInterface *implementation();
 
-  // Creates a kernel which can be launched with stream.ThenLaunch, such that
-  // the types of the arguments provided for launch would have to match
-  // types of the arguments provided at creation time.
-  //
-  // The kernel has a name kernel_name, and is based from provided PTX in ptx,
-  // and (optional) compiled PTX in cubin_data.
-  // The canonical storage for both ptx and cubin_data should outlive the
-  // lifetime of the kernel.
-  template <typename... Args>
-  port::StatusOr<std::unique_ptr<TypedKernel<Args...>>> CreateTypedKernel(
-      absl::string_view kernel_name, absl::string_view ptx,
-      absl::Span<const uint8> cubin_data);
-
   // Warning: use Stream::ThenLaunch instead, this method is not for general
   // consumption. However, this is the only way to launch a kernel for which
   // the type signature is only known at runtime; say, if an application
@@ -450,9 +449,9 @@ class StreamExecutor {
   //
   // This is called by Stream::Launch() to delegate to the platform's launch
   // implementation in StreamExecutorInterface::Launch().
-  port::Status Launch(Stream *stream, const ThreadDim &thread_dims,
-                      const BlockDim &block_dims, const KernelBase &kernel,
-                      const KernelArgsArrayBase &args);
+  bool Launch(Stream *stream, const ThreadDim &thread_dims,
+              const BlockDim &block_dims, const KernelBase &kernel,
+              const KernelArgsArrayBase &args);
 
   // Gets-or-creates (creates with memoization) a FftSupport datatype that can
   // be used to execute FFT routines on the current platform.
@@ -472,19 +471,6 @@ class StreamExecutor {
   // underlying platform.
   dnn::DnnSupport *AsDnn();
 
-  // Gets-or-creates (creates with memoization) a BlasSupport datatype that can
-  // be used to execute BLAS routines on the current platform. This is typically
-  // not user-facing, as users will use the Stream::ThenBlas* family of routines
-  // to entrain BLAS operations. See blas.h for additional details.
-  //
-  // Ownership is not transferred to the caller -- ownership is retained by this
-  // object for memoization. This BLAS interface is also only expected to be
-  // used by a Stream for entraining calls to BLAS functionality.
-  //
-  // Returns null if there was an error initializing the BLAS support for the
-  // underlying platform.
-  blas::BlasSupport *AsBlas();
-
   // Turns StreamExecutor operation tracing on or off.
   void EnableTracing(bool enable);
 
@@ -503,10 +489,6 @@ class StreamExecutor {
   // Return allocator statistics.
   absl::optional<AllocatorStats> GetAllocatorStats();
 
-  // Return an allocator which delegates to this stream executor for memory
-  // allocation.
-  StreamExecutorMemoryAllocator *GetAllocator() { return &allocator_; }
-
  private:
   template <typename BeginCallT, typename CompleteCallT,
             typename ReturnT, typename... BeginArgsT>
@@ -519,10 +501,18 @@ class StreamExecutor {
   template <typename... Args>
   friend struct ThenBlasImpl;
 
-  // Synchronously allocates size bytes on the underlying platform and returns
-  // an opaque void* representing that allocation. In the case of failure,
-  // nullptr is returned.
-  void *Allocate(uint64 size);
+  // Gets-or-creates (creates with memoization) a BlasSupport datatype that can
+  // be used to execute BLAS routines on the current platform. This is typically
+  // not user-facing, as users will use the Stream::ThenBlas* family of routines
+  // to entrain BLAS operations. See blas.h for additional details.
+  //
+  // Ownership is not transferred to the caller -- ownership is retained by this
+  // object for memoization. This BLAS interface is also only expected to be
+  // used by a Stream for entraining calls to BLAS functionality.
+  //
+  // Returns null if there was an error initializing the BLAS support for the
+  // underlying platform.
+  blas::BlasSupport *AsBlas();
 
   // Gets-or-creates (creates with memoization) an RngSupport datatype that can
   // be used for random-number-generation routines on the current platform.
@@ -540,6 +530,11 @@ class StreamExecutor {
 
   // Without blocking the device, retrieve the current stream status.
   port::Status GetStatus(Stream *stream);
+
+  // Synchronously allocates size bytes on the underlying platform and returns
+  // an opaque void* representing that allocation. In the case of failure,
+  // nullptr is returned.
+  void *Allocate(uint64 size);
 
   // Finds and retrieves device memory for the symbol on the underlying
   // platform.
@@ -587,23 +582,23 @@ class StreamExecutor {
   // Requests the current status of the event from the underlying platform.
   Event::Status PollForEventStatus(Event *event);
 
-  // Allocates stream resources on the underlying platform and initializes its
-  // internals.
-  bool AllocateStream(Stream *stream);
+  // Allocates stream resources on the underlying platform for subject and
+  // initializes its internals.
+  bool AllocateStream(Stream *subject);
 
   // Deallocates stream resources on the underlying platform.
-  void DeallocateStream(Stream *stream);
+  void DeallocateStream(Stream *subject);
 
   // Causes dependent to not begin execution until other has finished its
   // last-enqueued work.
   bool CreateStreamDependency(Stream *dependent, Stream *other);
 
-  // Allocates timer resources on the underlying platform and initializes its
-  // internals.
-  bool AllocateTimer(Timer *timer);
+  // Allocates timer resources on the underlying platform for subject and
+  // initializes its internals.
+  bool AllocateTimer(Timer *subject);
 
   // Deallocates timer resources on the underlying platform.
-  void DeallocateTimer(Timer *timer);
+  void DeallocateTimer(Timer *subject);
 
   // Records a start event for an interval timer.
   bool StartTimer(Stream *stream, Timer *timer);
@@ -613,7 +608,7 @@ class StreamExecutor {
 
   // Allocates a new metadata object, appropriately populated, on the heap, with
   // ownership transfer to caller.
-  std::unique_ptr<DeviceDescription> CreateDeviceDescription() const;
+  DeviceDescription *PopulateDeviceDescription() const;
 
   // Adds a task to the port::ThreadPool work queue. These tasks must be
   // fire-and-forget and have no external data or timing dependencies; their
@@ -625,7 +620,7 @@ class StreamExecutor {
   // Adds an AllocRecord for 'opaque' of size 'bytes' to the record map, for
   // leak checking. NULL buffer pointers and buffer sizes of 0 will not be
   // tracked.
-  void CreateAllocRecord(void *opaque, uint64 bytes);
+  void CreateAllocRecord(void *opaque, uint64 size);
 
   // Removes the AllocRecord keyed by 'opaque' from the record map. NULL
   // pointers will not be erased (as they're not tracked, per above).
@@ -637,13 +632,13 @@ class StreamExecutor {
   void SubmitTrace(TraceCallT trace_call, ArgsT&&... args);
 
   // Reader/writer lock for class-static StreamExecutor members.
-  static absl::Mutex static_mu_;
+  static mutex static_mu_;
 
   // Reader/writer lock for mutable data structures on this StreamExecutor.
   //
   // Mutable so that caching functions (like DeviceDescription, AsBlas, etc.)
   // can acquire the lock on their first (mutating) call as well.
-  mutable absl::Mutex mu_;
+  mutable mutex mu_;
 
   // Reference to the platform that created this executor.
   const Platform *platform_;
@@ -724,8 +719,6 @@ class StreamExecutor {
   // limit.
   int64 memory_limit_bytes_;
 
-  StreamExecutorMemoryAllocator allocator_;
-
   SE_DISALLOW_COPY_AND_ASSIGN(StreamExecutor);
 };
 
@@ -767,24 +760,6 @@ class ScopedModuleHandle {
 ////////////
 // Inlines
 
-template <typename... Args>
-inline port::StatusOr<std::unique_ptr<TypedKernel<Args...>>>
-StreamExecutor::CreateTypedKernel(absl::string_view kernel_name,
-                                  absl::string_view ptx,
-                                  absl::Span<const uint8> cubin_data) {
-  auto kernel_base = absl::make_unique<TypedKernel<Args...>>(this);
-  MultiKernelLoaderSpec loader_spec(kernel_base->kNumberOfParameters);
-  loader_spec.AddCudaPtxInMemory(ptx, kernel_name);
-
-  if (!cubin_data.empty()) {
-    loader_spec.AddCudaCubinInMemory(
-        reinterpret_cast<const char *>(cubin_data.data()), kernel_name);
-  }
-
-  TF_RETURN_IF_ERROR(GetKernel(loader_spec, kernel_base.get()));
-  return std::move(kernel_base);
-}
-
 template <typename T>
 inline DeviceMemory<T> StreamExecutor::AllocateArray(uint64 element_count) {
   uint64 bytes = sizeof(T) * element_count;
@@ -804,11 +779,13 @@ inline port::StatusOr<DeviceMemory<T>> StreamExecutor::GetSymbol(
 }
 
 template <typename ElemT>
+ScopedDeviceMemory<ElemT>::ScopedDeviceMemory()
+    : wrapped_(DeviceMemoryBase()), parent_(nullptr) {}
+
+template <typename ElemT>
 ScopedDeviceMemory<ElemT>::ScopedDeviceMemory(StreamExecutor *parent,
                                               DeviceMemoryBase value)
-    : wrapped_(value),
-      device_ordinal_(parent->device_ordinal()),
-      allocator_(parent->GetAllocator()) {}
+    : wrapped_(value), parent_(parent) {}
 
 template <typename ElemT>
 ScopedDeviceMemory<ElemT>::ScopedDeviceMemory(
@@ -818,9 +795,34 @@ ScopedDeviceMemory<ElemT>::ScopedDeviceMemory(
     std::vector<ElemT> local(values);
     if (!parent->SynchronousMemcpy(ptr(), const_cast<const ElemT *>(&local[0]),
                                    ptr()->size())) {
-      TF_CHECK_OK(Free());
+      Reset(nullptr);
     }
   }
+}
+
+template <typename ElemT>
+ScopedDeviceMemory<ElemT>::~ScopedDeviceMemory() {
+  if (wrapped_ == nullptr) return;
+  DCHECK(parent_ != nullptr);
+  parent_->Deallocate(&wrapped_);
+}
+
+template <typename ElemT>
+void ScopedDeviceMemory<ElemT>::Reset(DeviceMemory<ElemT> updated) {
+  if (wrapped_ != nullptr) {
+    DCHECK(parent_ != nullptr);
+    parent_->Deallocate(&wrapped_);
+  }
+  wrapped_ = updated;
+}
+
+template <typename ElemT>
+void ScopedDeviceMemory<ElemT>::Reset(std::nullptr_t) {
+  if (wrapped_ != nullptr) {
+    DCHECK(parent_ != nullptr);
+    parent_->Deallocate(&wrapped_);
+  }
+  wrapped_ = DeviceMemory<ElemT>{};
 }
 
 template <typename T>
@@ -841,9 +843,9 @@ DeviceMemory<T> StreamExecutor::AllocateZeroed() {
 }
 
 template <typename T>
-DeviceMemory<T> StreamExecutor::GetSubBuffer(DeviceMemory<T> *parent,
-                                             uint64 element_offset,
-                                             uint64 element_count) {
+DeviceMemory<T> StreamExecutor::AllocateSubBuffer(DeviceMemory<T> *parent,
+                                                  uint64 element_offset,
+                                                  uint64 element_count) {
   if (element_offset + element_count > parent->ElementCount()) {
     LOG(ERROR) << "requested sub-buffer allocation (offset + size) is greater "
                << "than parent allocation size: (" << element_offset << " + "
@@ -851,12 +853,14 @@ DeviceMemory<T> StreamExecutor::GetSubBuffer(DeviceMemory<T> *parent,
     return DeviceMemory<T>{};
   }
 
-  void *opaque = implementation_->GetSubBuffer(
+  void *opaque = implementation_->AllocateSubBuffer(
       parent, sizeof(T) * element_offset, sizeof(T) * element_count);
   if (opaque == nullptr) {
     return DeviceMemory<T>{};
   }
-  return DeviceMemory<T>(DeviceMemoryBase(opaque, sizeof(T) * element_count));
+  CreateAllocRecord(opaque, sizeof(T) * element_count);
+  return DeviceMemory<T>(DeviceMemoryBase(opaque, sizeof(T) * element_count,
+                                          true /* = is_sub_buffer */));
 }
 
 template <typename... Params, typename... Args>
@@ -875,8 +879,7 @@ inline Stream &Stream::ThenLaunch(ThreadDim thread_dims, BlockDim block_dims,
     kernel.PackParams(&kernel_args, args...);
     DCHECK(parent_ != nullptr);
     bool ok =
-        parent_->Launch(this, thread_dims, block_dims, kernel, kernel_args)
-            .ok();
+        parent_->Launch(this, thread_dims, block_dims, kernel, kernel_args);
     if (!ok) {
       SetError();
       LOG(WARNING) << "parent failed to launch kernel: " << &kernel;

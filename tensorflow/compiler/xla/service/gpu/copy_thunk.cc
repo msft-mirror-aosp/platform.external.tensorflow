@@ -30,12 +30,13 @@ HostToDeviceCopyThunk::HostToDeviceCopyThunk(
       destination_buffer_(destination_buffer),
       mem_size_(mem_size) {}
 
-Status HostToDeviceCopyThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status HostToDeviceCopyThunk::ExecuteOnStream(
+    const BufferAllocations& buffer_allocations, se::Stream* stream,
+    HloExecutionProfiler* profiler) {
   se::DeviceMemoryBase destination_data =
-      params.buffer_allocations->GetDeviceAddress(destination_buffer_);
-  auto op_profiler =
-      params.profiler->MakeScopedInstructionProfiler(hlo_instruction());
-  params.stream->ThenMemcpy(&destination_data, source_address_, mem_size_);
+      buffer_allocations.GetDeviceAddress(destination_buffer_);
+  auto op_profiler = profiler->MakeScopedInstructionProfiler(hlo_instruction());
+  stream->ThenMemcpy(&destination_data, source_address_, mem_size_);
   return Status::OK();
 }
 
@@ -48,14 +49,15 @@ DeviceToDeviceCopyThunk::DeviceToDeviceCopyThunk(
       destination_buffer_(destination_buffer),
       mem_size_(mem_size) {}
 
-Status DeviceToDeviceCopyThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status DeviceToDeviceCopyThunk::ExecuteOnStream(
+    const BufferAllocations& buffer_allocations, se::Stream* stream,
+    HloExecutionProfiler* profiler) {
   se::DeviceMemoryBase destination_data =
-      params.buffer_allocations->GetDeviceAddress(destination_buffer_);
+      buffer_allocations.GetDeviceAddress(destination_buffer_);
   se::DeviceMemoryBase source_data =
-      params.buffer_allocations->GetDeviceAddress(source_buffer_);
-  auto op_profiler =
-      params.profiler->MakeScopedInstructionProfiler(hlo_instruction());
-  params.stream->ThenMemcpy(&destination_data, source_data, mem_size_);
+      buffer_allocations.GetDeviceAddress(source_buffer_);
+  auto op_profiler = profiler->MakeScopedInstructionProfiler(hlo_instruction());
+  stream->ThenMemcpy(&destination_data, source_data, mem_size_);
   return Status::OK();
 }
 }  // namespace gpu

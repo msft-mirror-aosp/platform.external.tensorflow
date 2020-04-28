@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/kernels/data/stats_utils.h"
 
-#include "absl/base/attributes.h"
 #include "tensorflow/core/lib/strings/strcat.h"
 
 namespace tensorflow {

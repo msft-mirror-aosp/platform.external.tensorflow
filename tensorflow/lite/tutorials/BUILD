@@ -2,8 +2,9 @@
 
 package(
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
@@ -13,7 +14,6 @@ py_binary(
         "dataset.py",
         "mnist_tflite.py",
     ],
-    python_version = "PY2",
     deps = [
         "//tensorflow:tensorflow_py",
     ],

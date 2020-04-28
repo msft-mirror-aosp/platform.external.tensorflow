@@ -21,6 +21,8 @@ limitations under the License.
 
 namespace tensorflow {
 
+extern const char kPropagateCompileTimeConsts[];
+
 // This TensorFlow op provides a functional iteration primitive.
 //
 // The inputs and outputs of the loop body must agree on the number, types, and

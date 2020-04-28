@@ -186,9 +186,7 @@ TEST(OpResolver, TestGetRegistrationFromOpCodeNonexistentCustom) {
   EXPECT_EQ(kTfLiteError, GetRegistrationFromOpCode(conv_code, *resolver,
                                                     reporter, &registration));
   EXPECT_EQ(nullptr, registration);
-  // There is no error, since unresolved custom ops are checked while preparing
-  // nodes.
-  EXPECT_EQ(0, mock_reporter.GetBufferSize());
+  EXPECT_NE(0, mock_reporter.GetBufferSize());
 }
 
 }  // namespace tflite

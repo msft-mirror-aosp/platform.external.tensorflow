@@ -1,14 +1,15 @@
 # Description:
 #   Contains modules to compute receptive field parameters for CNN models.
 
-load("//tensorflow:tensorflow.bzl", "py_test")
-
 package(
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
 )
 
+licenses(["notice"])  # Apache 2.0
+
 exports_files(["LICENSE"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 # Transitive dependencies of this target will be included in the pip package.
 py_library(
@@ -52,7 +53,6 @@ py_library(
     srcs_version = "PY2AND3",
     deps = [
         ":graph_compute_order_py",
-        "//tensorflow/contrib/util:util_py",
         "//tensorflow/python:framework_ops",
         "//tensorflow/python:platform",
         "//third_party/py/numpy",
@@ -62,7 +62,6 @@ py_library(
 py_test(
     name = "graph_compute_order_test",
     srcs = ["python/util/graph_compute_order_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":graph_compute_order_py",
@@ -79,7 +78,6 @@ py_test(
 py_test(
     name = "parse_layer_parameters_test",
     srcs = ["python/util/parse_layer_parameters_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":graph_compute_order_py",
@@ -89,18 +87,13 @@ py_test(
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:dtypes",
         "//tensorflow/python:framework_ops",
-        "//tensorflow/python:graph_util",
         "//tensorflow/python:nn",
-        "//tensorflow/python:session",
-        "//tensorflow/python:variables",
-        "@absl_py//absl/testing:parameterized",
     ],
 )
 
 py_test(
     name = "receptive_field_test",
     srcs = ["python/util/receptive_field_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":receptive_field_py",

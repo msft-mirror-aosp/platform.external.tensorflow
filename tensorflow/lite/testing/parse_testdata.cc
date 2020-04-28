@@ -263,25 +263,17 @@ class Invoke : public Message {
     if (name == "id") {
       test_runner_->SetInvocationId(value);
     } else if (name == "input") {
-      if (parsed_input_count_ >= expected_inputs_.size()) {
+      if (expected_inputs_.empty()) {
         return test_runner_->Invalidate("Too many inputs");
       }
-      test_runner_->SetInput(expected_inputs_[parsed_input_count_], value);
-      ++parsed_input_count_;
+      test_runner_->SetInput(*expected_inputs_.begin(), value);
+      expected_inputs_.erase(expected_inputs_.begin());
     } else if (name == "output") {
-      if (parsed_output_count_ >= expected_outputs_.size()) {
+      if (expected_outputs_.empty()) {
         return test_runner_->Invalidate("Too many outputs");
       }
-      test_runner_->SetExpectation(expected_outputs_[parsed_output_count_],
-                                   value);
-      ++parsed_output_count_;
-    } else if (name == "output_shape") {
-      if (parsed_output_shape_count_ >= expected_outputs_.size()) {
-        return test_runner_->Invalidate("Too many output shapes");
-      }
-      test_runner_->SetShapeExpectation(
-          expected_outputs_[parsed_output_shape_count_], value);
-      ++parsed_output_shape_count_;
+      test_runner_->SetExpectation(*expected_outputs_.begin(), value);
+      expected_outputs_.erase(expected_outputs_.begin());
     }
   }
   void Finish() override {
@@ -292,10 +284,6 @@ class Invoke : public Message {
  private:
   std::vector<int> expected_inputs_;
   std::vector<int> expected_outputs_;
-
-  int parsed_input_count_ = 0;
-  int parsed_output_count_ = 0;
-  int parsed_output_shape_count_ = 0;
 
   TestRunner* test_runner_;
 };

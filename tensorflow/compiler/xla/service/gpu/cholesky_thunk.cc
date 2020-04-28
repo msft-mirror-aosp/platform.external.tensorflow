@@ -50,7 +50,9 @@ CholeskyThunk::CholeskyThunk(const CholeskyOptions& options,
                           hlo->operand(0)->shape().element_type())),
       n_(n) {}
 
-Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
+Status CholeskyThunk::ExecuteOnStream(
+    const BufferAllocations& buffer_allocations, se::Stream* stream,
+    HloExecutionProfiler* profiler) {
   VLOG(3) << "type=" << PrimitiveType_Name(type_)
           << " uplo=" << se::blas::UpperLowerString(uplo_)
           << " batch_size=" << batch_size_ << " n=" << n_
@@ -61,20 +63,20 @@ Status CholeskyThunk::ExecuteOnStream(const ExecuteParams& params) {
   CusolverContext* context;
   {
     tensorflow::mutex_lock lock(mu_);
-    auto result = contexts_.emplace(params.stream, CusolverContext());
+    auto result = contexts_.emplace(stream, CusolverContext());
     if (result.second) {
       TF_ASSIGN_OR_RETURN(result.first->second,
-                          CusolverContext::Create(params.stream));
+                          CusolverContext::Create(stream));
     }
     context = &result.first->second;
   }
 
   char* a_base = static_cast<char*>(
-      params.buffer_allocations->GetDeviceAddress(a_buffer_).opaque());
+      buffer_allocations.GetDeviceAddress(a_buffer_).opaque());
   int* info_base = static_cast<int*>(
-      params.buffer_allocations->GetDeviceAddress(info_buffer_).opaque());
+      buffer_allocations.GetDeviceAddress(info_buffer_).opaque());
   se::DeviceMemoryBase workspace_data =
-      params.buffer_allocations->GetDeviceAddress(workspace_buffer_);
+      buffer_allocations.GetDeviceAddress(workspace_buffer_);
   for (int64 i = 0; i < batch_size_; ++i) {
     se::DeviceMemoryBase a_data =
         se::DeviceMemoryBase(a_base + i * a_batch_stride_, a_batch_stride_);

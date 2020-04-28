@@ -112,7 +112,9 @@ class ErrorsTest(test.TestCase):
 
   def testStatusDoesNotLeak(self):
     try:
-      pywrap_tensorflow.DeleteFile(compat.as_bytes("/DOES_NOT_EXIST/"))
+      with errors.raise_exception_on_not_ok_status() as status:
+        pywrap_tensorflow.DeleteFile(
+            compat.as_bytes("/DOES_NOT_EXIST/"), status)
     except:
       pass
     gc.collect()

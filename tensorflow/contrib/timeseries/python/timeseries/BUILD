@@ -4,8 +4,9 @@ package(
     default_visibility = [
         "//tensorflow:internal",
     ],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
@@ -103,7 +104,6 @@ py_test(
     srcs = [
         "estimators_test.py",
     ],
-    python_version = "PY2",
     shard_count = 3,
     srcs_version = "PY2AND3",
     tags = [
@@ -159,7 +159,6 @@ py_test(
     srcs = [
         "head_test.py",
     ],
-    python_version = "PY2",
     shard_count = 10,
     srcs_version = "PY2AND3",
     tags = [
@@ -215,7 +214,6 @@ py_test(
     srcs = [
         "model_utils_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "no_pip_gpu",  # b/63391119
@@ -251,7 +249,6 @@ py_test(
     srcs = [
         "state_management_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "no_oss",
@@ -317,7 +314,6 @@ py_test(
     srcs = [
         "input_pipeline_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "no_oss",  # b/63709811
@@ -394,7 +390,6 @@ py_test(
     srcs = [
         "ar_model_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [
@@ -448,7 +443,6 @@ py_test(
     srcs = [
         "math_utils_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "no_pip_gpu",  # b/63391119

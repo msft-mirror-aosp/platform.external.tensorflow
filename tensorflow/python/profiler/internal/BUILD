@@ -1,10 +1,11 @@
+package(default_visibility = ["//tensorflow/python/profiler:__subpackages__"])
+
+licenses(["notice"])  # Apache 2.0
+
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 load("//tensorflow:tensorflow.bzl", "py_test")
-
-package(
-    default_visibility = ["//tensorflow/python/profiler:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
-)
+load("//tensorflow:tensorflow.bzl", "tf_py_test")
+load("//tensorflow:tensorflow.bzl", "tf_py_wrap_cc")
 
 py_library(
     name = "flops_registry",
@@ -39,7 +40,6 @@ py_library(
 py_test(
     name = "print_model_analysis_test",
     srcs = ["print_model_analysis_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/core/profiler:protos_all_py",
@@ -67,7 +67,6 @@ cuda_py_test(
         "//tensorflow/python:random_ops",
     ],
     tags = [
-        "no_gpu",  # b/138442728
         "no_pip",
     ],
     xla_enable_strict_auto_jit = False,  # Node names are different with autojit

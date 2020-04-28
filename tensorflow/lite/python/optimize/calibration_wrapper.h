@@ -59,8 +59,7 @@ class CalibrationWrapper {
 
   PyObject* FeedTensor(PyObject* input_value);
 
-  PyObject* QuantizeModel(int input_py_type, int output_py_type,
-                          bool allow_float);
+  PyObject* QuantizeModel();
 
  private:
   // CalibrationWrapper is not copyable or assignable. We avoid the use of

@@ -1,8 +1,9 @@
+licenses(["notice"])  # Apache 2.0
+
 package(
     default_visibility = [
         "//tensorflow/compiler/tf2xla:internal",
     ],
-    licenses = ["notice"],  # Apache 2.0
 )
 
 cc_library(
@@ -12,8 +13,6 @@ cc_library(
     deps = [
         "//tensorflow/compiler/jit:common",
         "//tensorflow/compiler/jit:flags",
-        "//tensorflow/compiler/jit:xla_activity_listener",
-        "//tensorflow/compiler/jit:xla_activity_proto_cc",
         "//tensorflow/compiler/jit:xla_compilation_cache",
         "//tensorflow/compiler/jit:xla_device",
         "//tensorflow/compiler/jit:xla_launch_util",
@@ -30,8 +29,6 @@ cc_library(
         "//tensorflow/core:lib",
         "//tensorflow/core:state_ops_op_lib",
         "//tensorflow/core:stream_executor_no_cuda",
-        "//tensorflow/core/profiler/lib:traceme",
-        "//tensorflow/stream_executor:tf_allocator_adapter",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/memory",
     ],

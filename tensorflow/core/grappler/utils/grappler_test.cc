@@ -46,10 +46,7 @@ void CompareGraphNodes(protobuf::RepeatedPtrField<NodeDef>* want,
     EXPECT_EQ(want_node.op(), got_node.op());
     EXPECT_EQ(want_node.name(), got_node.name());
     EXPECT_EQ(want_node.device(), got_node.device());
-    ASSERT_EQ(want_node.input_size(), got_node.input_size())
-        << "want_node =\n"
-        << want_node.DebugString() << "\ngot_node =\n"
-        << got_node.DebugString();
+    ASSERT_EQ(want_node.input_size(), got_node.input_size());
 
     // Order of control dependencies doesn't matter, so we sort them first.
     const auto is_control = [](const string& input) -> bool {
@@ -88,7 +85,6 @@ GrapplerTest::GrapplerTest() {
   cfg->set_layout_optimizer(RewriterConfig::OFF);
   cfg->set_loop_optimization(RewriterConfig::OFF);
   cfg->set_pin_to_host_optimization(RewriterConfig::OFF);
-  cfg->set_remapping(RewriterConfig::OFF);
 }
 
 std::vector<Tensor> GrapplerTest::EvaluateNodes(

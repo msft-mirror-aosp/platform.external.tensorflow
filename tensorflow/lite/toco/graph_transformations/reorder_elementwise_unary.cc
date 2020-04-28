@@ -37,7 +37,6 @@ bool IsElementwiseOperator(OperatorType optype) {
     case OperatorType::kRelu:
     case OperatorType::kRelu1:
     case OperatorType::kRelu6:
-    case OperatorType::kRound:
     case OperatorType::kTanh:
     case OperatorType::kSqrt:
     case OperatorType::kSquare:
@@ -122,7 +121,7 @@ bool IsMoveOperator(OperatorType optype) {
 
     element_op->inputs[0] = input_name;
     element_op->outputs[0] = new_intermediate_name;
-    DeleteArrayIfUnused(intermediate_name, model);
+    model->EraseArray(intermediate_name);
     move_op->inputs[0] = new_intermediate_name;
     move_op->outputs[0] = output_name;
   } else {

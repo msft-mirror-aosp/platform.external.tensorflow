@@ -19,18 +19,18 @@ from __future__ import division
 from __future__ import print_function
 
 from absl.testing import parameterized
-import numpy as np
 
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import ragged
 from tensorflow.python.ops.ragged import ragged_factory_ops
 from tensorflow.python.ops.ragged import ragged_tensor
+from tensorflow.python.ops.ragged import ragged_test_util
 from tensorflow.python.platform import googletest
 
 
 @test_util.run_all_in_graph_and_eager_modes
-class RaggedConstOpTest(test_util.TensorFlowTestCase,
+class RaggedConstOpTest(ragged_test_util.RaggedTensorTestCase,
                         parameterized.TestCase):
 
   @parameterized.parameters(
@@ -65,27 +65,6 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
           ragged_rank=1,
           inner_shape=(2,),
           expected_shape=(3, None, 2)),
-      # 3-dimensional tensors with numpy arrays
-      dict(
-          pylist=[[[1, 2], np.array([3, np.array(4)])],
-                  np.array([]), [[5, 6], [7, 8], [9, 0]]],
-          expected_shape=(3, None, None)),
-      dict(
-          pylist=[[[1, 2], np.array([3, np.array(4)])],
-                  np.array([]), [[5, 6], [7, 8], [9, 0]]],
-          ragged_rank=1,
-          expected_shape=(3, None, 2)),
-      dict(
-          pylist=[[[1, 2], np.array([3, np.array(4)])],
-                  np.array([]), [[5, 6], [7, 8], [9, 0]]],
-          inner_shape=(2,),
-          expected_shape=(3, None, 2)),
-      dict(
-          pylist=[[[1, 2], np.array([3, np.array(4)])],
-                  np.array([]), [[5, 6], [7, 8], [9, 0]]],
-          ragged_rank=1,
-          inner_shape=(2,),
-          expected_shape=(3, None, 2)),
       #=========================================================================
       # 4-dimensional tensors.
       dict(
@@ -107,22 +86,13 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
                   [[[2, 4], [6, 8]], [[1, 5], [7, 9]]]],
           inner_shape=(2, 2),
           expected_shape=(2, None, 2, 2)),
-      # 4-dimensional tensors with numpy arrays
-      dict(
-          pylist=np.array([[[np.array([1, 2]), [3, 4]], [[5, 6], [7, 8]]],
-                           np.array([[[2, 4], [6, 8]], [[1, 5], [7, 9]]])]),
-          expected_shape=(2, None, None, None)),
 
       #=========================================================================
       # Empty tensors (no scalar values) w/ default ragged_rank and inner_shape
       dict(pylist=[], expected_shape=(0,)),
-      dict(pylist=[[], [], np.array([])], expected_shape=(3, None)),
+      dict(pylist=[[], [], []], expected_shape=(3, None)),
       dict(
           pylist=[[[], []], [], [[], [[]]]],
-          expected_shape=(3, None, None, None)),
-      dict(
-          pylist=np.array([np.array([[], []]),
-                           np.array([]), [[], [[]]]]),
           expected_shape=(3, None, None, None)),
 
       #=========================================================================
@@ -143,11 +113,6 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
       dict(pylist=[[], [], []], ragged_rank=2, expected_shape=(3, None, None)),
       dict(pylist=[], inner_shape=(0,), expected_shape=(0,)),
       dict(pylist=[[]], inner_shape=(1, 0), expected_shape=(1, 0)),
-      dict(
-          pylist=np.array([]),
-          ragged_rank=1,
-          inner_shape=(100, 20),
-          expected_shape=(0, None, 100, 20)),
 
       #=========================================================================
       # default/inferred dtypes
@@ -158,9 +123,6 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
       dict(pylist=[[1, 2], [3.], [4, 5, 6]], expected_dtype=dtypes.float32),
       dict(pylist=[[b'a', b'b'], [b'c']], expected_dtype=dtypes.string),
       dict(pylist=[[True]], expected_dtype=dtypes.bool),
-      dict(
-          pylist=[np.array([1, 2]), np.array([3.]), [4, 5, 6]],
-          expected_dtype=dtypes.float32),
 
       #=========================================================================
       # explicit dtypes
@@ -171,9 +133,8 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
       dict(pylist=[[1, 2], [3], [4, 5, 6]], dtype=dtypes.float32),
       dict(pylist=[[1., 2.], [3.], [4., 5., 6.]], dtype=dtypes.float16),
       dict(pylist=[[1., 2.], [3.], [4., 5., 6.]], dtype=dtypes.float32),
-      dict(
-          pylist=[[b'a', b'b'], [b'c'], [b'd', b'e', b'f']],
-          dtype=dtypes.string),
+      dict(pylist=[[b'a', b'b'], [b'c'], [b'd', b'e', b'f']],
+           dtype=dtypes.string),
   )
   def testRaggedConst(self,
                       pylist,
@@ -200,9 +161,6 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
     """
     rt = ragged_factory_ops.constant(
         pylist, dtype=dtype, ragged_rank=ragged_rank, inner_shape=inner_shape)
-    # Normalize the pylist, i.e., convert all np.arrays to list.
-    # E.g., [np.array((1,2))] --> [[1,2]]
-    pylist = _normalize_pylist(pylist)
 
     # If dtype was explicitly specified, check it.
     if dtype is not None:
@@ -226,11 +184,8 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
 
     if expected_shape is not None:
       self.assertEqual(tuple(rt.shape.as_list()), expected_shape)
-      if (expected_shape and expected_shape[0] == 0 and
-          None not in expected_shape):
-        pylist = np.zeros(expected_shape, rt.dtype.as_numpy_dtype)
 
-    self.assertAllEqual(rt, pylist)
+    self.assertRaggedEqual(rt, pylist)
 
   @parameterized.parameters(
       dict(
@@ -399,15 +354,6 @@ class RaggedConstOpTest(test_util.TensorFlowTestCase,
       self.assertEqual(
           ragged.ragged_factory_ops._default_inner_shape_for_pylist(
               pylist, ragged_rank), inner_shape)
-
-
-def _normalize_pylist(item):
-  """Convert all (possibly nested) np.arrays contained in item to list."""
-  # convert np.arrays in current level to list
-  if np.ndim(item) == 0:
-    return item
-  level = (x.tolist() if isinstance(x, np.ndarray) else x for x in item)
-  return [_normalize_pylist(el) if np.ndim(el) != 0 else el for el in level]
 
 
 if __name__ == '__main__':

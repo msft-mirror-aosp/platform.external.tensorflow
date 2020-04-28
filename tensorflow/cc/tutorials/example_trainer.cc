@@ -167,7 +167,8 @@ namespace {
 
 bool ParseInt32Flag(tensorflow::StringPiece arg, tensorflow::StringPiece flag,
                     int32* dst) {
-  if (absl::ConsumePrefix(&arg, flag) && absl::ConsumePrefix(&arg, "=")) {
+  if (tensorflow::str_util::ConsumePrefix(&arg, flag) &&
+      tensorflow::str_util::ConsumePrefix(&arg, "=")) {
     char extra;
     return (sscanf(arg.data(), "%d%c", dst, &extra) == 1);
   }
@@ -177,7 +178,7 @@ bool ParseInt32Flag(tensorflow::StringPiece arg, tensorflow::StringPiece flag,
 
 bool ParseBoolFlag(tensorflow::StringPiece arg, tensorflow::StringPiece flag,
                    bool* dst) {
-  if (absl::ConsumePrefix(&arg, flag)) {
+  if (tensorflow::str_util::ConsumePrefix(&arg, flag)) {
     if (arg.empty()) {
       *dst = true;
       return true;

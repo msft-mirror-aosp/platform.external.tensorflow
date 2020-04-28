@@ -151,7 +151,6 @@ class FusionInstructionMerger {
   int num_fail_expensive_fused_instruction_ = 0;
   int num_fail_net_bytes_transferred_ratio_ = 0;
   int num_fail_inefficient_fusion_emitter_ = 0;
-  int num_fail_fusion_too_large_ = 0;
 
   TF_DISALLOW_COPY_AND_ASSIGN(FusionInstructionMerger);
 };
@@ -173,8 +172,7 @@ Status FusionInstructionMerger::Run() {
           << " expensive_instruction: " << num_fail_expensive_fused_instruction_
           << " net_bytes_transferred: " << num_fail_net_bytes_transferred_ratio_
           << " inefficient_fusion_emitter: "
-          << num_fail_inefficient_fusion_emitter_
-          << " fusion_too_large: " << num_fail_fusion_too_large_ << " }";
+          << num_fail_inefficient_fusion_emitter_ << " }";
   return Status::OK();
 }
 
@@ -191,18 +189,26 @@ Status FusionInstructionMerger::HandleFusion(HloInstruction* fusion) {
   // instructions match specific patterns, so they shouldn't be further fused.
   // Input fusion instructions need to be rooted at a particular HLO (e.g.
   // kReduce), so they shouldn't be further fused either.
-  if (!fusion->IsLoopFusion()) {
+  if (fusion->fusion_kind() != HloInstruction::FusionKind::kLoop) {
     VLOG(3) << "Not merging " << fusion->name() << ": Is not loop fusion.";
     ++num_fail_not_loop_fusion_;
     return Status::OK();
   }
 
+  // Skip multiple output fusion. It's not yet supported.
+  if (fusion->IsMultiOutputFusion()) {
+    VLOG(3) << "Not merging " << fusion->name() << ": Is multi-output fusion.";
+    ++num_fail_not_loop_fusion_;
+    return Status::OK();
+  }
   // Skip 'fusion' instruction if we cannot merge into all of its users.
   // Merging into all users enables the removal of 'fusion' from the
   // computation.
   if (!absl::c_all_of(fusion->users(), [&](const HloInstruction* user) {
         return user->opcode() == HloOpcode::kFusion &&
-               IsProducerConsumerFusible(*fusion, *user);
+               (user->fusion_kind() == HloInstruction::FusionKind::kLoop ||
+                (IsReduceInputFusion(*user) &&
+                 LayoutsAreReduceInputFusionFriendly(*fusion, *user)));
       })) {
     VLOG(3) << "Not merging " << fusion->name()
             << ": Some of its users are not loop/input fusion kernels.";
@@ -257,18 +263,6 @@ Status FusionInstructionMerger::HandleFusion(HloInstruction* fusion) {
             << ": Contains one or more users where fusing would cause "
                "inefficiencies in the fusion emitter.";
     ++num_fail_inefficient_fusion_emitter_;
-    return Status::OK();
-  }
-
-  // Skip 'fusion' instruction if merging it into at least one of the users
-  // would make the fusion too big.
-  if (absl::c_any_of(fusion->users(), [fusion](const HloInstruction* user) {
-        return FusionWouldBeTooLarge(*fusion, *user);
-      })) {
-    VLOG(3) << "Not merging " << fusion->name()
-            << ": Contains one or more users where fusing would cause "
-               "the fusion to have too many parameters.";
-    ++num_fail_fusion_too_large_;
     return Status::OK();
   }
 

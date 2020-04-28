@@ -20,10 +20,9 @@ from __future__ import division
 from __future__ import print_function
 
 import contextlib
-import threading
 
 
-class TpuContext(threading.local):
+class TpuContext(object):
   """A context object holding state about the TPU computation being built."""
 
   def __init__(self):

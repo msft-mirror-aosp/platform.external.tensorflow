@@ -17,7 +17,6 @@ limitations under the License.
 #define TENSORFLOW_CORE_COMMON_RUNTIME_DATA_STANDALONE_H_
 
 #include <memory>
-
 #include "tensorflow/core/common_runtime/device_mgr.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function_handle_cache.h"
@@ -43,11 +42,12 @@ namespace standalone {
 //
 // Example usage:
 //
-//   // Create a `Dataset` by running the `graph_def` graph.
+//   // Create a `Dataset` by running the `graph_def` graph and fetching the
+//   // output of the `fetch_node` node.
 //   tensorflow::data:standalone::Dataset::Params params;
 //   std::unique_ptr<tensorflow::data::standalone::Dataset> dataset;
 //   Status s = tensorflow::data::standalone::Dataset::FromGraph(
-//      params, graph_def, &dataset);
+//      params, graph_def, fetch_node, &dataset);
 //   if (!s.ok()) { /* error handling */ }
 //
 //   std::unique_ptr<tensorflow::data::standalone::Iterator> iterator;
@@ -90,8 +90,10 @@ class Dataset {
     SessionOptions session_options;
   };
 
-  // Creates a new `Dataset` instance by running the given dataset graph.
+  // Creates a new `Dataset` instance by running the TensorFlow graph `graph`
+  // and fetching the output of the `fetch_node` node.
   static Status FromGraph(Params params, const GraphDef& graph_def,
+                          const string& fetch_node,
                           std::unique_ptr<Dataset>* result);
 
   ~Dataset();
@@ -111,8 +113,6 @@ class Dataset {
   std::unique_ptr<thread::ThreadPool> pool_;
   std::unique_ptr<FunctionHandleCache> function_handle_cache_;
   std::function<void(std::function<void()>)> runner_;
-  ResourceMgr resource_mgr_;
-  CancellationManager cancellation_manager_;
 };
 
 }  // namespace standalone

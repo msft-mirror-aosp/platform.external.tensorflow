@@ -17,10 +17,9 @@ limitations under the License.
 
 #include <cstring>
 
-#include "tensorflow/core/util/command_line_flags.h"
 #include "tensorflow/lite/testing/split.h"
 #include "tensorflow/lite/testing/tflite_diff_util.h"
-#include "tensorflow/lite/testing/tflite_driver.h"
+#include "tensorflow/core/util/command_line_flags.h"
 
 namespace tflite {
 namespace testing {
@@ -34,10 +33,9 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
     string input_layer_shape;
     string output_layer;
     int32_t num_runs_per_pass = 100;
-    string delegate_name;
+    string delegate;
   } values;
 
-  std::string delegate_name;
   std::vector<tensorflow::Flag> flags = {
       tensorflow::Flag("tensorflow_model", &values.tensorflow_model,
                        "Path of tensorflow model."),
@@ -57,9 +55,9 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
                        "output_1,output_2."),
       tensorflow::Flag("num_runs_per_pass", &values.num_runs_per_pass,
                        "[optional] Number of full runs in each pass."),
-      tensorflow::Flag("delegate", &values.delegate_name,
+      tensorflow::Flag("delegate", &values.delegate,
                        "[optional] Delegate to use for executing ops. Must be "
-                       "`{\"\", NNAPI, GPU, FLEX}`"),
+                       "`{\"\", FLEX}`"),
   };
 
   bool no_inputs = *argc == 1;
@@ -72,20 +70,9 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
              values.input_layer_shape.empty() || values.output_layer.empty()) {
     fprintf(stderr, "%s", tensorflow::Flags::Usage(argv[0], flags).c_str());
     return {};
-  }
-
-  TfLiteDriver::DelegateType delegate = TfLiteDriver::DelegateType::kNone;
-  if (!values.delegate_name.empty()) {
-    if (delegate_name == "NNAPI") {
-      delegate = TfLiteDriver::DelegateType::kNnapi;
-    } else if (values.delegate_name == "GPU") {
-      delegate = TfLiteDriver::DelegateType::kGpu;
-    } else if (values.delegate_name == "FLEX") {
-      delegate = TfLiteDriver::DelegateType::kFlex;
-    } else {
-      fprintf(stderr, "%s", tensorflow::Flags::Usage(argv[0], flags).c_str());
-      return {};
-    }
+  } else if (!(values.delegate == "" || values.delegate == "FLEX")) {
+    fprintf(stderr, "%s", tensorflow::Flags::Usage(argv[0], flags).c_str());
+    return {};
   }
 
   return {values.tensorflow_model,
@@ -95,7 +82,7 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
           Split<string>(values.input_layer_shape, ":"),
           Split<string>(values.output_layer, ","),
           values.num_runs_per_pass,
-          delegate};
+          values.delegate};
 }
 
 }  // namespace testing

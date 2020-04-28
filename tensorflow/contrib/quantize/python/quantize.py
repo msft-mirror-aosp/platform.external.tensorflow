@@ -37,10 +37,9 @@ _ACTIVATION_TYPES = {'Relu', 'Relu6', 'Identity'}
 _RELU_TYPES = {'Relu', 'Relu6'}
 
 _QUANTIZATION_OP = {'FakeQuantWithMinMaxVars'}
-_VALID_SRC_OP = {'Add', 'AddV2', 'Mul'}
-_INTERMEDIATE_OP = {'Add', 'AddV2', 'Mul'}
-_PASS_THROUGH_OP = {'Reshape', 'Identity', 'BatchToSpaceND', 'SpaceToBatchND',
-                    'MaxPool', 'Max'}
+_VALID_SRC_OP = {'Add', 'Mul'}
+_INTERMEDIATE_OP = {'Add', 'Mul'}
+_PASS_THROUGH_OP = {'Reshape', 'Identity', 'BatchToSpaceND', 'SpaceToBatchND'}
 _VALID_ACTIVATION_OP = {'Relu', 'Relu6'}
 
 
@@ -416,12 +415,12 @@ def _FindLayersToQuantize(graph):
       inputs=[graph_matcher.OpTypePattern('*'), layer_output_pattern],
       ordered_inputs=False)
   post_layer_op_correction_pattern = graph_matcher.OpTypePattern(
-      'Add|AddV2',
+      'Add',
       inputs=[folded_bias_mul_pattern,
               graph_matcher.OpTypePattern('*')],
       ordered_inputs=False)
   folded_bias_add_pattern = graph_matcher.OpTypePattern(
-      'Add|AddV2',
+      'Add',
       inputs=[
           post_layer_op_correction_pattern,
           graph_matcher.OpTypePattern('*')
@@ -436,13 +435,11 @@ def _FindLayersToQuantize(graph):
       'Identity', inputs=[folded_bias_add_pattern])
 
   bias_add_pattern = graph_matcher.OpTypePattern(
-      'Add|AddV2|BiasAdd',
-      inputs=[layer_output_pattern, '*'],
-      ordered_inputs=False)
+      'Add|BiasAdd', inputs=[layer_output_pattern, '*'], ordered_inputs=False)
 
   # The bias can come from the bias add or the folded bias add.
   bypass_pattern = graph_matcher.OpTypePattern(
-      'Add|AddV2',
+      'Add',
       inputs=[
           graph_matcher.OneofPattern(
               [bias_add_pattern, folded_bias_add_pattern, batch_norm_identity]),
@@ -467,7 +464,7 @@ def _FindLayersToQuantize(graph):
       ])
 
   post_activation_bypass_pattern = graph_matcher.OpTypePattern(
-      'Add|AddV2', inputs=['*', activation_pattern], ordered_inputs=False)
+      'Add', inputs=['*', activation_pattern], ordered_inputs=False)
 
   # The order of the following matching blocks is very important. Since matches
   # aren't guaranteed to be disjoint, we structure matches from largest to
@@ -580,7 +577,7 @@ def _IsSkipLayer(activation_op):
   if activation_op.type == 'Identity' and len(activation_op.outputs) == 1:
     if len(activation_op.outputs[0].consumers()) == 1:
       consumer = activation_op.outputs[0].consumers()[0]
-      if consumer.type in ['FusedBatchNorm', 'FusedBatchNormV3']:
+      if consumer.type == 'FusedBatchNorm':
         skip_layer = True
         logging.info(
             'Skipping quantizing %s, because it is the output of a conv/fc '

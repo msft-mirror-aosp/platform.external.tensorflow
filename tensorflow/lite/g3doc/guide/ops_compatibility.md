@@ -134,6 +134,8 @@ TensorFlow operation not listed above are likely unsupported. Notably, the
 following common ops are not supported at the moment:
 
 *   [tf.depth_to_space](https://www.tensorflow.org/api_docs/python/tf/depth_to_space)
+*   [tf.image.resize_bilinear](https://www.tensorflow.org/api_docs/python/tf/image/resize_bilinear)
+*   [tf.tanh](https://www.tensorflow.org/api_docs/python/tf/tanh)
 
 ## TensorFlow Lite Operations
 
@@ -266,7 +268,7 @@ Options {
 }
 ```
 
-**TRANSPOSE_CONV**
+**CONV_2D_TRANSPOSE**
 
 ```
 Inputs {
@@ -388,10 +390,10 @@ Outputs {
 **CEIL**
 
 ```
-Inputs {
-  0: a tensor
+inputs {
+  0: tensor
 }
-Outputs {
+outputs: {
   0: result of computing element-wise ceil of the input tensor
 }
 ```
@@ -782,22 +784,6 @@ Options {
 }
 ```
 
-**RESIZE_BILINEAR**
-
-```
-Inputs {
-  0: a 4D tensor
-  1: a 1D tensor with 2 elements
-}
-Outputs {
-  0: A tensor of type `tensor 0` resized according to `tensor 1` height/width values
-  using bilinear interpolation.
-}
-Options {
-  align_corners
-}
-```
-
 **RESIZE_NEAREST_NEIGHBOR**
 
 ```
@@ -855,17 +841,6 @@ Outputs {
 }
 Options {
   out_type: the output type of the op (int32 or int64). Defaults to int32.
-}
-```
-
-**ROUND**
-
-```
-Inputs {
-  0: a tensor
-}
-Outputs {
-  0: result of computing element-wise round of the input tensor
 }
 ```
 
@@ -1015,17 +990,6 @@ Options {
 }
 ```
 
-**TANH**
-
-```
-Inputs {
-  0: a tensor
-}
-Outputs {
-  0: result of computing element-wise hyperbolic tangent of the input tensor
-}
-```
-
 **TOP_K**
 
 ```
@@ -1035,7 +999,7 @@ Inputs {
 }
 Outputs {
   0: k largest element along each last dimensional slice
-  1: indices of values within the last dimension of the input tensor
+  1: indices of values within the last dimension of the input ensor
 }
 ```
 
@@ -1128,6 +1092,8 @@ custom models yet:
 *   HASHTABLE_LOOKUP
 *   LSH_PROJECTION
 *   LSTM
+*   RESIZE_BILINEAR
 *   RNN
 *   SKIP_GRAM
 *   SVDF
+*   TANH

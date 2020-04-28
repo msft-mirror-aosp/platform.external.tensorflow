@@ -42,9 +42,6 @@ typedef int64 CancellationToken;
 // comment for CancellationManager::RegisterCallback.
 typedef std::function<void()> CancelCallback;
 
-// This class should never simultaneously be used as the cancellation manager
-// for two separate sets of executions (i.e two separate steps, or two separate
-// function executions).
 class CancellationManager {
  public:
   // A value that won't be returned by get_cancellation_token().
@@ -58,6 +55,9 @@ class CancellationManager {
 
   // Returns true iff StartCancel() has been called.
   bool IsCancelled() { return is_cancelled_.load(std::memory_order_acquire); }
+
+  // Resets the cancellation manager to its original pre-cancelled state.
+  void Reset();
 
   // Returns a token that must be used in calls to RegisterCallback
   // and DeregisterCallback.

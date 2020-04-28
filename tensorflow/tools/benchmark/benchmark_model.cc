@@ -33,7 +33,6 @@ limitations under the License.
 #include "tensorflow/core/graph/algorithm.h"
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/graph_constructor.h"
-#include "tensorflow/core/lib/strings/numbers.h"
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/env.h"
@@ -102,7 +101,7 @@ void CreateTensorsFromInputInfo(
         if (!input.initialization_values.empty()) {
           LOG(FATAL) << "Initialization values are not supported for strings";
         }
-        auto type_tensor = input_tensor.flat<tstring>();
+        auto type_tensor = input_tensor.flat<string>();
         type_tensor = type_tensor.constant("");
         break;
       }
@@ -547,17 +546,10 @@ int Main(int argc, char** argv) {
     }
     input.name = input_layers[n];
     if (n < input_layer_values.size()) {
-      std::vector<string> string_tokens =
-          str_util::Split(input_layer_values[n], ',');
-      input.initialization_values.clear();
-      input.initialization_values.reserve(string_tokens.size());
-      for (const string& str_val : string_tokens) {
-        float val;
-        CHECK(strings::safe_strtof(str_val, &val))
-            << "Incorrect initialization values string specified: "
-            << input_layer_values[n];
-        input.initialization_values.push_back(val);
-      }
+      CHECK(str_util::SplitAndParseAsFloats(input_layer_values[n], ',',
+                                            &input.initialization_values))
+          << "Incorrect initialization values string specified: "
+          << input_layer_values[n];
     }
     inputs.push_back(input);
   }

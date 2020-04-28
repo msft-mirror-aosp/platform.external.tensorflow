@@ -65,26 +65,27 @@ void TF_Run_wrapper(TF_DeprecatedSession* session, const TF_Buffer* run_options,
 // Python wrappers for the `Session::MakeCallable()` API.
 void TF_DeprecatedSessionMakeCallable(TF_DeprecatedSession* session,
                                       const TF_Buffer* callable_options,
-                                      int64_t* out_handle, TF_Status* status);
+                                      int64_t* out_handle,
+                                      TF_Status* out_status);
 void TF_SessionMakeCallable(TF_Session* session,
                             const TF_Buffer* callable_options,
-                            int64_t* out_handle, TF_Status* status);
+                            int64_t* out_handle, TF_Status* out_status);
 
 // Python wrappers for the `Session::RunCallable()` API.
 void TF_DeprecatedSessionRunCallable(TF_DeprecatedSession* session,
                                      int64_t handle, PyObject* feed_values,
+                                     TF_Status* out_status,
                                      PyObjectVector* out_values,
-                                     TF_Buffer* run_metadata,
-                                     TF_Status* status);
+                                     TF_Buffer* run_metadata);
 void TF_SessionRunCallable(TF_Session* session, int64_t handle,
-                           PyObject* feed_values, PyObjectVector* out_values,
-                           TF_Buffer* run_metadata, TF_Status* status);
+                           PyObject* feed_values, TF_Status* out_status,
+                           PyObjectVector* out_values, TF_Buffer* run_metadata);
 
 // Python wrappers for the `Session::ReleaseCallable()` API.
 void TF_DeprecatedSessionReleaseCallable(TF_DeprecatedSession* session,
-                                         int64_t handle, TF_Status* status);
+                                         int64_t handle, TF_Status* out_status);
 void TF_SessionReleaseCallable(TF_Session* session, int64_t handle,
-                               TF_Status* status);
+                               TF_Status* out_status);
 
 // Set up the graph with the intended feeds and fetches for partial run.
 // *out_handle is owned by the caller.
@@ -117,7 +118,7 @@ void TF_PRun_wrapper(TF_DeprecatedSession* session, const char* handle,
 
 // Wrapper for TF_Reset that converts the string vectors to character arrays.
 void TF_Reset_wrapper(const TF_SessionOptions* opt,
-                      const NameVector& containers, TF_Status* status);
+                      const NameVector& containers, TF_Status* out_status);
 
 // Convenience wrapper around EqualGraphDef to make it easier to wrap.
 // Returns an explanation if a difference is found, or the empty string

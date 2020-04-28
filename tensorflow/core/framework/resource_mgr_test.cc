@@ -19,7 +19,6 @@ limitations under the License.
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/framework/node_def_util.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/refcount.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/core/threadpool.h"
 #include "tensorflow/core/lib/strings/str_util.h"
@@ -74,7 +73,7 @@ string LookupOrCreate(ResourceMgr* rm, const string& container,
 }
 
 static void HasError(const Status& s, const string& substr) {
-  EXPECT_TRUE(absl::StrContains(s.ToString(), substr))
+  EXPECT_TRUE(str_util::StrContains(s.ToString(), substr))
       << s << ", expected substring " << substr;
 }
 
@@ -267,14 +266,15 @@ TEST(ResourceHandleTest, CRUD) {
     TF_EXPECT_OK(CreateResource(&ctx, p, r));
   }
   {
-    core::RefCountPtr<StubResource> r;
+    StubResource* r = nullptr;
     TF_ASSERT_OK(LookupResource(&ctx, p, &r));
     ASSERT_TRUE(r != nullptr);
     EXPECT_EQ(r->value_, 42);
+    r->Unref();
   }
   {
     TF_EXPECT_OK(DeleteResource<StubResource>(&ctx, p));
-    core::RefCountPtr<StubResource> unused;
+    StubResource* unused = nullptr;
     EXPECT_FALSE(LookupResource(&ctx, p, &unused).ok());
   }
 }
@@ -338,12 +338,13 @@ TEST(ResourceHandleTest, DeleteUsingResourceHandle) {
   StubResource* r = new StubResource;
   TF_EXPECT_OK(CreateResource(&ctx, p, r));
 
-  core::RefCountPtr<StubResource> lookup_r;
+  StubResource* lookup_r = nullptr;
   TF_EXPECT_OK(LookupResource<StubResource>(&ctx, p, &lookup_r));
-  EXPECT_EQ(lookup_r.get(), r);
+  EXPECT_EQ(lookup_r, r);
 
   TF_EXPECT_OK(DeleteResource(&ctx, p));
   EXPECT_NE(LookupResource<StubResource>(&ctx, p, &lookup_r).ok(), true);
+  r->Unref();
 }
 
 }  // end namespace tensorflow

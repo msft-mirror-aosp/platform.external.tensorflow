@@ -9,7 +9,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/core/kernels/data/take_dataset_op.h"
 
 #include "tensorflow/core/kernels/data/dataset_test_base.h"
 
@@ -18,6 +17,7 @@ namespace data {
 namespace {
 
 constexpr char kNodeName[] = "take_dataset";
+constexpr char kOpName[] = "TakeDataset";
 
 class TakeDatasetOpTest : public DatasetOpsTestBase {
  protected:
@@ -38,12 +38,10 @@ class TakeDatasetOpTest : public DatasetOpsTestBase {
       const DataTypeVector &output_types,
       const std::vector<PartialTensorShape> &output_shapes,
       std::unique_ptr<OpKernel> *op_kernel) {
-    NodeDef node_def = test::function::NDef(
-        kNodeName, name_utils::OpName(TakeDatasetOp::kDatasetType),
-        {TakeDatasetOp::kInputDataset, TakeDatasetOp::kCount},
-        {{TakeDatasetOp::kOutputTypes, output_types},
-         {TakeDatasetOp::kOutputShapes, output_shapes}});
-    TF_RETURN_IF_ERROR(CreateOpKernel(node_def, op_kernel));
+    node_def_ = test::function::NDef(
+        kNodeName, kOpName, {"input_dataset", "count"},
+        {{"output_types", output_types}, {"output_shapes", output_shapes}});
+    TF_RETURN_IF_ERROR(CreateOpKernel(node_def_, op_kernel));
     return Status::OK();
   }
 
@@ -55,6 +53,9 @@ class TakeDatasetOpTest : public DatasetOpsTestBase {
     TF_RETURN_IF_ERROR(CreateOpKernelContext(op_kernel, inputs, context));
     return Status::OK();
   }
+
+ private:
+  NodeDef node_def_;
 };
 
 struct TestCase {
@@ -69,85 +70,90 @@ struct TestCase {
 
 // Test case 1: take fewer than input size.
 TestCase TakeLessTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*count*/ 4,
-      /*expected_outputs*/
-      {CreateTensor<int64>(TensorShape{1}, {0}),
-       CreateTensor<int64>(TensorShape{1}, {1}),
-       CreateTensor<int64>(TensorShape{1}, {2}),
-       CreateTensor<int64>(TensorShape{1}, {3})},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 4,
-      /*breakpoints*/ {0, 2, 5}};
+  return {/*input_tensors*/
+          {DatasetOpsTestBase::CreateTensor<int64>(
+              TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+          /*count*/ 4,
+          /*expected_outputs*/
+          {DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {0}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {1}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {2}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {3})},
+          /*expected_output_dtypes*/ {DT_INT64},
+          /*expected_output_shapes*/
+          {PartialTensorShape({1})},
+          /*expected_cardinality*/ 4,
+          /*breakpoints*/ {0, 2, 5}};
 }
 
 // Test case 2: take more than input size.
 TestCase TakeMoreTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*count*/ 25,
-      /*expected_outputs*/
-      {CreateTensor<int64>(TensorShape{1}, {0}),
-       CreateTensor<int64>(TensorShape{1}, {1}),
-       CreateTensor<int64>(TensorShape{1}, {2}),
-       CreateTensor<int64>(TensorShape{1}, {3}),
-       CreateTensor<int64>(TensorShape{1}, {4}),
-       CreateTensor<int64>(TensorShape{1}, {5}),
-       CreateTensor<int64>(TensorShape{1}, {6}),
-       CreateTensor<int64>(TensorShape{1}, {7}),
-       CreateTensor<int64>(TensorShape{1}, {8}),
-       CreateTensor<int64>(TensorShape{1}, {9})},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 10,
-      /*breakpoints*/ {0, 2, 5, 11}};
+  return {/*input_tensors*/
+          {DatasetOpsTestBase::CreateTensor<int64>(
+              TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+          /*count*/ 25,
+          /*expected_outputs*/
+          {DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {0}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {1}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {2}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {3}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {4}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {5}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {6}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {7}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {8}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {9})},
+          /*expected_output_dtypes*/ {DT_INT64},
+          /*expected_output_shapes*/
+          {PartialTensorShape({1})},
+          /*expected_cardinality*/ 10,
+          /*breakpoints*/ {0, 2, 5, 11}};
 }
 
 // Test case 3: take all of input.
 TestCase TakeAllTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*count*/ -1,
-      /*expected_outputs*/
-      {CreateTensor<int64>(TensorShape{1}, {0}),
-       CreateTensor<int64>(TensorShape{1}, {1}),
-       CreateTensor<int64>(TensorShape{1}, {2}),
-       CreateTensor<int64>(TensorShape{1}, {3}),
-       CreateTensor<int64>(TensorShape{1}, {4}),
-       CreateTensor<int64>(TensorShape{1}, {5}),
-       CreateTensor<int64>(TensorShape{1}, {6}),
-       CreateTensor<int64>(TensorShape{1}, {7}),
-       CreateTensor<int64>(TensorShape{1}, {8}),
-       CreateTensor<int64>(TensorShape{1}, {9})},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ -1,
-      /*breakpoints*/ {0, 2, 5, 11}};
+  return {/*input_tensors*/
+          {DatasetOpsTestBase::CreateTensor<int64>(
+              TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+          /*count*/ -1,
+          /*expected_outputs*/
+          {DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {0}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {1}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {2}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {3}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {4}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {5}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {6}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {7}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {8}),
+           DatasetOpsTestBase::CreateTensor<int64>(TensorShape{1}, {9})},
+          /*expected_output_dtypes*/ {DT_INT64},
+          /*expected_output_shapes*/
+          {PartialTensorShape({1})},
+          /*expected_cardinality*/ -1,
+          /*breakpoints*/ {0, 2, 5, 11}};
 }
 
 // Test case 4: take nothing.
 TestCase TakeNothingTestCase() {
-  return {
-      /*input_tensors*/
-      {CreateTensor<int64>(TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
-      /*count*/ 0,
-      /*expected_outputs*/ {},
-      /*expected_output_dtypes*/ {DT_INT64},
-      /*expected_output_shapes*/ {PartialTensorShape({1})},
-      /*expected_cardinality*/ 0,
-      /*breakpoints*/ {0, 2, 5, 11}};
+  return {/*input_tensors*/
+          {DatasetOpsTestBase::CreateTensor<int64>(
+              TensorShape{10, 1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9})},
+          /*count*/ 0,
+          /*expected_outputs*/
+          {},
+          /*expected_output_dtypes*/ {DT_INT64},
+          /*expected_output_shapes*/
+          {PartialTensorShape({1})},
+          /*expected_cardinality*/ 0,
+          /*breakpoints*/ {0, 2, 5, 11}};
 }
 
-class ParameterizedTakeDatasetOpTest
+class ParametrizedTakeDatasetOpTest
     : public TakeDatasetOpTest,
       public ::testing::WithParamInterface<TestCase> {};
 
-TEST_P(ParameterizedTakeDatasetOpTest, GetNext) {
+TEST_P(ParametrizedTakeDatasetOpTest, GetNext) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -198,7 +204,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, GetNext) {
   EXPECT_EQ(expected_outputs_it, test_case.expected_outputs.end());
 }
 
-TEST_F(TakeDatasetOpTest, DatasetNodeName) {
+TEST_F(TakeDatasetOpTest, DatasetName) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -225,41 +231,10 @@ TEST_F(TakeDatasetOpTest, DatasetNodeName) {
                              take_dataset_context.get(), &take_dataset));
   core::ScopedUnref scoped_unref(take_dataset);
 
-  EXPECT_EQ(take_dataset->node_name(), kNodeName);
+  EXPECT_EQ(take_dataset->type_string(), kOpName);
 }
 
-TEST_F(TakeDatasetOpTest, DatasetTypeString) {
-  int thread_num = 2, cpu_num = 2;
-  TF_ASSERT_OK(InitThreadPool(thread_num));
-  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
-  const TestCase &test_case = TakeLessTestCase();
-  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
-  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
-  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
-                                              &tensor_slice_dataset_tensor));
-  Tensor count = CreateTensor<int64>(TensorShape{}, {test_case.count});
-  gtl::InlinedVector<TensorValue, 4> inputs_for_take_dataset;
-  inputs_for_take_dataset.emplace_back(&tensor_slice_dataset_tensor);
-  inputs_for_take_dataset.emplace_back(&count);
-
-  std::unique_ptr<OpKernel> take_dataset_kernel;
-  TF_ASSERT_OK(CreateTakeDatasetKernel(test_case.expected_output_dtypes,
-                                       test_case.expected_output_shapes,
-                                       &take_dataset_kernel));
-  std::unique_ptr<OpKernelContext> take_dataset_context;
-  TF_ASSERT_OK(CreateTakeDatasetContext(take_dataset_kernel.get(),
-                                        &inputs_for_take_dataset,
-                                        &take_dataset_context));
-  DatasetBase *take_dataset;
-  TF_ASSERT_OK(CreateDataset(take_dataset_kernel.get(),
-                             take_dataset_context.get(), &take_dataset));
-  core::ScopedUnref scoped_unref(take_dataset);
-
-  EXPECT_EQ(take_dataset->type_string(),
-            name_utils::OpName(TakeDatasetOp::kDatasetType));
-}
-
-TEST_P(ParameterizedTakeDatasetOpTest, DatasetOutputDtypes) {
+TEST_P(ParametrizedTakeDatasetOpTest, DatasetOutputDtypes) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -290,7 +265,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, DatasetOutputDtypes) {
                                 test_case.expected_output_dtypes));
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, DatasetOutputShapes) {
+TEST_P(ParametrizedTakeDatasetOpTest, DatasetOutputShapes) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -321,7 +296,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, DatasetOutputShapes) {
                                       test_case.expected_output_shapes));
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, Cardinality) {
+TEST_P(ParametrizedTakeDatasetOpTest, Cardinality) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -351,7 +326,42 @@ TEST_P(ParameterizedTakeDatasetOpTest, Cardinality) {
   EXPECT_EQ(take_dataset->Cardinality(), test_case.expected_cardinality);
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputDtypes) {
+TEST_F(TakeDatasetOpTest, DatasetSave) {
+  int thread_num = 2, cpu_num = 2;
+  TF_ASSERT_OK(InitThreadPool(thread_num));
+  TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
+  const TestCase &test_case = TakeLessTestCase();
+  Tensor tensor_slice_dataset_tensor(DT_VARIANT, TensorShape({}));
+  std::vector<Tensor> inputs_for_tensor_slice_dataset = test_case.input_tensors;
+  TF_ASSERT_OK(CreateTensorSliceDatasetTensor(&inputs_for_tensor_slice_dataset,
+                                              &tensor_slice_dataset_tensor));
+  Tensor count = CreateTensor<int64>(TensorShape{}, {test_case.count});
+  gtl::InlinedVector<TensorValue, 4> inputs_for_take_dataset;
+  inputs_for_take_dataset.emplace_back(&tensor_slice_dataset_tensor);
+  inputs_for_take_dataset.emplace_back(&count);
+
+  std::unique_ptr<OpKernel> take_dataset_kernel;
+  TF_ASSERT_OK(CreateTakeDatasetKernel(test_case.expected_output_dtypes,
+                                       test_case.expected_output_shapes,
+                                       &take_dataset_kernel));
+  std::unique_ptr<OpKernelContext> take_dataset_context;
+  TF_ASSERT_OK(CreateTakeDatasetContext(take_dataset_kernel.get(),
+                                        &inputs_for_take_dataset,
+                                        &take_dataset_context));
+  DatasetBase *take_dataset;
+  TF_ASSERT_OK(CreateDataset(take_dataset_kernel.get(),
+                             take_dataset_context.get(), &take_dataset));
+  core::ScopedUnref scoped_unref(take_dataset);
+
+  std::unique_ptr<SerializationContext> serialization_ctx;
+  TF_ASSERT_OK(CreateSerializationContext(&serialization_ctx));
+  VariantTensorData data;
+  VariantTensorDataWriter writer(&data);
+  TF_ASSERT_OK(take_dataset->Save(serialization_ctx.get(), &writer));
+  TF_ASSERT_OK(writer.Flush());
+}
+
+TEST_P(ParametrizedTakeDatasetOpTest, IteratorOutputDtypes) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -389,7 +399,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputDtypes) {
                                 test_case.expected_output_dtypes));
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputShapes) {
+TEST_P(ParametrizedTakeDatasetOpTest, IteratorOutputShapes) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -427,7 +437,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputShapes) {
                                       test_case.expected_output_shapes));
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputPrefix) {
+TEST_P(ParametrizedTakeDatasetOpTest, IteratorOutputPrefix) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -462,15 +472,13 @@ TEST_P(ParameterizedTakeDatasetOpTest, IteratorOutputPrefix) {
       take_dataset->MakeIterator(iterator_ctx.get(), "Iterator", &iterator));
 
   if (test_case.count == 0) {
-    EXPECT_EQ(iterator->prefix(),
-              name_utils::IteratorPrefix("EmptyTake", "Iterator"));
+    EXPECT_EQ(iterator->prefix(), "Iterator::EmptyTake");
   } else {
-    EXPECT_EQ(iterator->prefix(),
-              name_utils::IteratorPrefix("FiniteTake", "Iterator"));
+    EXPECT_EQ(iterator->prefix(), "Iterator::FiniteTake");
   }
 }
 
-TEST_P(ParameterizedTakeDatasetOpTest, Roundtrip) {
+TEST_P(ParametrizedTakeDatasetOpTest, Roundtrip) {
   int thread_num = 2, cpu_num = 2;
   TF_ASSERT_OK(InitThreadPool(thread_num));
   TF_ASSERT_OK(InitFunctionLibraryRuntime({}, cpu_num));
@@ -518,8 +526,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, Roundtrip) {
     TF_EXPECT_OK(iterator->Save(serialization_ctx.get(), &writer));
     TF_EXPECT_OK(writer.Flush());
     VariantTensorDataReader reader(&data);
-    TF_EXPECT_OK(RestoreIterator(iterator_ctx.get(), &reader, "Iterator",
-                                 *take_dataset, &iterator));
+    TF_EXPECT_OK(iterator->Restore(iterator_ctx.get(), &reader));
 
     while (cur_iteration <= breakpoint) {
       TF_EXPECT_OK(iterator->GetNext(iterator_ctx.get(), &out_tensors,
@@ -543,7 +550,7 @@ TEST_P(ParameterizedTakeDatasetOpTest, Roundtrip) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(TakeDatasetOpTest, ParameterizedTakeDatasetOpTest,
+INSTANTIATE_TEST_SUITE_P(TakeDatasetOpTest, ParametrizedTakeDatasetOpTest,
                          ::testing::ValuesIn(std::vector<TestCase>(
                              {TakeLessTestCase(), TakeMoreTestCase(),
                               TakeAllTestCase(), TakeNothingTestCase()})));

@@ -4394,7 +4394,8 @@ class IdentityCategoricalColumnTest(test.TestCase):
     id_weight_pair = column._get_sparse_tensors(_LazyBuilder({'aaa': inputs}))
     self.assertIsNone(id_weight_pair.weight_tensor)
     with _initialized_session():
-      with self.assertRaisesRegexp(errors.OpError, 'assert'):
+      with self.assertRaisesRegexp(
+          errors.OpError, 'assert_greater_or_equal_0'):
         id_weight_pair.id_tensor.eval()
 
   @test_util.run_deprecated_v1
@@ -4407,7 +4408,8 @@ class IdentityCategoricalColumnTest(test.TestCase):
     id_weight_pair = column._get_sparse_tensors(_LazyBuilder({'aaa': inputs}))
     self.assertIsNone(id_weight_pair.weight_tensor)
     with _initialized_session():
-      with self.assertRaisesRegexp(errors.OpError, 'assert'):
+      with self.assertRaisesRegexp(
+          errors.OpError, 'assert_less_than_num_buckets'):
         id_weight_pair.id_tensor.eval()
 
   @test_util.run_deprecated_v1

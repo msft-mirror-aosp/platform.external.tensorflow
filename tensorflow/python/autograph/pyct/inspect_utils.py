@@ -21,19 +21,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
 import itertools
-import linecache
-import sys
-import threading
 import types
 
 import six
 
 from tensorflow.python.util import tf_inspect
-
-# This lock seems to help avoid linecache concurrency errors.
-_linecache_lock = threading.Lock()
 
 
 # These functions test negative for isinstance(*, types.BuiltinFunctionType)
@@ -81,51 +74,13 @@ def isnamedtuple(f):
 
 def isbuiltin(f):
   """Returns True if the argument is a built-in function."""
-  if any(f is builtin for builtin in six.moves.builtins.__dict__.values()):
+  if f in six.moves.builtins.__dict__.values():
     return True
-  elif isinstance(f, types.BuiltinFunctionType):
+  if isinstance(f, types.BuiltinFunctionType):
     return True
-  elif inspect.isbuiltin(f):
+  if tf_inspect.isbuiltin(f):
     return True
-  elif f is eval:
-    return True
-  else:
-    return False
-
-
-def _fix_linecache_record(obj):
-  """Fixes potential corruption of linecache in the presence of functools.wraps.
-
-  functools.wraps modifies the target object's __module__ field, which seems
-  to confuse linecache in special instances, for example when the source is
-  loaded from a .par file (see https://google.github.io/subpar/subpar.html).
-
-  This function simply triggers a call to linecache.updatecache when a mismatch
-  was detected between the object's __module__ property and the object's source
-  file.
-
-  Args:
-    obj: Any
-  """
-  if hasattr(obj, '__module__'):
-    obj_file = inspect.getfile(obj)
-    obj_module = obj.__module__
-
-    # A snapshot of the loaded modules helps avoid "dict changed size during
-    # iteration" errors.
-    loaded_modules = tuple(sys.modules.values())
-    for m in loaded_modules:
-      if hasattr(m, '__file__') and m.__file__ == obj_file:
-        if obj_module is not m:
-          linecache.updatecache(obj_file, m.__dict__)
-
-
-def getimmediatesource(obj):
-  """A variant of inspect.getsource that ignores the __wrapped__ property."""
-  with _linecache_lock:
-    _fix_linecache_record(obj)
-    lines, lnum = inspect.findsource(obj)
-    return ''.join(inspect.getblock(lines[lnum:]))
+  return False
 
 
 def getnamespace(f):
@@ -216,8 +171,6 @@ def getqualifiedname(namespace, object_, max_depth=5, visited=None):
 def _get_unbound_function(m):
   # TODO(mdan): Figure out why six.get_unbound_function fails in some cases.
   # The failure case is for tf.keras.Model.
-  if hasattr(m, '__func__'):
-    return m.__func__
   if hasattr(m, 'im_func'):
     return m.im_func
   return m
@@ -227,7 +180,7 @@ def getdefiningclass(m, owner_class):
   """Resolves the class (e.g. one of the superclasses) that defined a method."""
   # Normalize bound functions to their respective unbound versions.
   m = _get_unbound_function(m)
-  for superclass in reversed(inspect.getmro(owner_class)):
+  for superclass in owner_class.__bases__:
     if hasattr(superclass, m.__name__):
       superclass_m = getattr(superclass, m.__name__)
       if _get_unbound_function(superclass_m) is m:
@@ -243,9 +196,7 @@ def istfmethodtarget(m):
   # See eager.function.TfMethodTarget for more details.
   return (hasattr(m, '__self__') and
           hasattr(m.__self__, 'weakrefself_target__') and
-          hasattr(m.__self__, 'weakrefself_func__') and
-          hasattr(m, '__module__') and
-          (m.__module__ != 'mock'))
+          hasattr(m.__self__, 'weakrefself_func__'))
 
 
 def getmethodself(m):
@@ -347,8 +298,63 @@ def getfutureimports(entity):
   Returns:
     A tuple of future strings
   """
-  if not (tf_inspect.isfunction(entity) or tf_inspect.ismethod(entity)):
+  if not tf_inspect.isfunction(entity):
     return tuple()
   return tuple(sorted(name for name, value in entity.__globals__.items()
                       if getattr(value, '__module__', None) == '__future__'))
 
+
+class SuperWrapperForDynamicAttrs(object):
+  """A wrapper that supports dynamic attribute lookup on the super object.
+
+  For example, in the following code, `super` incorrectly reports that
+  `super(Bar, b)` lacks the `a` attribute:
+
+    class Foo(object):
+      def __init__(self):
+        self.a = lambda: 1
+
+      def bar(self):
+        return hasattr(self, 'a')
+
+    class Bar(Foo):
+      def bar(self):
+        return super(Bar, self).bar()
+
+
+    b = Bar()
+    print(hasattr(super(Bar, b), 'a'))  # False
+    print(super(Bar, b).bar())          # True
+
+  A practical situation when this tends to happen is Keras model hierarchies
+  that hold references to certain layers, like this:
+
+    class MiniModel(keras.Model):
+
+      def __init__(self):
+        super(MiniModel, self).__init__()
+        self.fc = keras.layers.Dense(1)
+
+      def call(self, inputs, training=True):
+        return self.fc(inputs)
+
+    class DefunnedMiniModel(MiniModel):
+
+      def call(self, inputs, training=True):
+        return super(DefunnedMiniModel, self).call(inputs, training=training)
+
+  A side effect of this wrapper is that all attributes become visible, even
+  those created in the subclass.
+  """
+
+  # TODO(mdan): Investigate why that happens - it may be for a reason.
+  # TODO(mdan): Probably need more overrides to make it look like super.
+
+  def __init__(self, target):
+    self._target = target
+
+  def __getattribute__(self, name):
+    target = object.__getattribute__(self, '_target')
+    if hasattr(target, name):
+      return getattr(target, name)
+    return getattr(target.__self__, name)

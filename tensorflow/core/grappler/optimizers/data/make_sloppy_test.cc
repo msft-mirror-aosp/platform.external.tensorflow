@@ -29,6 +29,10 @@ namespace tensorflow {
 namespace grappler {
 namespace {
 
+using graph_tests_utils::MakeParallelInterleaveNode;
+using graph_tests_utils::MakeParallelMapNode;
+using graph_tests_utils::MakeParseExampleNode;
+
 TEST(MakeSloppy, ParallelInterleave) {
   using test::function::NDef;
   GrapplerItem item;
@@ -41,9 +45,9 @@ TEST(MakeSloppy, ParallelInterleave) {
        NDef("block_length", "Const", {}, {{"value", 1}, {"dtype", DT_INT32}}),
        NDef("num_parallel_calls", "Const", {},
             {{"value", 1}, {"dtype", DT_INT32}}),
-       graph_tests_utils::MakeParallelInterleaveV2Node(
-           "interleave", "range", "cycle_length", "block_length",
-           "num_parallel_calls", "XTimesTwo", /*sloppy=*/false)},
+       MakeParallelInterleaveNode("interleave", "range", "cycle_length",
+                                  "block_length", "num_parallel_calls",
+                                  "XTimesTwo", /*sloppy=*/false)},
       // FunctionLib
       {
           test::function::XTimesTwo(),
@@ -67,9 +71,8 @@ TEST(MakeSloppy, ParallelMap) {
        NDef("range", "RangeDataset", {"start", "stop", "step"}, {}),
        NDef("num_parallel_calls", "Const", {},
             {{"value", 1}, {"dtype", DT_INT32}}),
-       graph_tests_utils::MakeParallelMapNode("map", "range",
-                                              "num_parallel_calls", "XTimesTwo",
-                                              /*sloppy=*/false)},
+       MakeParallelMapNode("map", "range", "num_parallel_calls", "XTimesTwo",
+                           /*sloppy=*/false)},
       // FunctionLib
       {
           test::function::XTimesTwo(),
@@ -93,9 +96,8 @@ TEST(MakeSloppy, ParseExampleDataset) {
        NDef("range", "RangeDataset", {"start", "stop", "step"}, {}),
        NDef("num_parallel_calls", "Const", {},
             {{"value", 1}, {"dtype", DT_INT32}}),
-       graph_tests_utils::MakeParseExampleNode("parse_example", "range",
-                                               "num_parallel_calls",
-                                               /*sloppy=*/false)},
+       MakeParseExampleNode("parse_example", "range", "num_parallel_calls",
+                            /*sloppy=*/false)},
       // FunctionLib
       {});
 

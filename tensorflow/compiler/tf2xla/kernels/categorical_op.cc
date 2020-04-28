@@ -15,7 +15,6 @@ limitations under the License.
 
 // XLA implementations of Categorical op.
 
-#include "tensorflow/compiler/tf2xla/kernels/random_ops_util.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
 #include "tensorflow/compiler/tf2xla/type_util.h"
 #include "tensorflow/compiler/tf2xla/xla_helpers.h"
@@ -36,9 +35,7 @@ namespace {
 
 class CategoricalOp : public XlaOpKernel {
  public:
-  explicit CategoricalOp(OpKernelConstruction* ctx)
-      : XlaOpKernel(ctx),
-        is_gpu_(ctx->device_type().type_string() == DEVICE_GPU_XLA_JIT) {}
+  explicit CategoricalOp(OpKernelConstruction* ctx) : XlaOpKernel(ctx) {}
 
   void Compile(XlaOpKernelContext* ctx) override {
     // Get the logits
@@ -103,15 +100,8 @@ class CategoricalOp : public XlaOpKernel {
     xla::PrimitiveType xla_output_type;
     OP_REQUIRES_OK(ctx,
                    DataTypeToPrimitiveType(output_type(0), &xla_output_type));
-    xla::XlaOp argmax;
-    if (is_gpu_) {
-      argmax = xla::ArgMaxTwoPass(softmax_entries, xla_output_type,
-                                  /*axis=*/class_dimension);
-    } else {
-      argmax = xla::ArgMax(softmax_entries, xla_output_type,
-                           /*axis=*/class_dimension);
-    }
-
+    xla::XlaOp argmax = xla::ArgMax(softmax_entries, xla_output_type,
+                                    /*axis=*/class_dimension);
     if (num_samples == 1) {
       argmax = xla::Reshape(argmax, {batch_size, 1});
     }
@@ -133,7 +123,6 @@ class CategoricalOp : public XlaOpKernel {
   }
 
  private:
-  bool is_gpu_;
   TF_DISALLOW_COPY_AND_ASSIGN(CategoricalOp);
 };
 
@@ -144,14 +133,15 @@ REGISTER_XLA_OP(Name("Multinomial").CompileTimeConstantInput("num_samples"),
 class StatelessCategoricalOp : public CategoricalOp {
  public:
   explicit StatelessCategoricalOp(OpKernelConstruction* ctx)
-      : CategoricalOp(ctx),
-        device_type_string_(ctx->device_type().type_string()) {
+      : CategoricalOp(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("T", &dtype_));
   }
 
   xla::XlaOp GetLogUniforms(xla::Shape uniform_shape, xla::PrimitiveType type,
                             XlaOpKernelContext* ctx) override {
     xla::XlaOp seed = ctx->Input(2);
+    auto seed0 = xla::Reshape(xla::Slice(seed, {0}, {1}, {1}), {});
+    auto seed1 = xla::Reshape(xla::Slice(seed, {1}, {2}, {1}), {});
 
     xla::XlaBuilder* builder = ctx->builder();
     if (uniform_shape.element_type() == xla::BF16) {
@@ -160,8 +150,8 @@ class StatelessCategoricalOp : public CategoricalOp {
     // We want a number in (0, 1) rather than [0, 1) or (0, 1]:
     // * log(-log(0)) is ∞.
     // * log(-log(1)) is -∞.
-    xla::XlaOp uniforms = StatelessRngUniform(
-        device_type_string_, seed, uniform_shape,
+    auto uniforms = xla::StatelessRngUniform(
+        {seed0, seed1}, uniform_shape,
         xla::MinPositiveNormalValue(builder, uniform_shape.element_type()),
         xla::One(builder, uniform_shape.element_type()));
     return xla::ConvertElementType(xla::Log(-xla::Log(uniforms)), type);
@@ -177,7 +167,6 @@ class StatelessCategoricalOp : public CategoricalOp {
 
  private:
   DataType dtype_;
-  string device_type_string_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(StatelessCategoricalOp);
 };

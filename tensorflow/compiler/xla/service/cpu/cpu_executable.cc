@@ -16,7 +16,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/cpu/cpu_executable.h"
 
 #include <stdint.h>
-
 #include <algorithm>
 #include <set>
 #include <unordered_set>
@@ -74,13 +73,13 @@ CpuExecutable::CpuExecutable(
 }
 
 StatusOr<std::pair<std::vector<se::DeviceMemoryBase>,
-                   std::vector<se::OwningDeviceMemory>>>
+                   std::vector<OwningDeviceMemory>>>
 CpuExecutable::CreateBufferTable(
-    se::DeviceMemoryAllocator* memory_allocator, int device_ordinal,
+    DeviceMemoryAllocator* memory_allocator, int device_ordinal,
     absl::Span<const ShapedBuffer* const> arguments) {
   std::vector<se::DeviceMemoryBase> unowning_buffers(
       assignment_->Allocations().size());
-  std::vector<se::OwningDeviceMemory> owning_buffers(
+  std::vector<OwningDeviceMemory> owning_buffers(
       assignment_->Allocations().size());
   VLOG(3) << "Allocating " << assignment_->Allocations().size()
           << " allocations for module " << module().name();
@@ -93,9 +92,6 @@ CpuExecutable::CreateBufferTable(
     if (allocation.is_entry_computation_parameter()) {
       unowning_buffers[i] = arguments[allocation.parameter_number()]->buffer(
           allocation.param_shape_index());
-      CHECK_EQ(allocation.size(), unowning_buffers[i].size())
-          << "Size mismatch on param " << allocation.parameter_number()
-          << " at shape index " << allocation.param_shape_index().ToString();
       VLOG(3) << "allocation #" << i << " is a parameter";
       continue;
     }
@@ -117,17 +113,17 @@ CpuExecutable::CreateBufferTable(
     } else {
       TF_ASSIGN_OR_RETURN(owning_buffers[i], memory_allocator->Allocate(
                                                  device_ordinal, buffer_size));
-      unowning_buffers[i] = *owning_buffers[i];
+      unowning_buffers[i] = owning_buffers[i].AsDeviceMemoryBase();
 
       VLOG(3) << "buffer #" << i << " allocated " << buffer_size << " bytes ["
-              << owning_buffers[i]->opaque() << "]";
+              << owning_buffers[i].opaque() << "]";
     }
 
     // Since the output buffer and all the temporary buffers were written into
     // by the JITed code, msan has no way of knowing their memory was
     // initialized. Mark them initialized so that msan doesn't flag loads from
     // these buffers.
-    TF_ANNOTATE_MEMORY_IS_INITIALIZED(owning_buffers[i]->opaque(), buffer_size);
+    TF_ANNOTATE_MEMORY_IS_INITIALIZED(owning_buffers[i].opaque(), buffer_size);
   }
 
   TF_ASSIGN_OR_RETURN(const BufferAllocation::Slice result_slice,
@@ -194,13 +190,13 @@ Status CpuExecutable::ExecuteComputeFunction(
 
   uint64 end_micros = tensorflow::Env::Default()->NowMicros();
 
-  if (run_options->execution_profile()) {
+  {
+    tensorflow::mutex_lock lock(mutex_);
     const double nanoseconds = (end_micros - start_micros) * 1000.0;
-    run_options->execution_profile()->set_compute_time_ns(
-        std::max(nanoseconds, 1.0));
+    execution_profile_.set_compute_time_ns(std::max(nanoseconds, 1.0));
     // If hlo profiling was disabled then the cycle count is left empty.
     if (hlo_execution_profile) {
-      run_options->execution_profile()->set_compute_cycle_count(
+      execution_profile_.set_compute_cycle_count(
           hlo_execution_profile->total_cycles_executed(
               *module().entry_computation()));
     }
@@ -211,7 +207,7 @@ Status CpuExecutable::ExecuteComputeFunction(
 
 StatusOr<ScopedShapedBuffer> CpuExecutable::CreateResultShapedBuffer(
     const ServiceExecutableRunOptions* run_options,
-    absl::Span<se::OwningDeviceMemory> buffers) {
+    absl::Span<OwningDeviceMemory> buffers) {
   se::Stream* stream = run_options->stream();
   ScopedShapedBuffer result_buffer(
       /*on_host_shape=*/result_shape(),
@@ -220,26 +216,26 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::CreateResultShapedBuffer(
   const HloInputOutputAliasConfig& input_output_alias =
       module().input_output_alias_config();
 
-  // Move se::OwningDeviceMemory values which contain the array(s) of the result
+  // Move OwningDeviceMemory values which contain the array(s) of the result
   // into the respective location in ScopedShapedBuffer which is returned to the
   // caller.
   TF_RETURN_IF_ERROR(result_buffer.buffers().ForEachMutableElementWithStatus(
       [&](const ShapeIndex& index, se::DeviceMemoryBase* device_memory) {
-        const auto& sources = this->GetRootValueSet().element(index);
+        const auto& sources = this->GetRootPointsToSet().element(index);
         // The points to set is unambiguous so the set should be a
         // singleton.
-        CHECK_EQ(1, sources.values().size());
-        const HloValue* value_source = sources.values()[0];
-        HloInstruction* src = value_source->instruction();
+        CHECK_EQ(1, sources.size());
+        const LogicalBuffer* buffer_source = sources[0];
+        HloInstruction* src = buffer_source->instruction();
 
         // The source for this result buffer can be a nested buffer such as
         // a tuple element. The source instruction should have a
         // non-parameter buffer assigned.
         TF_ASSIGN_OR_RETURN(
             const BufferAllocation::Slice slice,
-            this->assignment_->GetUniqueSlice(src, value_source->index()));
+            this->assignment_->GetUniqueSlice(src, buffer_source->index()));
         const BufferAllocation::Index buffer_index = slice.index();
-        se::OwningDeviceMemory& buffer = buffers[buffer_index];
+        OwningDeviceMemory& buffer = buffers[buffer_index];
         if (!slice.allocation()->is_entry_computation_parameter()) {
           // If the buffer coming out of the result is from a parameter, the
           // owning buffer will be null, and that means the caller aliased some
@@ -251,7 +247,7 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::CreateResultShapedBuffer(
           // ownership, and hence a buffer coming from there cannot be part of
           // the new ScopedShapedBuffer we create for the result (which assumes
           // ownership).
-          *device_memory = buffer.Release();
+          *device_memory = buffer.Forget();
         } else {
           auto output_alias = input_output_alias.GetAliasedOutput(
               slice.allocation()->parameter_number(),
@@ -268,34 +264,41 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::CreateResultShapedBuffer(
   return std::move(result_buffer);
 }
 
-StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStream(
+StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteOnStream(
     const ServiceExecutableRunOptions* run_options,
     absl::Span<const ShapedBuffer* const> arguments,
     HloExecutionProfile* hlo_execution_profile) {
-  if (GetRootValueSet().IsAmbiguous()) {
-    return Unimplemented("Points-to set of root instruction is ambiguous");
-  }
+  TF_ASSIGN_OR_RETURN(
+      auto result,
+      ExecuteAsyncOnStreamImpl(run_options, arguments, hlo_execution_profile));
+  TF_RETURN_IF_ERROR(run_options->stream()->BlockHostUntilDone());
+  return std::move(result);
+}
 
-  if (hlo_module_) {
-    const HloComputation* entry_comp = hlo_module_->entry_computation();
-    CHECK_EQ(entry_comp->num_parameters(), arguments.size())
-        << "Wrong number of arguments passed when running executable";
-    for (int64 i = 0; i < entry_comp->num_parameters(); ++i) {
-      const Shape& expected_shape =
-          entry_comp->parameter_instruction(i)->shape();
-      const Shape& actual_shape = arguments[i]->on_device_shape();
-      CHECK(expected_shape == actual_shape) << absl::StreamFormat(
-          "Shape mismatch on argument %d.  Expected %s, but was %s.", i,
-          expected_shape.ToString(/*print_layout=*/true),
-          actual_shape.ToString(/*print_layout=*/true));
-    }
+StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStream(
+    const ServiceExecutableRunOptions* run_options,
+    absl::Span<const ShapedBuffer* const> arguments) {
+  if (hlo_profiling_enabled()) {
+    return Unimplemented(
+        "Asynchronous execution on stream with hlo profiling is not yet "
+        "supported on CPU.");
+  }
+  return ExecuteAsyncOnStreamImpl(run_options, arguments, nullptr);
+}
+
+StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStreamImpl(
+    const ServiceExecutableRunOptions* run_options,
+    absl::Span<const ShapedBuffer* const> arguments,
+    HloExecutionProfile* hlo_execution_profile) {
+  if (GetRootPointsToSet().IsAmbiguous()) {
+    return Unimplemented("Points-to set of root instruction is ambiguous");
   }
 
   auto* host_stream = dynamic_cast<se::host::HostStream*>(
       run_options->stream()->implementation());
   se::Stream* stream = run_options->stream();
-  se::DeviceMemoryAllocator* memory_allocator = run_options->allocator();
-  std::vector<se::OwningDeviceMemory> owning_buffers;
+  DeviceMemoryAllocator* memory_allocator = run_options->allocator();
+  std::vector<OwningDeviceMemory> owning_buffers;
   std::vector<se::DeviceMemoryBase> unowning_buffers;
   TF_ASSIGN_OR_RETURN(
       std::tie(unowning_buffers, owning_buffers),
@@ -323,7 +326,7 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStream(
     CpuExecutable* executable;
     ServiceExecutableRunOptions run_options;
     std::vector<se::DeviceMemoryBase> unowning_buffers;
-    std::shared_ptr<std::vector<se::OwningDeviceMemory>> buffers;
+    std::shared_ptr<std::vector<OwningDeviceMemory>> buffers;
     HloExecutionProfile* hlo_execution_profile;
 
     void operator()() {
@@ -335,7 +338,7 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStream(
   };
   host_stream->EnqueueTask(
       AsyncRunTask{this, *run_options, std::move(unowning_buffers),
-                   std::make_shared<std::vector<se::OwningDeviceMemory>>(
+                   std::make_shared<std::vector<OwningDeviceMemory>>(
                        std::move(owning_buffers)),
                    hlo_execution_profile});
 
@@ -350,8 +353,8 @@ StatusOr<ScopedShapedBuffer> CpuExecutable::ExecuteAsyncOnStream(
   return ShapeUtil::ByteSizeOf(shape, sizeof(void*));
 }
 
-const InstructionValueSet& CpuExecutable::GetRootValueSet() const {
-  return assignment_->dataflow_analysis().GetInstructionValueSet(
+const PointsToSet& CpuExecutable::GetRootPointsToSet() const {
+  return assignment_->points_to_analysis().GetPointsToSet(
       module().entry_computation()->root_instruction());
 }
 

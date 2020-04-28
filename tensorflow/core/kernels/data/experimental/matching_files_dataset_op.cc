@@ -32,7 +32,6 @@ limitations under the License.
 
 namespace tensorflow {
 namespace data {
-namespace experimental {
 namespace {
 
 class MatchingFilesDatasetOp : public DatasetOpKernel {
@@ -42,7 +41,7 @@ class MatchingFilesDatasetOp : public DatasetOpKernel {
   void MakeDataset(OpKernelContext* ctx, DatasetBase** output) override {
     const Tensor* patterns_t;
     OP_REQUIRES_OK(ctx, ctx->input("patterns", &patterns_t));
-    const auto patterns = patterns_t->flat<tstring>();
+    const auto patterns = patterns_t->flat<string>();
     size_t num_patterns = static_cast<size_t>(patterns.size());
     std::vector<string> pattern_strs;
     pattern_strs.reserve(num_patterns);
@@ -80,8 +79,6 @@ class MatchingFilesDatasetOp : public DatasetOpKernel {
     string DebugString() const override {
       return "MatchingFilesDatasetOp::Dataset";
     }
-
-    Status CheckExternalState() const override { return Status::OK(); }
 
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
@@ -128,7 +125,7 @@ class MatchingFilesDatasetOp : public DatasetOpKernel {
                              current_path.first.end(), '/', '\\');
               }
 
-              filepath_tensor.scalar<tstring>()() =
+              filepath_tensor.scalar<string>()() =
                   std::move(current_path.first);
               out_tensors->emplace_back(std::move(filepath_tensor));
               *end_of_sequence = false;
@@ -311,7 +308,7 @@ class MatchingFilesDatasetOp : public DatasetOpKernel {
             const string child_path = io::JoinPath(current_dir, children[i]);
             // In case the child_path doesn't start with the fixed_prefix, then
             // we don't need to explore this path.
-            if (!absl::StartsWith(child_path, fixed_prefix)) {
+            if (!str_util::StartsWith(child_path, fixed_prefix)) {
               children_dir_status[i] =
                   errors::Cancelled("Operation not needed");
             } else {
@@ -369,13 +366,10 @@ class MatchingFilesDatasetOp : public DatasetOpKernel {
   };
 };
 
-REGISTER_KERNEL_BUILDER(Name("MatchingFilesDataset").Device(DEVICE_CPU),
-                        MatchingFilesDatasetOp);
 REGISTER_KERNEL_BUILDER(
     Name("ExperimentalMatchingFilesDataset").Device(DEVICE_CPU),
     MatchingFilesDatasetOp);
 
 }  // namespace
-}  // namespace experimental
 }  // namespace data
 }  // namespace tensorflow

@@ -160,11 +160,12 @@ void RenderSecondaryFactoryMethod(const OpSpec& op, const Type& op_class,
   }
   Method factory = Method::Create("create", return_type);
   Javadoc factory_doc = Javadoc::Create(
-      "Factory method to create a class wrapping a new " + op_class.name() +
-      " operation using default output types.");
+      "Factory method to create a class to wrap a new " + op_class.name() +
+      " operation to the graph, using "
+      "default output types.");
   Variable scope =
       Variable::Create("scope", Type::Class("Scope", "org.tensorflow.op"));
-  AddArgument(scope, "current scope", &factory, &factory_doc);
+  AddArgument(scope, "current graph scope", &factory, &factory_doc);
   std::stringstream factory_statement;
   factory_statement << "return create(scope";
   for (const ArgumentSpec& input : op.inputs()) {
@@ -201,11 +202,11 @@ void RenderFactoryMethods(const OpSpec& op, const Type& op_class,
                           SourceWriter* writer) {
   Method factory = Method::Create("create", op_class);
   Javadoc factory_doc =
-      Javadoc::Create("Factory method to create a class wrapping a new " +
-                      op_class.name() + " operation.");
+      Javadoc::Create("Factory method to create a class to wrap a new " +
+                      op_class.name() + " operation to the graph.");
   Variable scope =
       Variable::Create("scope", Type::Class("Scope", "org.tensorflow.op"));
-  AddArgument(scope, "current scope", &factory, &factory_doc);
+  AddArgument(scope, "current graph scope", &factory, &factory_doc);
   for (const ArgumentSpec& input : op.inputs()) {
     AddArgument(input.var(), input.description(), &factory, &factory_doc);
   }
@@ -228,7 +229,7 @@ void RenderFactoryMethods(const OpSpec& op, const Type& op_class,
   factory_doc.add_tag("return", "a new instance of " + op_class.name());
 
   writer->BeginMethod(factory, PUBLIC | STATIC, &factory_doc);
-  writer->Append("OperationBuilder opBuilder = scope.env().opBuilder(\"" +
+  writer->Append("OperationBuilder opBuilder = scope.graph().opBuilder(\"" +
                  op.graph_op_name() + "\", scope.makeOpName(\"" +
                  op_class.name() + "\"));");
   writer->EndLine();
@@ -243,10 +244,6 @@ void RenderFactoryMethods(const OpSpec& op, const Type& op_class,
       writer->EndLine();
     }
   }
-  // Add control dependencies, if any.
-  writer->Append("opBuilder = scope.applyControlDependencies(opBuilder);");
-  writer->EndLine();
-
   for (const AttributeSpec& attribute : op.attributes()) {
     WriteSetAttrDirective(attribute, false, writer);
   }
@@ -413,7 +410,7 @@ void RenderOptionsClass(const OpSpec& op, const Type& op_class,
 inline Type ClassOf(const EndpointSpec& endpoint, const string& base_package) {
   return Type::Class(
       endpoint.name(),
-      base_package + "." + absl::AsciiStrToLower(endpoint.package()));
+      base_package + "." + str_util::Lowercase(endpoint.package()));
 }
 
 void GenerateOp(const OpSpec& op, const EndpointSpec& endpoint,

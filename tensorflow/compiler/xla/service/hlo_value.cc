@@ -91,8 +91,7 @@ string HloValue::ToShortString() const {
                          ? defining_index().ToString()
                          : "";
   return StrCat(id(), " ", is_phi_ ? "PHI " : "",
-                defining_instruction()->name(), index_str, " @",
-                (has_color() ? color().value() : -1));
+                defining_instruction()->name(), index_str);
 }
 
 string HloValue::ToString(int indent) const {
@@ -178,16 +177,12 @@ void HloValue::SetPositionsAndComputeUses(
   // Build vector of HloUses for the value.
   for (const HloPosition& position : positions_) {
     for (HloInstruction* user : position.instruction->users()) {
-      for (int64 i = 0; i < user->operand_count(); ++i) {
-        if (user->operand(i) != position.instruction) {
-          continue;
-        }
-
+      for (int64 operand_number : user->OperandIndices(position.instruction)) {
         // Root instructions of computations are considered to be uses whether
         // or not the root instruction itself actually uses the value.
-        if (MayUseOperandValue(i, position.index, user) ||
+        if (MayUseOperandValue(operand_number, position.index, user) ||
             ContainsKey(root_positions, user)) {
-          HloUse new_use{user, i, position.index};
+          HloUse new_use{user, operand_number, position.index};
 
           // The new use must not already exist in uses_.
           for (const HloUse& use : uses_) {
@@ -255,14 +250,6 @@ bool HloValueSet::AddValue(const HloValue* value) {
 std::ostream& operator<<(std::ostream& out, const HloValueSet& value_set) {
   out << value_set.ToString();
   return out;
-}
-
-bool InstructionValueSet::IsAmbiguous() const {
-  bool ambiguous = false;
-  for (auto& iter : *this) {
-    ambiguous |= iter.second.values().size() > 1;
-  }
-  return ambiguous;
 }
 
 bool InstructionValueSet::AssignUnionOf(

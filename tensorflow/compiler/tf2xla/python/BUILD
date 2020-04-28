@@ -1,15 +1,21 @@
-load(
-    "//tensorflow/core/platform:default/build_config.bzl",
-    "tf_py_clif_cc",
+licenses(["notice"])  # Apache 2.0
+
+package_group(
+    name = "friends",
+    includes = ["//tensorflow:internal"],
 )
-load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 package(
     default_visibility = [
-        "//visibility:public",
+        ":friends",
     ],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+load(
+    "//tensorflow/core:platform/default/build_config.bzl",
+    "tf_py_clif_cc",
+)
+load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 tf_py_clif_cc(
     name = "xla_op_registry",

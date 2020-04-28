@@ -12,14 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Library imports for ClusterResolvers.
-
-  This library contains all implementations of ClusterResolvers.
-  ClusterResolvers are a way of specifying cluster information for distributed
-  execution. Built on top of existing `ClusterSpec` framework, ClusterResolvers
-  are a way for TensorFlow to communicate with various cluster management
-  systems (e.g. GCE, AWS, etc...).
-"""
+"""Library Imports for Cluster Resolvers."""
 
 from __future__ import absolute_import
 from __future__ import division

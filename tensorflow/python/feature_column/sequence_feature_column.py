@@ -30,7 +30,6 @@ from tensorflow.python.feature_column import utils as fc_utils
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras import utils
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import check_ops
 from tensorflow.python.ops import parsing_ops
@@ -67,8 +66,7 @@ class SequenceFeatures(fc._BaseFeaturesLayer):
     columns = [rating, watches_embedding]
 
     sequence_input_layer = SequenceFeatures(columns)
-    features = tf.io.parse_example(...,
-                                   features=make_parse_example_spec(columns))
+    features = tf.parse_example(..., features=make_parse_example_spec(columns))
     sequence_input, sequence_length = sequence_input_layer(features)
     sequence_length_mask = tf.sequence_mask(sequence_length)
 
@@ -216,7 +214,7 @@ def sequence_categorical_column_with_identity(
   watches_embedding = embedding_column(watches, dimension=10)
   columns = [watches_embedding]
 
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
+  features = tf.parse_example(..., features=make_parse_example_spec(columns))
   sequence_feature_layer = SequenceFeatures(columns)
   sequence_input, sequence_length = sequence_feature_layer(features)
   sequence_length_mask = tf.sequence_mask(sequence_length)
@@ -265,7 +263,7 @@ def sequence_categorical_column_with_hash_bucket(
   tokens_embedding = embedding_column(tokens, dimension=10)
   columns = [tokens_embedding]
 
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
+  features = tf.parse_example(..., features=make_parse_example_spec(columns))
   sequence_feature_layer = SequenceFeatures(columns)
   sequence_input, sequence_length = sequence_feature_layer(features)
   sequence_length_mask = tf.sequence_mask(sequence_length)
@@ -313,7 +311,7 @@ def sequence_categorical_column_with_vocabulary_file(
   states_embedding = embedding_column(states, dimension=10)
   columns = [states_embedding]
 
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
+  features = tf.parse_example(..., features=make_parse_example_spec(columns))
   sequence_feature_layer = SequenceFeatures(columns)
   sequence_input, sequence_length = sequence_feature_layer(features)
   sequence_length_mask = tf.sequence_mask(sequence_length)
@@ -377,7 +375,7 @@ def sequence_categorical_column_with_vocabulary_list(
   colors_embedding = embedding_column(colors, dimension=3)
   columns = [colors_embedding]
 
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
+  features = tf.parse_example(..., features=make_parse_example_spec(columns))
   sequence_feature_layer = SequenceFeatures(columns)
   sequence_input, sequence_length = sequence_feature_layer(features)
   sequence_length_mask = tf.sequence_mask(sequence_length)
@@ -436,7 +434,7 @@ def sequence_numeric_column(
   temperature = sequence_numeric_column('temperature')
   columns = [temperature]
 
-  features = tf.io.parse_example(..., features=make_parse_example_spec(columns))
+  features = tf.parse_example(..., features=make_parse_example_spec(columns))
   sequence_feature_layer = SequenceFeatures(columns)
   sequence_input, sequence_length = sequence_feature_layer(features)
   sequence_length_mask = tf.sequence_mask(sequence_length)
@@ -573,27 +571,19 @@ class SequenceNumericColumn(
     return fc.SequenceDenseColumn.TensorSequenceLengthPair(
         dense_tensor=dense_tensor, sequence_length=seq_length)
 
+  # TODO(b/119409767): Implement parents, _{get,from}_config.
   @property
   def parents(self):
     """See 'FeatureColumn` base class."""
-    return [self.key]
+    raise NotImplementedError()
 
   def _get_config(self):
     """See 'FeatureColumn` base class."""
-    config = dict(zip(self._fields, self))
-    config['normalizer_fn'] = utils.serialize_keras_object(self.normalizer_fn)
-    config['dtype'] = self.dtype.name
-    return config
+    raise NotImplementedError()
 
   @classmethod
   def _from_config(cls, config, custom_objects=None, columns_by_name=None):
     """See 'FeatureColumn` base class."""
-    fc._check_config_keys(config, cls._fields)
-    kwargs = config.copy()
-    kwargs['normalizer_fn'] = utils.deserialize_keras_object(
-        config['normalizer_fn'], custom_objects=custom_objects)
-    kwargs['dtype'] = dtypes.as_dtype(config['dtype'])
-    return cls(**kwargs)
-
+    raise NotImplementedError()
 
 # pylint: enable=protected-access

@@ -18,22 +18,24 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <vector>
 
-#include "tensorflow/lite/core/api/profiler.h"
 #include "tensorflow/lite/profiling/time.h"
 
 namespace tflite {
 namespace profiling {
-
-constexpr uint32_t kInvalidEventHandle = static_cast<uint32_t>(~0) - 1;
 
 // A profiling event.
 struct ProfileEvent {
   // Describes the type of event.
   // The event_metadata field may contain additional data for interpreting
   // the event.
-  using EventType = tflite::Profiler::EventType;
+  enum class EventType {
+    // Default event type, the metadata field has no special significance.
+    DEFAULT = 0,
+    // The event is an operator invocation and the event_metadata field is the
+    // index of operator node.
+    OPERATOR_INVOKE_EVENT = 1
+  };
 
   // Label of the event. This usually describes the event.
   const char* tag;
@@ -47,6 +49,17 @@ struct ProfileEvent {
   // Extra data describing the details of the event.
   uint32_t event_metadata;
 };
+}  // namespace profiling
+}  // namespace tflite
+
+#ifdef TFLITE_PROFILING_ENABLED
+
+#include <sys/time.h>
+#include <vector>
+
+namespace tflite {
+namespace profiling {
+constexpr uint32_t kInvalidEventHandle = static_cast<uint32_t>(~0) - 1;
 
 // A ring buffer of profile events.
 // This class is not thread safe.
@@ -115,7 +128,7 @@ class ProfileBuffer {
   // Returns the profile event at the given index. If the index is invalid a
   // nullptr is returned. The return event may get overwritten if more events
   // are added to buffer.
-  const struct ProfileEvent* At(size_t index) const {
+  const struct ProfileEvent* const At(size_t index) const {
     size_t size = Size();
     if (index >= size) {
       return nullptr;
@@ -132,8 +145,7 @@ class ProfileBuffer {
   uint32_t current_index_;
   std::vector<ProfileEvent> event_buffer_;
 };
-
 }  // namespace profiling
 }  // namespace tflite
-
+#endif  // TFLITE_PROFILING_ENABLED
 #endif  // TENSORFLOW_LITE_PROFILING_PROFILE_BUFFER_H_

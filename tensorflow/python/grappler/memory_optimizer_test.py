@@ -302,7 +302,6 @@ class MemoryOptimizerRecomputeTest(test.TestCase):
         self.evaluate(init_op)
         self.evaluate(train_op)
 
-  @test_util.run_v1_only('b/120545219')
   def testHintDoesRewrite(self):
     graph = self._annotated_graph()[0]
     with graph.as_default():
@@ -318,11 +317,9 @@ class MemoryOptimizerRecomputeTest(test.TestCase):
             memory_optimization=rewriter_config_pb2.RewriterConfig.MANUAL))
     rewritten_graph_def = tf_optimizer.OptimizeGraph(config, metagraph)
     self.assertEqual(
-        7,
-        len([
-            node for node in rewritten_graph_def.node
-            if 'Recomputed/' in node.name
-        ]))
+        9,
+        len([node for node in rewritten_graph_def.node
+             if 'Recomputed/' in node.name]))
 
 if __name__ == '__main__':
   test.main()

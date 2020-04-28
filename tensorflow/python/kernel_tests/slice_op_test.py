@@ -348,8 +348,8 @@ class SliceTest(test.TestCase):
     # Tensor from 0 to infinity.  This test ensures that this
     # unintended behavior is prevented.
     c = constant_op.constant(5.0)
-    with self.assertRaisesRegex(errors_impl.OperatorNotAllowedInGraphError,
-                                "iterating over `tf.Tensor`"):
+    with self.assertRaisesWithPredicateMatch(
+        TypeError, lambda e: "Tensor objects are only iterable" in str(e)):
       for _ in c:
         pass
 

@@ -1,8 +1,6 @@
-load("//tensorflow:tensorflow.bzl", "py_test")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    licenses = ["notice"],  # Apache 2.0
-)
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 filegroup(
     name = "all_files",
@@ -17,10 +15,9 @@ filegroup(
 )
 
 py_library(
-    name = "testing",
+    name = "test_modules",
     srcs = [
-        "basic_definitions.py",
-        "decorators.py",
+        "future_import_module.py",
     ],
     srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
@@ -44,7 +41,6 @@ py_test(
     name = "codegen_test",
     size = "large",
     srcs = ["codegen_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "manual",

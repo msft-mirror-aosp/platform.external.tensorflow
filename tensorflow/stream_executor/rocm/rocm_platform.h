@@ -19,11 +19,11 @@ limitations under the License.
 #include <memory>
 #include <vector>
 
-#include "absl/synchronization/mutex.h"
 #include "tensorflow/stream_executor/executor_cache.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
 #include "tensorflow/stream_executor/multi_platform_manager.h"
 #include "tensorflow/stream_executor/platform.h"
+#include "tensorflow/stream_executor/platform/mutex.h"
 #include "tensorflow/stream_executor/platform/port.h"
 #include "tensorflow/stream_executor/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
@@ -64,9 +64,6 @@ class ROCmPlatform : public Platform {
 
   const string& Name() const override;
 
-  port::StatusOr<std::unique_ptr<DeviceDescription>> DescriptionForDevice(
-      int ordinal) const override;
-
   port::StatusOr<StreamExecutor*> ExecutorForDevice(int ordinal) override;
 
   port::StatusOr<StreamExecutor*> ExecutorForDeviceWithPluginConfig(
@@ -90,7 +87,7 @@ class ROCmPlatform : public Platform {
   string name_;
 
   // mutex that guards internal state.
-  mutable absl::Mutex mu_;
+  mutable mutex mu_;
 
   // Cache of created executors.
   ExecutorCache executor_cache_;

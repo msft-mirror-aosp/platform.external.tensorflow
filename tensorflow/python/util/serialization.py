@@ -18,10 +18,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import collections
+
 import numpy as np
 
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.util.compat import collections_abc
 
 
 def get_json_type(obj):
@@ -62,7 +63,7 @@ def get_json_type(obj):
   if isinstance(obj, tensor_shape.TensorShape):
     return obj.as_list()
 
-  if isinstance(obj, collections_abc.Mapping):
+  if isinstance(obj, collections.Mapping):
     return dict(obj)
 
   raise TypeError('Not JSON Serializable:', obj)

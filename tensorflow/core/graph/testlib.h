@@ -131,8 +131,7 @@ Node* TruncatedNormal(Graph* g, Node* input, DataType dtype);
 
 // Adds an error node in "g". The node's computation always
 // generates an error with the given error message "errmsg".
-Node* Error(Graph* g, Node* input, const string& errmsg,
-            bool log_error = false);
+Node* Error(Graph* g, Node* input, const string& errmsg);
 
 // Adds a node that generates a invalid ref output.
 Node* InvalidRefType(Graph* g, DataType out_type, DataType invalid_type);

@@ -1,11 +1,10 @@
-load("//tensorflow:tensorflow.bzl", "py_test")
+package(default_visibility = ["//tensorflow:__subpackages__"])
 
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 py_library(
     name = "common",
@@ -18,7 +17,6 @@ py_test(
     name = "common_test",
     size = "small",
     srcs = ["python/common_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":common",
@@ -48,7 +46,6 @@ py_test(
     name = "graph_matcher_test",
     size = "small",
     srcs = ["python/graph_matcher_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":graph_matcher",
@@ -78,7 +75,6 @@ py_test(
     name = "input_to_ops_test",
     size = "small",
     srcs = ["python/input_to_ops_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":input_to_ops",
@@ -116,7 +112,6 @@ py_library(
 py_test(
     name = "fold_batch_norms_test",
     srcs = ["python/fold_batch_norms_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":fold_batch_norms",
@@ -157,7 +152,6 @@ py_test(
     name = "quant_ops_test",
     size = "small",
     srcs = ["python/quant_ops_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":quant_ops",
@@ -191,7 +185,6 @@ py_test(
     name = "quantize_test",
     size = "small",
     srcs = ["python/quantize_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":quantize",
@@ -211,7 +204,6 @@ py_test(
     name = "quantize_parameterized_test",
     size = "medium",
     srcs = ["python/quantize_parameterized_test.py"],
-    python_version = "PY2",
     shard_count = 4,
     srcs_version = "PY2AND3",
     # TODO(b/118839526): Re-enable msan test.
@@ -251,7 +243,6 @@ py_test(
     name = "quantize_graph_test",
     size = "small",
     srcs = ["python/quantize_graph_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":quantize_graph",

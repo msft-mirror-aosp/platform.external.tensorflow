@@ -20,4 +20,4 @@ from __future__ import print_function
 
 from tensorflow.python.distribute import one_device_strategy
 
-OneDeviceStrategy = one_device_strategy.OneDeviceStrategyV1
+OneDeviceStrategy = one_device_strategy.OneDeviceStrategy

@@ -130,8 +130,7 @@ TF_CALL_REAL_NUMBER_TYPES(REGISTER);
 
 #undef REGISTER
 
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
+#if GOOGLE_CUDA
 
 // Forward declarations of the functor specializations for GPU.
 namespace functor {
@@ -161,6 +160,6 @@ TF_CALL_GPU_NUMBER_TYPES(REGISTER);
 
 #undef REGISTER
 
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 }  // namespace tensorflow

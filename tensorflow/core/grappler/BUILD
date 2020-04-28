@@ -1,8 +1,6 @@
-load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_cuda_library")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    licenses = ["notice"],  # Apache 2.0
-)
+load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_cuda_library")
 
 cc_library(
     name = "op_types",

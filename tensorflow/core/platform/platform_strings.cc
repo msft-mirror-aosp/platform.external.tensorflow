@@ -15,11 +15,13 @@ limitations under the License.
 
 #include "tensorflow/core/platform/platform_strings.h"
 
-#include <cerrno>
 #include <cstdio>
 #include <cstring>
+
 #include <string>
 #include <vector>
+
+#include "tensorflow/core/lib/core/status.h"
 
 namespace tensorflow {
 

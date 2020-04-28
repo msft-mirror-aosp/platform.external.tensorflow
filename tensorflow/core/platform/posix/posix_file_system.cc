@@ -16,7 +16,6 @@ limitations under the License.
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #if defined(__linux__)
@@ -63,16 +62,7 @@ class PosixRandomAccessFile : public RandomAccessFile {
     Status s;
     char* dst = scratch;
     while (n > 0 && s.ok()) {
-      // Some platforms, notably macs, throw EINVAL if pread is asked to read
-      // more than fits in a 32-bit integer.
-      size_t requested_read_length;
-      if (n > INT32_MAX) {
-        requested_read_length = INT32_MAX;
-      } else {
-        requested_read_length = n;
-      }
-      ssize_t r =
-          pread(fd_, dst, requested_read_length, static_cast<off_t>(offset));
+      ssize_t r = pread(fd_, dst, n, static_cast<off_t>(offset));
       if (r > 0) {
         dst += r;
         n -= r;
@@ -115,9 +105,6 @@ class PosixWritableFile : public WritableFile {
   }
 
   Status Close() override {
-    if (file_ == nullptr) {
-      return IOError(filename_, EBADF);
-    }
     Status result;
     if (fclose(file_) != 0) {
       result = IOError(filename_, errno);
@@ -336,13 +323,12 @@ Status PosixFileSystem::CopyFile(const string& src, const string& target) {
     return IOError(src, errno);
   }
   string translated_target = TranslateName(target);
-  // O_WRONLY | O_CREAT | O_TRUNC:
+  // O_WRONLY | O_CREAT:
   //   Open file for write and if file does not exist, create the file.
-  //   If file exists, truncate its size to 0.
-  // When creating file, use the same permissions as original
-  mode_t mode = sbuf.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
-  int target_fd =
-      open(translated_target.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode);
+  // S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH:
+  //   Create the file with permission of 0644
+  int target_fd = open(translated_target.c_str(), O_WRONLY | O_CREAT,
+                       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (target_fd < 0) {
     close(src_fd);
     return IOError(target, errno);

@@ -192,8 +192,8 @@ class QNResolverTest(test.TestCase):
       [f, (g.h.i)]
       j(k, l)
     """
-    nodes = parser.parse_str(textwrap.dedent(samples), single_node=False)
-    nodes = tuple(resolve(node).value for node in nodes)
+    nodes = resolve(parser.parse_str(textwrap.dedent(samples)))
+    nodes = tuple(n.value for n in nodes.body)
 
     self.assertQNStringIs(nodes[0], 'a')
     self.assertQNStringIs(nodes[1], 'a.b')
@@ -218,8 +218,8 @@ class QNResolverTest(test.TestCase):
       a.b[c[d]].e.f
       a.b[c[d.e.f].g].h
     """
-    nodes = parser.parse_str(textwrap.dedent(samples), single_node=False)
-    nodes = tuple(resolve(node).value for node in nodes)
+    nodes = resolve(parser.parse_str(textwrap.dedent(samples)))
+    nodes = tuple(n.value for n in nodes.body)
 
     self.assertQNStringIs(nodes[0], 'x[i]')
     self.assertQNStringIs(nodes[1], 'x[i.b]')
@@ -241,8 +241,8 @@ class QNResolverTest(test.TestCase):
       z[i]()
       z()[i]
     """
-    nodes = parser.parse_str(textwrap.dedent(samples), single_node=False)
-    nodes = tuple(resolve(node).value for node in nodes)
+    nodes = resolve(parser.parse_str(textwrap.dedent(samples)))
+    nodes = tuple(n.value for n in nodes.body)
     self.assertQNStringIs(nodes[0], 'a.b')
     self.assertQNStringIs(nodes[1].func, 'a.b')
     self.assertQNStringIs(nodes[2].value.func, 'a')

@@ -1,13 +1,11 @@
 # Files for using TF-GAN framework.
-
 load("//tensorflow:tensorflow.bzl", "py_test")
 
-package(
-    default_visibility = [
-        "//tensorflow:__subpackages__",
-    ],
-    licenses = ["notice"],  # Apache 2.0
-)
+package(default_visibility = [
+    "//tensorflow:__subpackages__",
+])
+
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
 
@@ -60,13 +58,9 @@ py_library(
 py_test(
     name = "train_test",
     srcs = ["python/train_test.py"],
-    python_version = "PY2",
     shard_count = 50,
     srcs_version = "PY2AND3",
-    tags = [
-        "no_oss",
-        "notsan",
-    ],
+    tags = ["notsan"],
     deps = [
         ":namedtuples",
         ":random_tensor_pool",
@@ -167,7 +161,6 @@ py_library(
 py_test(
     name = "losses_impl_test",
     srcs = ["python/losses/python/losses_impl_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":losses_impl",
@@ -205,7 +198,6 @@ py_library(
 py_test(
     name = "tuple_losses_test",
     srcs = ["python/losses/python/tuple_losses_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":losses_impl",
@@ -244,7 +236,6 @@ py_library(
 py_test(
     name = "conditioning_utils_test",
     srcs = ["python/features/python/conditioning_utils_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":conditioning_utils",
@@ -275,7 +266,6 @@ py_library(
 py_test(
     name = "random_tensor_pool_test",
     srcs = ["python/features/python/random_tensor_pool_test.py"],
-    python_version = "PY2",
     shard_count = 6,
     srcs_version = "PY2AND3",
     deps = [
@@ -313,7 +303,6 @@ py_library(
 py_test(
     name = "virtual_batchnorm_test",
     srcs = ["python/features/python/virtual_batchnorm_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":virtual_batchnorm",
@@ -349,7 +338,6 @@ py_library(
 py_test(
     name = "clip_weights_test",
     srcs = ["python/features/python/clip_weights_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":clip_weights",
@@ -388,7 +376,6 @@ py_library(
 py_test(
     name = "classifier_metrics_test",
     srcs = ["python/eval/python/classifier_metrics_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "no_pip",
@@ -424,7 +411,6 @@ py_library(
 py_test(
     name = "eval_utils_test",
     srcs = ["python/eval/python/eval_utils_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":eval_utils",
@@ -457,7 +443,6 @@ py_library(
 py_test(
     name = "summaries_test",
     srcs = ["python/eval/python/summaries_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":namedtuples",
@@ -490,7 +475,6 @@ py_library(
 py_test(
     name = "head_test",
     srcs = ["python/estimator/python/head_test.py"],
-    python_version = "PY2",
     shard_count = 1,
     srcs_version = "PY2AND3",
     deps = [
@@ -528,13 +512,9 @@ py_library(
 py_test(
     name = "gan_estimator_test",
     srcs = ["python/estimator/python/gan_estimator_test.py"],
-    python_version = "PY2",
     shard_count = 1,
     srcs_version = "PY2AND3",
-    tags = [
-        "no_oss",
-        "notsan",
-    ],
+    tags = ["notsan"],
     deps = [
         ":gan_estimator",
         ":namedtuples",
@@ -587,7 +567,6 @@ py_library(
 py_test(
     name = "stargan_estimator_test",
     srcs = ["python/estimator/python/stargan_estimator_test.py"],
-    python_version = "PY2",
     shard_count = 1,
     srcs_version = "PY2AND3",
     tags = ["notsan"],
@@ -638,7 +617,6 @@ py_library(
 py_test(
     name = "tpu_gan_estimator_test",
     srcs = ["python/estimator/python/tpu_gan_estimator_test.py"],
-    python_version = "PY2",
     shard_count = 11,
     srcs_version = "PY2AND3",
     tags = ["notsan"],
@@ -692,7 +670,6 @@ py_test(
     srcs = [
         "python/estimator/python/latent_gan_estimator_test.py",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":latent_gan_estimator",
@@ -728,7 +705,6 @@ py_library(
 py_test(
     name = "sliced_wasserstein_test",
     srcs = ["python/eval/python/sliced_wasserstein_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":sliced_wasserstein",
@@ -762,7 +738,6 @@ py_library(
 py_test(
     name = "spectral_normalization_test",
     srcs = ["python/features/python/spectral_normalization_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":spectral_normalization",

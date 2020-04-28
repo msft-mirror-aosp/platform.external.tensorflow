@@ -72,7 +72,7 @@ class TextEmbeddingModel(tf.train.Checkpoint):
     normalized_sentences = tf.strings.regex_replace(
         input=sentences, pattern=r"\pP", rewrite="")
     normalized_sentences = tf.reshape(normalized_sentences, [-1])
-    sparse_tokens = tf.strings.split(normalized_sentences, " ").to_sparse()
+    sparse_tokens = tf.strings.split(normalized_sentences, " ")
 
     # Deal with a corner case: there is one empty sentence.
     sparse_tokens, _ = tf.sparse.fill_empty_rows(sparse_tokens, tf.constant(""))
@@ -102,4 +102,5 @@ def main(argv):
 
 
 if __name__ == "__main__":
+  tf.enable_v2_behavior()
   app.run(main)

@@ -14,12 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/xla/service/cpu/buffer_info_util.h"
-#include "tensorflow/compiler/xla/cpu_function_runtime.h"
 
 namespace xla {
 namespace cpu {
 
-using BufferInfo = cpu_function_runtime::BufferInfo;
+using BufferInfo = ::tensorflow::cpu_function_runtime::BufferInfo;
 
 std::vector<BufferInfo> CreateBufferInfosFromBufferAssignment(
     const BufferAssignment& buffer_assignment) {

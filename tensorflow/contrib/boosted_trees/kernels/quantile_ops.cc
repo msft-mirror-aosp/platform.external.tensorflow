@@ -28,7 +28,6 @@
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/refcount.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/stringprintf.h"
 #include "tensorflow/core/platform/types.h"
@@ -300,12 +299,13 @@ class QuantileAccumulatorAddSummariesOp : public OpKernel {
             const ResourceHandle& handle =
                 resource_handle_list[resource_handle_idx]
                     .flat<ResourceHandle>()(0);
-            core::RefCountPtr<QuantileStreamResource> streams_resource;
+            QuantileStreamResource* streams_resource;
             // Create a reference to the underlying resource using the handle.
             OP_REQUIRES_OK(context,
                            LookupResource(context, handle, &streams_resource));
             // Remove the reference at the end of this scope.
             mutex_lock l(*streams_resource->mutex());
+            core::ScopedUnref unref_me(streams_resource);
 
             // If the stamp is invalid we drop the update.
             if (!streams_resource->is_stamp_valid(stamp_token)) {
@@ -324,7 +324,7 @@ class QuantileAccumulatorAddSummariesOp : public OpKernel {
                 context,
                 ParseProtoUnlimited(
                     summary_proto,
-                    summary_list[resource_handle_idx].scalar<tstring>()()),
+                    summary_list[resource_handle_idx].scalar<string>()()),
                 errors::InvalidArgument("Unable to parse quantile summary."));
             std::vector<QuantileSummaryEntry> entries;
             entries.reserve(summary_proto->entries_size());
@@ -467,12 +467,13 @@ class QuantileAccumulatorSerializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<QuantileStreamResource> streams_resource;
+    QuantileStreamResource* streams_resource;
     // Create a reference to the underlying resource using the handle.
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
                                            &streams_resource));
     // Remove the reference at the end of this scope.
     mutex_lock l(*streams_resource->mutex());
+    core::ScopedUnref unref_me(streams_resource);
 
     int64 stamp_token = streams_resource->stamp();
     Tensor* stream_state_t;
@@ -525,12 +526,13 @@ class QuantileAccumulatorDeserializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<QuantileStreamResource> streams_resource;
+    QuantileStreamResource* streams_resource;
     // Create a reference to the underlying resource using the handle.
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
                                            &streams_resource));
     // Remove the reference at the end of this scope.
     mutex_lock l(*streams_resource->mutex());
+    core::ScopedUnref unref_me(streams_resource);
 
     int64 old_stamp_token = streams_resource->stamp();
 
@@ -543,7 +545,7 @@ class QuantileAccumulatorDeserializeOp : public OpKernel {
     ::boosted_trees::QuantileStreamState state_proto;
     OP_REQUIRES(
         context,
-        ParseProtoUnlimited(&state_proto, stream_state_t->scalar<tstring>()()),
+        ParseProtoUnlimited(&state_proto, stream_state_t->scalar<string>()()),
         errors::InvalidArgument("Unabnle to parse quantile stream state."));
     std::vector<QuantileSummary> summaries;
     summaries.reserve(state_proto.summaries_size());
@@ -593,12 +595,13 @@ class QuantileAccumulatorFlushOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<QuantileStreamResource> streams_resource;
+    QuantileStreamResource* streams_resource;
     // Create a reference to the underlying resource using the handle.
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
                                            &streams_resource));
     // Remove the reference at the end of this scope.
     mutex_lock l(*streams_resource->mutex());
+    core::ScopedUnref unref_me(streams_resource);
 
     const Tensor* next_stamp_token_t;
     OP_REQUIRES_OK(context,
@@ -638,12 +641,13 @@ class QuantileAccumulatorFlushSummaryOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<QuantileStreamResource> streams_resource;
+    QuantileStreamResource* streams_resource;
     // Create a reference to the underlying resource using the handle.
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
                                            &streams_resource));
     // Remove the reference at the end of this scope.
     mutex_lock l(*streams_resource->mutex());
+    core::ScopedUnref unref_me(streams_resource);
 
     const Tensor* next_stamp_token_t;
     OP_REQUIRES_OK(context,
@@ -709,11 +713,12 @@ class QuantileAccumulatorGetBucketsOp : public OpKernel {
             const ResourceHandle& handle =
                 resource_handle_list[resource_handle_idx]
                     .flat<ResourceHandle>()(0);
-            core::RefCountPtr<QuantileStreamResource> streams_resource;
+            QuantileStreamResource* streams_resource;
             OP_REQUIRES_OK(context,
                            LookupResource(context, handle, &streams_resource));
             // Remove the reference at the end of this scope.
             mutex_lock l(*streams_resource->mutex());
+            core::ScopedUnref unref_me(streams_resource);
 
             bool are_buckets_ready =
                 streams_resource->is_stamp_valid(stamp_token) &&

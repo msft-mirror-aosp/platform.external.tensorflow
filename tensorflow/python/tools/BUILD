@@ -1,15 +1,14 @@
 # Description:
 #   Tools for manipulating TensorFlow graphs.
 
-load("//tensorflow:tensorflow.bzl", "py_test")
-load("//tensorflow:tensorflow.bzl", "py_binary")
+package(default_visibility = ["//visibility:public"])
 
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
+load("//tensorflow:tensorflow.bzl", "py_binary")
 
 # Transitive dependencies of this target will be included in the pip package.
 py_library(
@@ -47,7 +46,6 @@ py_test(
     name = "saved_model_utils_test",
     size = "small",
     srcs = ["saved_model_utils_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = ["no_windows"],  # TODO: needs investigation on Windows
     visibility = ["//visibility:private"],
@@ -80,7 +78,6 @@ py_library(
 py_binary(
     name = "freeze_graph",
     srcs = ["freeze_graph.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [":freeze_graph_main_lib"],
 )
@@ -97,7 +94,6 @@ py_library(
 py_binary(
     name = "import_pb_to_tensorboard",
     srcs = ["import_pb_to_tensorboard.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [":import_pb_to_tensorboard_lib"],
 )
@@ -121,7 +117,6 @@ py_test(
     name = "freeze_graph_test",
     size = "small",
     srcs = ["freeze_graph_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":freeze_graph_lib",
@@ -140,7 +135,6 @@ py_test(
 py_binary(
     name = "inspect_checkpoint",
     srcs = ["inspect_checkpoint.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [":inspect_checkpoint_lib"],
 )
@@ -168,15 +162,14 @@ py_library(
 )
 
 py_library(
-    name = "module_util",
-    srcs = ["module_util.py"],
+    name = "component_api_helper",
+    srcs = ["component_api_helper.py"],
     srcs_version = "PY2AND3",
 )
 
 py_binary(
     name = "strip_unused",
     srcs = ["strip_unused.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":strip_unused_lib",
@@ -190,7 +183,6 @@ py_test(
     name = "strip_unused_test",
     size = "small",
     srcs = ["strip_unused_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = ["notap"],
     deps = [
@@ -223,7 +215,6 @@ py_library(
 py_binary(
     name = "optimize_for_inference",
     srcs = ["optimize_for_inference.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [":optimize_for_inference_main_lib"],
 )
@@ -247,7 +238,6 @@ py_test(
     name = "optimize_for_inference_test",
     size = "small",
     srcs = ["optimize_for_inference_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":optimize_for_inference_lib",
@@ -278,7 +268,6 @@ py_library(
 py_binary(
     name = "print_selective_registration_header",
     srcs = ["print_selective_registration_header.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [":print_selective_registration_header_lib"],
@@ -298,7 +287,6 @@ py_library(
 py_test(
     name = "print_selective_registration_header_test",
     srcs = ["print_selective_registration_header_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":selective_registration_header_lib",
@@ -310,7 +298,6 @@ py_test(
 py_binary(
     name = "saved_model_cli",
     srcs = ["saved_model_cli.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [":saved_model_cli_lib"],
 )
@@ -332,7 +319,6 @@ py_test(
     data = [
         "//tensorflow/cc/saved_model:saved_model_half_plus_two",
     ],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = [
         "manual",

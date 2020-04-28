@@ -24,6 +24,7 @@ from tensorflow.core.framework import step_stats_pb2
 from tensorflow.core.grappler.costs import op_performance_data_pb2
 from tensorflow.core.protobuf import device_properties_pb2
 from tensorflow.python import pywrap_tensorflow as tf_cluster
+from tensorflow.python.framework import errors
 
 
 class Cluster(object):
@@ -48,13 +49,14 @@ class Cluster(object):
     """
     self._tf_cluster = None
     self._generate_timeline = not disable_timeline
-
-    if devices is None:
-      self._tf_cluster = tf_cluster.TF_NewCluster(allow_soft_placement,
-                                                  disable_detailed_stats)
-    else:
-      devices_serialized = [device.SerializeToString() for device in devices]
-      self._tf_cluster = tf_cluster.TF_NewVirtualCluster(devices_serialized)
+    with errors.raise_exception_on_not_ok_status() as status:
+      if devices is None:
+        self._tf_cluster = tf_cluster.TF_NewCluster(
+            allow_soft_placement, disable_detailed_stats, status)
+      else:
+        devices_serialized = [device.SerializeToString() for device in devices]
+        self._tf_cluster = tf_cluster.TF_NewVirtualCluster(
+            devices_serialized, status)
 
   def Shutdown(self):
     if self._tf_cluster is not None:
@@ -92,8 +94,9 @@ class Cluster(object):
       item: The item for which to measure the costs.
     Returns: The triplet op_perfs, runtime, step_stats.
     """
-    ret_from_swig = tf_cluster.TF_MeasureCosts(item.tf_item, self._tf_cluster,
-                                               self._generate_timeline)
+    with errors.raise_exception_on_not_ok_status() as status:
+      ret_from_swig = tf_cluster.TF_MeasureCosts(
+          item.tf_item, self._tf_cluster, self._generate_timeline, status)
 
     if ret_from_swig is None:
       return None
@@ -111,8 +114,9 @@ class Cluster(object):
       item: The item for which to measure the costs.
     Returns: A hashtable indexed by device name.
     """
-    return tf_cluster.TF_DeterminePeakMemoryUsage(item.tf_item,
-                                                  self._tf_cluster)
+    with errors.raise_exception_on_not_ok_status() as status:
+      return tf_cluster.TF_DeterminePeakMemoryUsage(
+          item.tf_item, self._tf_cluster, status)
 
 
 @contextlib.contextmanager

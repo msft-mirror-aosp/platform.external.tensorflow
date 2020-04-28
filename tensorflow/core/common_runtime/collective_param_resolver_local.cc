@@ -15,7 +15,6 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/collective_param_resolver_local.h"
 
 #include <stddef.h>
-
 #include <algorithm>
 #include <unordered_map>
 #include <utility>
@@ -55,31 +54,12 @@ void CollectiveParamResolverLocal::CompleteGroupAsync(
                        "intended only for non-distributed deployment."));
 }
 
-namespace {
-const char* GetCollectiveName(const CollectiveParams* cp, bool nccl) {
-  switch (cp->instance.type) {
-    case BROADCAST_COLLECTIVE:
-      return "HierarchicalTreeBroadcast";
-
-    case REDUCTION_COLLECTIVE:
-      return nccl ? "NcclReduce" : "RingReduce";
-
-    case GATHER_COLLECTIVE:
-      return "RingGather";
-
-    default:
-      return "undef";
-  }
-}
-}  // namespace
-
 void CollectiveParamResolverLocal::CompleteGroupLocal(
     const string& device, CollectiveParams* cp, const GroupRecCallback& done) {
   VLOG(1) << "CompleteGroupLocal device=" << device << " cp: " << cp << ": "
           << cp->ToString();
   std::vector<StatusCallback> to_be_called;
   GroupRec* gr = nullptr;
-  Status status;
   {
     mutex_lock l(group_mu_);
     auto it = group_table_.find(cp->group.group_key);
@@ -88,39 +68,14 @@ void CollectiveParamResolverLocal::CompleteGroupLocal(
       gr->group.group_key = cp->group.group_key;
       gr->group.group_size = cp->group.group_size;
       gr->group.device_type = cp->group.device_type;
-
-      // Initialize group runtime details.
-      CollectiveImplementationInterface* col_impl;
-      // Try to lookup a NCCL collective kernel.  This will return error status
-      // if `NcclReduce` kernel is not present in the registry, e.g. on an
-      // environment that does not support NCCL.
-      status = CollectiveRegistry::LookupParamResolverInstance("NcclReduce",
-                                                               &col_impl);
-      if (!status.ok()) {
-        // Fallback to non-NCCL collective.
-        status = CollectiveRegistry::LookupParamResolverInstance(
-            GetCollectiveName(cp, /*nccl=*/false), &col_impl);
-      }
-      if (status.ok()) {
-        status = col_impl->InitializeCollectiveGroupRuntimeDetails(
-            &gr->group.runtime_details);
-      }
-
-      if (!status.ok()) {
-        done(status, gr);
-        return;
-      }
-
-      // Store GroupRec in group_table_ which is shared between all devices on
-      // this worker.
       group_table_[gr->group.group_key].reset(gr);
       VLOG(2) << "New group_key=" << gr->group.group_key
-              << " group_size=" << gr->group.group_size
-              << " runtime_details=" << gr->group.runtime_details.ToString();
+              << " group_size=" << gr->group.group_size;
     } else {
       gr = it->second.get();
     }
   }
+  Status status;
   {
     mutex_lock gr_lock(gr->mu);
     if (!gr->device_set.empty()) {
@@ -160,23 +115,14 @@ void CollectiveParamResolverLocal::CompleteGroupLocal(
           gr->task_set.insert(task_name);
           gr->task_list.push_back(task_name);
           gr->group.num_tasks = static_cast<int32>(gr->task_set.size());
-          if (VLOG_IS_ON(1)) {
-            string dev_buf;
-            for (const auto& d : gr->device_set) {
-              strings::StrAppend(&dev_buf, ",", d);
-            }
-            VLOG(1) << "CompleteGroupLocal group_key=" << gr->group.group_key
-                    << " group_size=" << gr->group.group_size << " (current"
-                    << " devices)=(" << dev_buf << ") (number of"
-                    << " devices pending)="
-                    << (gr->group.group_size - gr->device_set.size());
-          }
+          VLOG(1) << "group_key=" << gr->group.group_key
+                  << " group_size=" << gr->group.group_size
+                  << " dev_set=" << gr->device_set.size();
         }
       }
     }
 
     if (status.ok()) {
-      cp->group.runtime_details = gr->group.runtime_details;
       // If the group is not yet complete, queue to wait for it.
       VLOG(2) << "group_size " << gr->group.group_size << " set size "
               << gr->device_set.size() << " gr " << gr;
@@ -211,10 +157,10 @@ typedef std::unordered_map<string, TaskDeviceMap> GlobalDeviceMap;
 
 // Create a populated GlobalDeviceMap from CollInstanceParams and localities.
 GlobalDeviceMap BuildDevRecs(const CollInstanceParams& ip,
-                             const std::vector<DeviceAttributes>& attributes) {
+                             const std::vector<DeviceLocality>& localities) {
   GlobalDeviceMap gdm;
   CHECK_EQ(ip.device_names.size(), ip.task_names.size());
-  CHECK_EQ(ip.device_names.size(), attributes.size());
+  CHECK_EQ(ip.device_names.size(), localities.size());
   for (int i = 0; i < ip.device_names.size(); ++i) {
     TaskDeviceMap& tdm = gdm[ip.task_names[i]];
     DevRec* dr = &tdm[ip.device_names[i]];
@@ -223,7 +169,7 @@ GlobalDeviceMap BuildDevRecs(const CollInstanceParams& ip,
     dr->original_rank = i;
     dr->local_rank = 0;   // Will be populated later by OrderTaskDeviceMap.
     dr->global_rank = 0;  // Will be populated later by EstablishGlobalRank.
-    dr->locality = &attributes[i].locality();
+    dr->locality = &localities[i];
   }
   return gdm;
 }
@@ -344,9 +290,9 @@ void OrderTaskDeviceMap(const string& gpu_ring_order, TaskDeviceMap* tdm) {
 // sharing the same device group where there is more than one good
 // order.
 GlobalDeviceMap EstablishGlobalRank(
-    CollectiveParams* cp, const std::vector<DeviceAttributes>& attributes) {
+    CollectiveParams* cp, const std::vector<DeviceLocality>& localities) {
   VLOG(1) << "EstablishGlobalRank";
-  GlobalDeviceMap gdm = BuildDevRecs(cp->instance, attributes);
+  GlobalDeviceMap gdm = BuildDevRecs(cp->instance, localities);
   for (auto& iter : gdm) {
     TaskDeviceMap& tdm = iter.second;
     OrderTaskDeviceMap(cp->instance.gpu_ring_order, &tdm);
@@ -474,26 +420,20 @@ void CollectiveParamResolverLocal::InitInstanceSharedParams(
   // Get Locality data for all devices.
 
   // Set is_local and task_names in *shared prior to invoking
-  // GetDeviceAttributesAsync.  In a distributed context this function can be
+  // GetDeviceLocalitiesAsync.  In a distributed context this function can be
   // called by a derived class, some of the devices may be non-local and
-  // GetDeviceAttributesAsync will use those fields to launch RPCs.
+  // GetDeviceLocalitiesAsync will use those fields to launch RPCs.
   CompleteTaskIsLocal(task_name_, &ir->shared);
 
   // Because the callback may execute in a different thread, we release
   // ir->out_mu here.  Before releasing, we mark it as unavailable for other
   // threads.
   ir->out_mu_available = false;
-  const auto device_names = ir->shared.instance.device_names;
-  const auto task_names = ir->shared.instance.task_names;
   ir->out_mu.unlock();
-  std::vector<DeviceAttributes>* attributes = new std::vector<DeviceAttributes>;
-  // Suppress linter warning about access to shared without mutex because in
-  // principle the members are locked due to out_mu_available=false.
-  dev_resolver_->GetAllDeviceAttributesAsync(
-      ir->shared.instance.device_names,  // NOLINT
-      ir->shared.instance.task_names,    // NOLINT
-      attributes,
-      [this, gr, cp, ir, attributes, done](const Status& s)
+  std::vector<DeviceLocality>* localities = new std::vector<DeviceLocality>;
+  dev_resolver_->GetDeviceLocalitiesAsync(
+      ir->shared.instance, localities,
+      [this, gr, cp, ir, localities, done](const Status& s)
           EXCLUSIVE_LOCK_FUNCTION(ir->out_mu) {
             // Then we recover the lock in the callback thread that will hold it
             // through the rest of the call chain.  Signal the cv now, any
@@ -503,26 +443,26 @@ void CollectiveParamResolverLocal::InitInstanceSharedParams(
             ir->out_mu_available = true;
             ir->out_cv.notify_all();
             if (s.ok()) {
-              CompleteDefaultRanking(gr, cp, ir, *attributes);
+              CompleteDefaultRanking(gr, cp, ir, *localities);
               done(Status::OK());
             } else {
               done(s);
             }
-            delete attributes;
+            delete localities;
           });
 }
 
-// NOTE(ayushd): The DeviceLocality objects in attributes will have LocalLinks
+// NOTE(ayushd): The DeviceLocality objects in localities will have LocalLinks
 // to all devices that they are physically connected to and visible to the
 // TensorFlow runtime.  This set of devices may be a superset of the devices
 // participating in this instance of collectives.
 void CollectiveParamResolverLocal::CompleteDefaultRanking(
     const GroupRec* gr, const CollectiveParams* cp, InstanceRec* ir,
-    const std::vector<DeviceAttributes>& attributes) {
+    const std::vector<DeviceLocality>& localities) {
   // Establish an instance-specific default rank order for devices
   // based on localities.  This rank order should be a good ring
   // order, if possible.
-  GlobalDeviceMap gdm = EstablishGlobalRank(&ir->shared, attributes);
+  GlobalDeviceMap gdm = EstablishGlobalRank(&ir->shared, localities);
   // Reflect the new global ranking on shared
   size_t num_devices = ir->shared.group.group_size;
   std::vector<string> new_device_names(num_devices, "");
@@ -607,7 +547,7 @@ void CollectiveParamResolverLocal::CallInitInstanceSharedParams(
   // before all the function stack frames pop. The static analysis will
   // not allow that.
   //
-  // *the lock is dropped just before calling GetDeviceAttributesAsync, because
+  // *the lock is dropped just before calling GetDeviceLocalitiesAsync, because
   // there is no guarantee that the thread that executes the callback is the
   // same as the one that locked ir->out_mu.  To prevent other threads from
   // grabbing ir->out_mu, we mark ir->out_mu_available as false.  Hence, in
@@ -670,7 +610,19 @@ void CollectiveParamResolverLocal::CompleteInstanceAsync(
 // implementation.  The ideal way would depend upon the topology and link
 // strength before picking a particular implementation.
 void CollectiveParamResolverLocal::AssignCollectiveType(CollectiveParams* cp) {
-  cp->instance.impl_details.collective_name = GetCollectiveName(cp, nccl_);
+  if (cp->instance.type == BROADCAST_COLLECTIVE) {
+    cp->instance.impl_details.collective_name = "HierarchicalTreeBroadcast";
+  } else if (cp->instance.type == REDUCTION_COLLECTIVE) {
+    if (nccl_) {
+      cp->instance.impl_details.collective_name = "NcclReduce";
+    } else {
+      cp->instance.impl_details.collective_name = "RingReduce";
+    }
+  } else if (cp->instance.type == GATHER_COLLECTIVE) {
+    cp->instance.impl_details.collective_name = "RingGather";
+  } else {
+    cp->instance.impl_details.collective_name = "undef";
+  }
   VLOG(1) << "AssignCollectiveType "
           << cp->instance.impl_details.collective_name;
 }
@@ -704,23 +656,12 @@ void CollectiveParamResolverLocal::CompleteInstanceLocal(
 void CollectiveParamResolverLocal::CompleteInstanceFromInitializedIRec(
     const string& device, const GroupRec* gr, CollectiveParams* cp,
     InstanceRec* ir, bool is_source, const StatusCallback& done) {
-  auto expected_shape = cp->instance.shape;
   // Populate the fields common across instance.
   {
     mutex_lock l(ir->out_mu);
     ir->WaitForOutMu(l);
     // custom operator= does a deep copy.
     cp->instance = ir->shared.instance;
-  }
-  if (expected_shape != cp->instance.shape) {
-    done(errors::InvalidArgument(
-        "Shape mismatch in the collective instance ", cp->instance.instance_key,
-        ". Op at device ", device, " expected shape ",
-        expected_shape.DebugString(), " but another member in the group ",
-        "expected shape ", cp->instance.shape.DebugString(), ". This is likely",
-        " due to different input shapes at different members of the collective",
-        " op."));
-    return;
   }
   // Populate the fields common across task.
   AssignCollectiveType(cp);
@@ -730,15 +671,24 @@ void CollectiveParamResolverLocal::CompleteInstanceFromInitializedIRec(
   CollectiveImplementationInterface* col_impl;
   Status status = CollectiveRegistry::LookupParamResolverInstance(
       cp->instance.impl_details.collective_name, &col_impl);
+  if (status.ok()) {
+    status = col_impl->InitializeInstanceBeforeGroupDiscovery(cp);
+  }
   if (!status.ok()) {
     done(status);
     return;
   }
 
-  //  We may need to wait for the group, if this is a broadcast, for source
-  //  discovery.
-  if (cp->instance.type == BROADCAST_COLLECTIVE) {
-    WaitForGroup(ir, cp, is_source,
+  //  We may need to wait for the group if:
+  //  * this is a broadcast, for source discovery;
+  //  * we are using NCCL with more than 1 worker, for the communicator key from
+  //    rank 0.
+  bool broadcast = cp->instance.type == BROADCAST_COLLECTIVE;
+  bool nccl = cp->instance.type == REDUCTION_COLLECTIVE &&
+              cp->instance.impl_details.collective_name == "NcclReduce" &&
+              cp->group.num_tasks > 1;
+  if (broadcast || nccl) {
+    WaitForGroup(ir, cp, is_source, broadcast, nccl,
                  [col_impl, ir, device, cp, done](InstanceRec* irec) {
                    Status s;
                    if (ir != irec) {
@@ -749,6 +699,7 @@ void CollectiveParamResolverLocal::CompleteInstanceFromInitializedIRec(
                      irec->WaitForOutMu(l);
                      s = irec->status;
                      cp->source_rank = irec->source_rank;
+                     cp->instance.communicator_key = irec->communicator_key;
                    }
                    if (s.ok()) {
                      s = col_impl->InitializeCollectiveParams(cp);
@@ -760,10 +711,9 @@ void CollectiveParamResolverLocal::CompleteInstanceFromInitializedIRec(
   }
 }
 
-void CollectiveParamResolverLocal::WaitForGroup(InstanceRec* ir,
-                                                CollectiveParams* cp,
-                                                bool is_source,
-                                                const IRConsumer& f) {
+void CollectiveParamResolverLocal::WaitForGroup(
+    InstanceRec* ir, CollectiveParams* cp, bool is_source, bool init_source,
+    bool init_nccl, const IRConsumer& f) {
   std::vector<IRConsumer> ready_waiters;
   {
     mutex_lock l(ir->out_mu);
@@ -773,7 +723,7 @@ void CollectiveParamResolverLocal::WaitForGroup(InstanceRec* ir,
     if (!ir->known[cp->default_rank]) {
       ir->known[cp->default_rank] = true;
       ++ir->known_count;
-      if (is_source) {
+      if (init_source && is_source) {
         // Initialize source rank.
         if (ir->source_rank >= 0) {
           ir->status = errors::Internal("Instance ", cp->instance.instance_key,
@@ -784,13 +734,26 @@ void CollectiveParamResolverLocal::WaitForGroup(InstanceRec* ir,
           ir->source_rank = cp->default_rank;
         }
       }
+      if (init_nccl && cp->default_rank == 0) {
+        // Initialize communicator key.
+        if (!ir->communicator_key.empty()) {
+          ir->status =
+              errors::Internal("Instance ", cp->instance.instance_key,
+                               " already has communicator_key ",
+                               str_util::CEscape(ir->communicator_key),
+                               ", received second claim from device ",
+                               cp->instance.device_names[cp->default_rank]);
+        } else {
+          ir->communicator_key = cp->instance.communicator_key;
+        }
+      }
     }
     if (ir->known_count < ir->shared.group.group_size) {
       ir->known_waiters.push_back(f);
       return;
     }
     CHECK_EQ(ir->known_count, ir->shared.group.group_size);
-    if (ir->source_rank < 0) {
+    if (init_source && ir->source_rank < 0) {
       // NOTE(ayushd): changing the error message below would also require
       // updating CompleteParamsBroadcastForgotSend test in
       // CollectiveParamResolverLocalTest.
@@ -799,6 +762,13 @@ void CollectiveParamResolverLocal::WaitForGroup(InstanceRec* ir,
                            " found no source for broadcast.  This "
                            "could mean that there were group_size=",
                            ir->known_count, " BcastRecvs but no BcastSend.");
+    }
+    if (init_nccl && ir->communicator_key.empty()) {
+      ir->status = errors::Internal(
+          "Instance ", cp->instance.instance_key, " device ",
+          cp->instance.device_names[cp->default_rank],
+          " did not find rank 0 for setting communicator key.  This is an "
+          "internal error in collective param resolution");
     }
     if (!ir->known_waiters.empty()) {
       ready_waiters = std::move(ir->known_waiters);

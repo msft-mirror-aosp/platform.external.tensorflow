@@ -1,4 +1,10 @@
 op {
   graph_op_name: "GatherNd"
-  visibility: HIDDEN
+  endpoint {
+    name: "gather_nd"
+  }
+  endpoint {
+    name: "manip.gather_nd"
+    deprecation_version: 2
+  }
 }

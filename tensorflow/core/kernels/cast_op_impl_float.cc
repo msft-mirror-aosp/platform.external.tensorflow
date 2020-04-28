@@ -27,13 +27,12 @@ CastFunctorType GetCpuCastFromFloat(DataType dst_dtype) {
   return nullptr;
 }
 
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
+#if GOOGLE_CUDA
 CastFunctorType GetGpuCastFromFloat(DataType dst_dtype) {
   CURRY_TYPES3(CAST_CASE, GPUDevice, float);
   return nullptr;
 }
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 #ifdef TENSORFLOW_USE_SYCL
 typedef Eigen::SyclDevice SYCLDevice;

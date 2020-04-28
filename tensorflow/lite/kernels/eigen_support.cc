@@ -50,35 +50,20 @@ void SetEigenNbThreads(int threads) {
 // We have a single global threadpool for all convolution operations. This means
 // that inferences started from different threads may block each other, but
 // since the underlying resource of CPU cores should be consumed by the
-// operations anyway, it shouldn't affect overall performance. Note that we
-// also avoid ThreadPool creation if the target thread count is 1, avoiding
-// unnecessary overhead, and more closely mimicking Gemmlowp threadpool
-// behavior.
+// operations anyway, it shouldn't affect overall performance.
 class EigenThreadPoolWrapper : public Eigen::ThreadPoolInterface {
  public:
   // Takes ownership of 'pool'
-  explicit EigenThreadPoolWrapper(int num_threads) {
-    // Avoid creating any threads for the single-threaded case.
-    if (num_threads > 1) {
-      pool_.reset(new Eigen::ThreadPool(num_threads));
-    }
-  }
+  explicit EigenThreadPoolWrapper(Eigen::ThreadPool* pool) : pool_(pool) {}
   ~EigenThreadPoolWrapper() override {}
 
   void Schedule(std::function<void()> fn) override {
-    if (pool_) {
-      pool_->Schedule(std::move(fn));
-    } else {
-      fn();
-    }
+    pool_->Schedule(std::move(fn));
   }
-  int NumThreads() const override { return pool_ ? pool_->NumThreads() : 1; }
-  int CurrentThreadId() const override {
-    return pool_ ? pool_->CurrentThreadId() : 0;
-  }
+  int NumThreads() const override { return pool_->NumThreads(); }
+  int CurrentThreadId() const override { return pool_->CurrentThreadId(); }
 
  private:
-  // May be null if num_threads <= 1.
   std::unique_ptr<Eigen::ThreadPool> pool_;
 };
 
@@ -92,8 +77,8 @@ class LazyEigenThreadPoolHolder {
   // Gets the ThreadPoolDevice, creating if necessary.
   const Eigen::ThreadPoolDevice* GetThreadPoolDevice() {
     if (!device_) {
-      thread_pool_wrapper_.reset(
-          new EigenThreadPoolWrapper(target_num_threads_));
+      thread_pool_wrapper_.reset(new EigenThreadPoolWrapper(
+          new Eigen::ThreadPool(target_num_threads_)));
       device_.reset(new Eigen::ThreadPoolDevice(thread_pool_wrapper_.get(),
                                                 target_num_threads_));
     }

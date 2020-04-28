@@ -18,7 +18,6 @@ limitations under the License.
 #include <string>
 
 #include "absl/memory/memory.h"
-#include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -126,16 +125,7 @@ PyObject* InterpreterWrapper::AllocateTensors() {
 
 PyObject* InterpreterWrapper::Invoke() {
   TFLITE_PY_ENSURE_VALID_INTERPRETER();
-
-  // Release the GIL so that we can run multiple interpreters in parallel
-  TfLiteStatus status_code = kTfLiteOk;
-  Py_BEGIN_ALLOW_THREADS;  // To return can happen between this and end!
-  status_code = interpreter_->Invoke();
-  Py_END_ALLOW_THREADS;
-
-  TFLITE_PY_CHECK(
-      status_code);  // don't move this into the Py_BEGIN/Py_End block
-
+  TFLITE_PY_CHECK(interpreter_->Invoke());
   Py_RETURN_NONE;
 }
 
@@ -260,10 +250,9 @@ PyObject* InterpreterWrapper::SetTensor(int i, PyObject* value) {
   if (python_utils::TfLiteTypeFromPyArray(array) != tensor->type) {
     PyErr_Format(PyExc_ValueError,
                  "Cannot set tensor:"
-                 " Got tensor of type %s"
-                 " but expected type %s for input %d, name: %s ",
-                 TfLiteTypeGetName(python_utils::TfLiteTypeFromPyArray(array)),
-                 TfLiteTypeGetName(tensor->type), i, tensor->name);
+                 " Got tensor of type %d"
+                 " but expected type %d for input %d ",
+                 python_utils::TfLiteTypeFromPyArray(array), tensor->type, i);
     return nullptr;
   }
 
@@ -444,13 +433,6 @@ InterpreterWrapper* InterpreterWrapper::CreateWrapperCPPFromBuffer(
 PyObject* InterpreterWrapper::ResetVariableTensors() {
   TFLITE_PY_ENSURE_VALID_INTERPRETER();
   TFLITE_PY_CHECK(interpreter_->ResetVariableTensors());
-  Py_RETURN_NONE;
-}
-
-PyObject* InterpreterWrapper::ModifyGraphWithDelegate(
-    TfLiteDelegate* delegate) {
-  TFLITE_PY_ENSURE_VALID_INTERPRETER();
-  TFLITE_PY_CHECK(interpreter_->ModifyGraphWithDelegate(delegate));
   Py_RETURN_NONE;
 }
 

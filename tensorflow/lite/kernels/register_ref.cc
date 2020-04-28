@@ -129,8 +129,6 @@ TfLiteRegistration* Register_LEAKY_RELU();
 TfLiteRegistration* Register_SQUARED_DIFFERENCE();
 TfLiteRegistration* Register_FILL();
 TfLiteRegistration* Register_MIRROR_PAD();
-TfLiteRegistration* Register_QUANTIZE();
-TfLiteRegistration* Register_HARD_SWISH_REF();
 
 namespace {
 
@@ -280,8 +278,6 @@ BuiltinRefOpResolver::BuiltinRefOpResolver() {
   AddBuiltin(BuiltinOperator_SQUARED_DIFFERENCE, Register_SQUARED_DIFFERENCE());
   AddBuiltin(BuiltinOperator_FILL, Register_FILL());
   AddBuiltin(BuiltinOperator_MIRROR_PAD, Register_MIRROR_PAD());
-  AddBuiltin(BuiltinOperator_QUANTIZE, Register_QUANTIZE());
-  AddBuiltin(BuiltinOperator_HARD_SWISH, Register_HARD_SWISH_REF());
 
   // TODO(andrewharp, ahentz): Move these somewhere more appropriate so that
   // custom ops aren't always included by default.

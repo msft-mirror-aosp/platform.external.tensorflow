@@ -86,33 +86,21 @@ namespace wrap {
 
 #endif
 
-// clang-format off
-#define ROCFFT_ROUTINE_EACH(__macro) \
-  __macro(hipfftDestroy)             \
-  __macro(hipfftSetStream)           \
-  __macro(hipfftPlan1d)              \
-  __macro(hipfftPlan2d)              \
-  __macro(hipfftPlan3d)              \
-  __macro(hipfftPlanMany)            \
-  __macro(hipfftCreate)              \
-  __macro(hipfftSetAutoAllocation)   \
-  __macro(hipfftSetWorkArea)         \
-  __macro(hipfftGetSize1d)           \
-  __macro(hipfftMakePlan1d)          \
-  __macro(hipfftGetSize2d)           \
-  __macro(hipfftMakePlan2d)          \
-  __macro(hipfftGetSize3d)           \
-  __macro(hipfftMakePlan3d)          \
-  __macro(hipfftGetSizeMany)         \
-  __macro(hipfftMakePlanMany)        \
-  __macro(hipfftExecD2Z)             \
-  __macro(hipfftExecZ2D)             \
-  __macro(hipfftExecC2C)             \
-  __macro(hipfftExecC2R)             \
-  __macro(hipfftExecZ2Z)             \
-  __macro(hipfftExecR2C)
-
-// clang-format on
+#define ROCFFT_ROUTINE_EACH(__macro)                                           \
+  __macro(hipfftDestroy) __macro(hipfftSetStream) __macro(hipfftPlan1d)        \
+      __macro(hipfftPlan2d) __macro(hipfftPlan3d) __macro(hipfftPlanMany)      \
+          __macro(hipfftCreate) __macro(hipfftSetAutoAllocation)               \
+              __macro(hipfftSetWorkArea) __macro(hipfftGetSize1d)              \
+                  __macro(hipfftMakePlan1d) __macro(hipfftGetSize2d)           \
+                      __macro(hipfftMakePlan2d) __macro(hipfftGetSize3d)       \
+                          __macro(hipfftMakePlan3d) __macro(hipfftGetSizeMany) \
+                              __macro(hipfftMakePlanMany)                      \
+                                  __macro(hipfftExecD2Z)                       \
+                                      __macro(hipfftExecZ2D)                   \
+                                          __macro(hipfftExecC2C)               \
+                                              __macro(hipfftExecC2R)           \
+                                                  __macro(hipfftExecZ2Z)       \
+                                                      __macro(hipfftExecR2C)
 
 ROCFFT_ROUTINE_EACH(STREAM_EXECUTOR_ROCFFT_WRAP)
 
@@ -272,7 +260,8 @@ port::Status ROCMFftPlan::Initialize(
       // TODO(yangzihao): refactor this code and the one with the same function
       // in the batch mode.
       if (size_in_bytes != 0) {
-        auto allocated = scratch_allocator->AllocateBytes(size_in_bytes);
+        auto allocated =
+            scratch_allocator->AllocateBytes(stream, size_in_bytes);
         if (!allocated.ok() || (scratch_ = allocated.ValueOrDie()) == nullptr) {
           LOG(ERROR) << "failed to allocate work area.";
           return allocated.status();
@@ -327,7 +316,8 @@ port::Status ROCMFftPlan::Initialize(
                             "Failed to make rocFFT bacthed plan."};
       }
       if (size_in_bytes != 0) {
-        auto allocated = scratch_allocator->AllocateBytes(size_in_bytes);
+        auto allocated =
+            scratch_allocator->AllocateBytes(stream, size_in_bytes);
         if (!allocated.ok() || (scratch_ = allocated.ValueOrDie()) == nullptr) {
           LOG(ERROR) << "failed to allocate work area.";
           return allocated.status();

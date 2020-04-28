@@ -14,11 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include "rocm/include/hiprand/hiprand.h"
+#include "tensorflow/stream_executor/gpu/gpu_rng.h"
+
 #include "tensorflow/stream_executor/device_memory.h"
 #include "tensorflow/stream_executor/gpu/gpu_activation.h"
 #include "tensorflow/stream_executor/gpu/gpu_executor.h"
 #include "tensorflow/stream_executor/gpu/gpu_helpers.h"
-#include "tensorflow/stream_executor/gpu/gpu_rng.h"
 #include "tensorflow/stream_executor/gpu/gpu_stream.h"
 #include "tensorflow/stream_executor/lib/env.h"
 #include "tensorflow/stream_executor/lib/initialize.h"
@@ -125,7 +126,7 @@ GpuRng::~GpuRng() {
 }
 
 bool GpuRng::Init() {
-  absl::MutexLock lock{&mu_};
+  mutex_lock lock{mu_};
   CHECK(rng_ == nullptr);
 
   hiprandStatus_t ret =
@@ -160,7 +161,7 @@ constexpr bool ComplexIsConsecutiveFloats() {
 
 template <typename T>
 bool GpuRng::DoPopulateRandUniformInternal(Stream* stream, DeviceMemory<T>* v) {
-  absl::MutexLock lock{&mu_};
+  mutex_lock lock{mu_};
   static_assert(ComplexIsConsecutiveFloats(),
                 "std::complex values are not stored as consecutive values");
 
@@ -219,7 +220,7 @@ bool GpuRng::DoPopulateRandGaussianInternal(Stream* stream, ElemT mean,
                                             ElemT stddev,
                                             DeviceMemory<ElemT>* v,
                                             FuncT func) {
-  absl::MutexLock lock{&mu_};
+  mutex_lock lock{mu_};
 
   if (!SetStream(stream)) {
     return false;
@@ -251,7 +252,7 @@ bool GpuRng::DoPopulateRandGaussian(Stream* stream, double mean, double stddev,
 }
 
 bool GpuRng::SetSeed(Stream* stream, const uint8* seed, uint64 seed_bytes) {
-  absl::MutexLock lock{&mu_};
+  mutex_lock lock{mu_};
   CHECK(rng_ != nullptr);
 
   if (!CheckSeed(seed, seed_bytes)) {

@@ -12,18 +12,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/kernels/internal/reference/integer_ops/dequantize.h"
-
 #include <string.h>
-
-#include <cstdint>
 #include <vector>
 
-#include "Eigen/Core"
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/c_api_internal.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
-#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
+#include "tensorflow/lite/kernels/internal/reference/integer_ops/dequantize.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/op_macros.h"
@@ -32,12 +27,6 @@ namespace tflite {
 namespace ops {
 namespace builtin {
 namespace dequantize {
-
-// This file has two implementation of Dequantize.
-enum KernelType {
-  kReference,
-  kGenericOptimized,
-};
 
 struct OpContext {
   OpContext(TfLiteContext* context, TfLiteNode* node) {
@@ -70,9 +59,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   OpContext op_context(context, node);
 
   TF_LITE_ENSURE(context, op_context.input->type == kTfLiteUInt8 ||
-                              op_context.input->type == kTfLiteInt8 ||
-                              op_context.input->type == kTfLiteInt16 ||
-                              op_context.input->type == kTfLiteFloat16);
+                              op_context.input->type == kTfLiteInt8);
 
   op_context.output->type = kTfLiteFloat32;
   // If the input tensor is constant, we can persist the dequantized value in
@@ -84,7 +71,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                                TfLiteIntArrayCopy(op_context.input->dims));
 }
 
-template <KernelType kernel_type>
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   OpData* op_data = reinterpret_cast<OpData*>(node->user_data);
   OpContext op_context(context, node);
@@ -98,54 +84,18 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   op_params.scale = op_context.input->params.scale;
   switch (op_context.input->type) {
     case kTfLiteUInt8:
-      if (kernel_type == kReference) {
-        reference_ops::Dequantize(op_params, GetTensorShape(op_context.input),
-                                  GetTensorData<uint8_t>(op_context.input),
-                                  GetTensorShape(op_context.output),
-                                  GetTensorData<float>(op_context.output));
-      } else {
-        optimized_ops::Dequantize(op_params, GetTensorShape(op_context.input),
-                                  GetTensorData<uint8_t>(op_context.input),
-                                  GetTensorShape(op_context.output),
-                                  GetTensorData<float>(op_context.output));
-      }
-      break;
-    case kTfLiteInt8:
-      if (kernel_type == kReference) {
-        reference_integer_ops::Dequantize<int8_t>(
-            op_params, GetTensorShape(op_context.input),
-            GetTensorData<int8_t>(op_context.input),
-            GetTensorShape(op_context.output),
-            GetTensorData<float>(op_context.output));
-      } else {
-        optimized_ops::Dequantize(op_params, GetTensorShape(op_context.input),
-                                  GetTensorData<int8_t>(op_context.input),
-                                  GetTensorShape(op_context.output),
-                                  GetTensorData<float>(op_context.output));
-      }
-      break;
-    case kTfLiteInt16:
-      if (kernel_type == kReference) {
-        reference_integer_ops::Dequantize<int16_t>(
-            op_params, GetTensorShape(op_context.input),
-            GetTensorData<int16_t>(op_context.input),
-            GetTensorShape(op_context.output),
-            GetTensorData<float>(op_context.output));
-      } else {
-        optimized_ops::Dequantize(op_params, GetTensorShape(op_context.input),
-                                  GetTensorData<int16_t>(op_context.input),
-                                  GetTensorShape(op_context.output),
-                                  GetTensorData<float>(op_context.output));
-      }
-      break;
-    case kTfLiteFloat16: {
-      const Eigen::half* half_data = reinterpret_cast<const Eigen::half*>(
-          GetTensorData<TfLiteFloat16>(op_context.input));
-      reference_ops::Dequantize(GetTensorShape(op_context.input), half_data,
+      optimized_ops::Dequantize(op_params, GetTensorShape(op_context.input),
+                                GetTensorData<uint8_t>(op_context.input),
                                 GetTensorShape(op_context.output),
                                 GetTensorData<float>(op_context.output));
       break;
-    }
+    case kTfLiteInt8:
+      reference_integer_ops::Dequantize(
+          op_params, GetTensorShape(op_context.input),
+          GetTensorData<int8_t>(op_context.input),
+          GetTensorShape(op_context.output),
+          GetTensorData<float>(op_context.output));
+      break;
     default:
       context->ReportError(context, "Type %d not supported.",
                            op_context.input->type);
@@ -162,26 +112,12 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 }  // namespace dequantize
 
 TfLiteRegistration* Register_DEQUANTIZE_OPT() {
-  static TfLiteRegistration r = {
-      dequantize::Init, dequantize::Free, dequantize::Prepare,
-      dequantize::Eval<dequantize::kGenericOptimized>};
-  return &r;
-}
-
-TfLiteRegistration* Register_DEQUANTIZE_REF() {
   static TfLiteRegistration r = {dequantize::Init, dequantize::Free,
-                                 dequantize::Prepare,
-                                 dequantize::Eval<dequantize::kReference>};
+                                 dequantize::Prepare, dequantize::Eval};
   return &r;
 }
 
-TfLiteRegistration* Register_DEQUANTIZE() {
-#ifdef USE_NEON
-  return Register_DEQUANTIZE_OPT();
-#else
-  return Register_DEQUANTIZE_REF();
-#endif
-}
+TfLiteRegistration* Register_DEQUANTIZE() { return Register_DEQUANTIZE_OPT(); }
 
 }  // namespace builtin
 }  // namespace ops

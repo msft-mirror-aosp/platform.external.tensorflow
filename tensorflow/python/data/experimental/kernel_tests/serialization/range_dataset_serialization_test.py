@@ -110,6 +110,7 @@ class RangeDatasetSerializationTest(
     stop = 10
     stop_1 = 8
     self.run_core_tests(lambda: self._build_range_dataset(start, stop),
+                        lambda: self._build_range_dataset(start, stop_1),
                         stop - start)
 
 

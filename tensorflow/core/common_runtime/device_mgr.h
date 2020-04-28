@@ -42,8 +42,6 @@ class DeviceMgr {
   // Constructs a DeviceMgr managing a single device.
   explicit DeviceMgr(std::unique_ptr<Device> device);
 
-  ~DeviceMgr();
-
   // Returns attributes of all devices.
   void ListDeviceAttributes(std::vector<DeviceAttributes>* devices) const;
 

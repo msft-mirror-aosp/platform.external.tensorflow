@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+
   FILE* fp = fopen(filename, "r");
   if (fp == NULL) {
     fprintf(stderr, "Failed to open %s for read\n", filename);

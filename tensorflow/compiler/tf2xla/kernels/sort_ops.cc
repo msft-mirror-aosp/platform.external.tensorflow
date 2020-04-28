@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "tensorflow/compiler/tf2xla/xla_op_kernel.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
-#include "tensorflow/compiler/xla/client/lib/comparators.h"
 #include "tensorflow/compiler/xla/client/xla_builder.h"
 
 namespace tensorflow {
@@ -26,10 +25,7 @@ class XlaSortOp : public XlaOpKernel {
   explicit XlaSortOp(OpKernelConstruction* context) : XlaOpKernel(context) {}
 
   void Compile(XlaOpKernelContext* context) override {
-    context->SetOutput(0, xla::Sort({context->Input("input")},
-                                    xla::CreateScalarLtComputation(
-                                        {context->InputXlaType("input")},
-                                        context->builder())));
+    context->SetOutput(0, xla::Sort(context->Input("input")));
   }
 };
 
@@ -41,11 +37,8 @@ class XlaKeyValueSortOp : public XlaOpKernel {
       : XlaOpKernel(context) {}
 
   void Compile(XlaOpKernelContext* context) override {
-    xla::XlaOp result = xla::Sort(
-        {context->Input("keys"), context->Input("values")},
-        xla::CreateScalarLtComputation(
-            {context->InputXlaType("keys"), context->InputXlaType("values")},
-            context->builder()));
+    xla::XlaOp result =
+        xla::Sort(context->Input("keys"), {context->Input("values")});
     context->SetOutput(0, xla::GetTupleElement(result, 0));
     context->SetOutput(1, xla::GetTupleElement(result, 1));
   }

@@ -82,8 +82,7 @@ class MetaOptimizer : public GraphOptimizer {
 
   struct OptimizerResult {
     string optimizer_name;
-    string message;
-    Status status;
+    string result;
   };
 
   struct GraphOptimizationResult {

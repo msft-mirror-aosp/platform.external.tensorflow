@@ -16,13 +16,16 @@ limitations under the License.
 #ifndef TENSORFLOW_CONTRIB_BIGTABLE_KERNELS_BIGTABLE_LIB_H_
 #define TENSORFLOW_CONTRIB_BIGTABLE_KERNELS_BIGTABLE_LIB_H_
 
+// Note: we use bigtable/client/internal/table.h as this is the no-exception API
+
 #include "google/cloud/bigtable/data_client.h"
-#include "google/cloud/bigtable/table.h"
+#include "google/cloud/bigtable/internal/table.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/resource_mgr.h"
 
 namespace tensorflow {
 
+Status GrpcStatusToTfStatus(const ::grpc::Status& status);
 Status GcpStatusToTfStatus(const ::google::cloud::Status& status);
 
 string RegexFromStringSet(const std::vector<string>& strs);
@@ -63,7 +66,7 @@ class BigtableTableResource : public ResourceBase {
 
   ~BigtableTableResource() override { client_->Unref(); }
 
-  ::google::cloud::bigtable::Table& table() { return table_; }
+  ::google::cloud::bigtable::noex::Table& table() { return table_; }
 
   string DebugString() const override {
     return strings::StrCat(
@@ -74,7 +77,7 @@ class BigtableTableResource : public ResourceBase {
  private:
   BigtableClientResource* client_;  // Ownes one ref.
   const string table_name_;
-  ::google::cloud::bigtable::Table table_;
+  ::google::cloud::bigtable::noex::Table table_;
 };
 
 namespace data {
@@ -114,15 +117,6 @@ class BigtableReaderDatasetIterator : public DatasetIterator<Dataset> {
   virtual Status ParseRow(IteratorContext* ctx,
                           const ::google::cloud::bigtable::Row& row,
                           std::vector<Tensor>* out_tensors) = 0;
-
-  Status SaveInternal(IteratorStateWriter* writer) override {
-    return errors::Unimplemented("SaveInternal is currently not supported");
-  }
-
-  Status RestoreInternal(IteratorContext* ctx,
-                         IteratorStateReader* reader) override {
-    return errors::Unimplemented("RestoreInternal is currently not supported");
-  }
 
  private:
   Status EnsureIteratorInitialized() EXCLUSIVE_LOCKS_REQUIRED(mu_) {

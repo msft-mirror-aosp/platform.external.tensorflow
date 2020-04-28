@@ -44,18 +44,11 @@ typedef enum { kTfLiteOk = 0, kTfLiteError = 1 } TfLiteStatus;
 // need. Access to the external contexts is controled by one of the
 // corresponding support files.
 typedef enum {
-  kTfLiteEigenContext = 0,       // include eigen_support.h to use.
-  kTfLiteGemmLowpContext = 1,    // include gemm_support.h to use.
-  kTfLiteEdgeTpuContext = 2,     // Placeholder for Edge TPU support.
-  kTfLiteCpuBackendContext = 3,  // include cpu_backend_support.h to use.
-  kTfLiteMaxExternalContexts = 4
+  kTfLiteEigenContext = 0,     // include eigen_support.h to use.
+  kTfLiteGemmLowpContext = 1,  // include gemm_support.h to use.
+  kTfLiteEdgeTpuContext = 2,   // Placeholder for Edge TPU support.
+  kTfLiteMaxExternalContexts = 3
 } TfLiteExternalContextType;
-
-// Forward declare so dependent structs and methods can reference these types
-// prior to the struct definitions.
-struct TfLiteContext;
-struct TfLiteDelegate;
-struct TfLiteRegistration;
 
 // An external context is a collection of information unrelated to the TF Lite
 // framework, but useful to a subset of the ops. TF Lite knows very little
@@ -66,6 +59,10 @@ typedef struct {
   TfLiteExternalContextType type;
   TfLiteStatus (*Refresh)(struct TfLiteContext* context);
 } TfLiteExternalContext;
+
+// Forward declare so GetNode can use this is in Context.
+typedef struct _TfLiteRegistration TfLiteRegistration;
+typedef struct _TfLiteDelegate TfLiteDelegate;
 
 #define kOptionalTensor (-1)
 
@@ -92,11 +89,10 @@ int TfLiteIntArrayGetSizeInBytes(int size);
 TfLiteIntArray* TfLiteIntArrayCreate(int size);
 
 // Check if two intarrays are equal. Returns 1 if they are equal, 0 otherwise.
-int TfLiteIntArrayEqual(const TfLiteIntArray* a, const TfLiteIntArray* b);
+int TfLiteIntArrayEqual(TfLiteIntArray* a, TfLiteIntArray* b);
 
 // Check if an intarray equals an array. Returns 1 if equals, 0 otherwise.
-int TfLiteIntArrayEqualsArray(const TfLiteIntArray* a, int b_size,
-                              const int b_data[]);
+int TfLiteIntArrayEqualsArray(TfLiteIntArray* a, int b_size, int b_data[]);
 
 // Create a copy of an array passed as `src`.
 // You are expected to free memory with TfLiteIntArrayFree
@@ -196,11 +192,6 @@ typedef struct {
   float re, im;  // real and imaginary parts, respectively.
 } TfLiteComplex64;
 
-// Half precision data type compatible with the C99 definition.
-typedef struct {
-  uint16_t data;
-} TfLiteFloat16;
-
 // Types supported by tensor
 typedef enum {
   kTfLiteNoType = 0,
@@ -213,7 +204,6 @@ typedef enum {
   kTfLiteInt16 = 7,
   kTfLiteComplex64 = 8,
   kTfLiteInt8 = 9,
-  kTfLiteFloat16 = 10,
 } TfLiteType;
 
 // Return the name of a given type, for error reporting purposes.
@@ -263,11 +253,9 @@ typedef struct {
 
 // A union of pointers that points to memory for a given tensor.
 typedef union {
-  int32_t* i32;
+  int* i32;
   int64_t* i64;
   float* f;
-  // Placeholder for 16b float type. Use uint16* in the pointer union for now.
-  TfLiteFloat16* f16;
   char* raw;
   const char* raw_const;
   uint8_t* uint8;
@@ -291,9 +279,7 @@ typedef enum {
 // The delegates should use zero or positive integers to represent handles.
 // -1 is reserved from unallocated status.
 typedef int TfLiteBufferHandle;
-enum {
-  kTfLiteNullBufferHandle = -1,
-};
+const TfLiteBufferHandle kTfLiteNullBufferHandle = -1;
 
 // An tensor in the interpreter system which is a wrapper around a buffer of
 // data including a dimensionality (or NULL if not currently defined).
@@ -330,7 +316,7 @@ typedef struct {
 
   // The delegate which knows how to handle `buffer_handle`.
   // WARNING: This is an experimental interface that is subject to change.
-  struct TfLiteDelegate* delegate;
+  TfLiteDelegate* delegate;
 
   // An integer buffer handle that can be handled by `delegate`.
   // The value is valid only when delegate is not null.
@@ -381,10 +367,6 @@ typedef struct {
   // Outputs to this node expressed as indices into the simulator's tensors.
   TfLiteIntArray* outputs;
 
-  // intermediate tensors to this node expressed as indices into the simulator's
-  // tensors.
-  TfLiteIntArray* intermediates;
-
   // Temporary tensors uses during the computations. This usually contains no
   // tensors, but ops are allowed to change that if they need scratch space of
   // any sort.
@@ -405,7 +387,7 @@ typedef struct {
   // The pointer to the delegate. This is non-null only when the node is
   // created by calling `interpreter.ModifyGraphWithDelegate`.
   // WARNING: This is an experimental interface that is subject to change.
-  struct TfLiteDelegate* delegate;
+  TfLiteDelegate* delegate;
 } TfLiteNode;
 
 typedef struct TfLiteContext {
@@ -451,15 +433,15 @@ typedef struct TfLiteContext {
 
   // Get a Tensor node by node_index.
   // WARNING: This is an experimental interface that is subject to change.
-  TfLiteStatus (*GetNodeAndRegistration)(
-      struct TfLiteContext*, int node_index, TfLiteNode** node,
-      struct TfLiteRegistration** registration);
+  TfLiteStatus (*GetNodeAndRegistration)(struct TfLiteContext*, int node_index,
+                                         TfLiteNode** node,
+                                         TfLiteRegistration** registration);
 
   // Replace ops with one or more stub delegate operations. This function
   // does not take ownership of `nodes_to_replace`.
   TfLiteStatus (*ReplaceNodeSubsetsWithDelegateKernels)(
-      struct TfLiteContext*, struct TfLiteRegistration registration,
-      const TfLiteIntArray* nodes_to_replace, struct TfLiteDelegate* delegate);
+      struct TfLiteContext*, TfLiteRegistration registration,
+      const TfLiteIntArray* nodes_to_replace, TfLiteDelegate* delegate);
 
   // Number of threads that are recommended to subsystems like gemmlowp and
   // eigen.
@@ -484,7 +466,7 @@ typedef struct TfLiteContext {
   void* profiler;
 } TfLiteContext;
 
-typedef struct TfLiteRegistration {
+typedef struct _TfLiteRegistration {
   // Initializes the op from serialized data.
   // If a built-in op:
   //   `buffer` is the op's params data (TfLiteLSTMParams*).
@@ -560,7 +542,7 @@ typedef enum {
 } TfLiteDelegateFlags;
 
 // WARNING: This is an experimental interface that is subject to change.
-typedef struct TfLiteDelegate {
+typedef struct _TfLiteDelegate {
   // Data that delegate needs to identify itself. This data is owned by the
   // delegate. The delegate is owned in the user code, so the delegate is
   // responsible for doing this when it is destroyed.
@@ -571,21 +553,20 @@ typedef struct TfLiteDelegate {
   // will look at the nodes and call ReplaceNodeSubsetsWithDelegateKernels()
   // to ask the TensorFlow lite runtime to create macro-nodes to represent
   // delegated subgraphs of the original graph.
-  TfLiteStatus (*Prepare)(TfLiteContext* context,
-                          struct TfLiteDelegate* delegate);
+  TfLiteStatus (*Prepare)(TfLiteContext* context, TfLiteDelegate* delegate);
 
   // Copy the data from delegate buffer handle into raw memory of the given
   // 'tensor'. This cannot be null. The delegate is allowed to allocate the raw
   // bytes as long as it follows the rules for kTfLiteDynamic tensors.
   TfLiteStatus (*CopyFromBufferHandle)(TfLiteContext* context,
-                                       struct TfLiteDelegate* delegate,
+                                       TfLiteDelegate* delegate,
                                        TfLiteBufferHandle buffer_handle,
                                        TfLiteTensor* tensor);
 
   // Copy the data from raw memory of the given 'tensor' to delegate buffer
   // handle. This can be null if the delegate doesn't use its own buffer.
   TfLiteStatus (*CopyToBufferHandle)(TfLiteContext* context,
-                                     struct TfLiteDelegate* delegate,
+                                     TfLiteDelegate* delegate,
                                      TfLiteBufferHandle buffer_handle,
                                      TfLiteTensor* tensor);
 
@@ -593,8 +574,7 @@ typedef struct TfLiteDelegate {
   // this doesn't release the underlying resource (e.g. textures). The
   // resources are either owned by application layer or the delegate.
   // This can be null if the delegate doesn't use its own buffer.
-  void (*FreeBufferHandle)(TfLiteContext* context,
-                           struct TfLiteDelegate* delegate,
+  void (*FreeBufferHandle)(TfLiteContext* context, TfLiteDelegate* delegate,
                            TfLiteBufferHandle* handle);
 
   // Bitmask flags. See the comments in `TfLiteDelegateFlags`.

@@ -21,7 +21,6 @@ limitations under the License.
 #include "tensorflow/core/framework/variant_op_registry.h"
 #include "tensorflow/core/kernels/dense_update_functor.h"
 #include "tensorflow/core/kernels/variable_ops.h"
-#include "tensorflow/core/lib/core/refcount.h"
 
 namespace tensorflow {
 
@@ -168,8 +167,10 @@ VariableInputLockHolder MaybeLockVariableInputMutexesInOrder(
   std::sort(acquire_order.begin(), acquire_order.end(),
             [&mutexes](int a, int b) { return mutexes[a] < mutexes[b]; });
 
-  auto locks = absl::make_unique<std::vector<mutex_lock>>();
-  auto shared_locks = absl::make_unique<std::vector<tf_shared_lock>>();
+  std::unique_ptr<std::vector<mutex_lock>> locks =
+      absl::make_unique<std::vector<mutex_lock>>();
+  std::unique_ptr<std::vector<tf_shared_lock>> shared_locks =
+      absl::make_unique<std::vector<tf_shared_lock>>();
   locks->reserve(acquire_order.size());
 
   for (auto input : acquire_order) {
@@ -240,10 +241,11 @@ template <typename Device, typename T>
 Status GetInputTensorFromVariable(OpKernelContext* ctx, int input,
                                   bool lock_held, bool sparse, Tensor* out) {
   if (ctx->input_dtype(input) == DT_RESOURCE) {
-    core::RefCountPtr<Var> var;
+    Var* var;
     TF_RETURN_IF_ERROR(LookupResource(ctx, HandleFromInput(ctx, input), &var));
+    core::ScopedUnref unref_var(var);
     if (sparse) {
-      TF_RETURN_IF_ERROR(EnsureSparseVariableAccess<Device, T>(ctx, var.get()));
+      TF_RETURN_IF_ERROR(EnsureSparseVariableAccess<Device, T>(ctx, var));
       *out = *var->tensor();
       return Status::OK();
     }

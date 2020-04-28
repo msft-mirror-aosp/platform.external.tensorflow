@@ -20,9 +20,7 @@ limitations under the License.
 
 #include <functional>
 #include <memory>
-#include <queue>
 
-#include "absl/synchronization/mutex.h"
 #include "tensorflow/stream_executor/lib/threadpool.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
 
@@ -42,12 +40,14 @@ class HostStream : public internal::StreamInterface {
   void BlockUntilDone();
 
  private:
-  bool WorkAvailable() EXCLUSIVE_LOCKS_REQUIRED(mu_);
-  void WorkLoop();
+  // Use only one thread and own task queue to preserve FIFO ordering
+  // for the operations enqueued by any given stream.
+  static const int kExecutorThreads = 1;
+  std::unique_ptr<port::ThreadPool> host_executor_;
 
-  absl::Mutex mu_;
-  std::queue<std::function<void()>> work_queue_ GUARDED_BY(mu_);
-  std::unique_ptr<port::Thread> thread_;
+  mutex mu_;
+  int pending_tasks_ GUARDED_BY(mu_) = 0;
+  condition_variable completion_condition_;
 };
 
 }  // namespace host

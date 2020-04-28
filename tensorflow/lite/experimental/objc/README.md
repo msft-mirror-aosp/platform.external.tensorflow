@@ -5,48 +5,11 @@ solution for Objective-C developers. It enables low-latency inference of
 on-device machine learning models with a small binary size and fast performance
 supporting hardware acceleration.
 
-## Build TensorFlow with iOS support
+## Getting Started
 
-To build the Objective-C TensorFlow Lite library on Apple platforms,
-[install from source](https://www.tensorflow.org/install/source#setup_for_linux_and_macos)
-or [clone the GitHub repo](https://github.com/tensorflow/tensorflow).
-Then, configure TensorFlow by navigating to the root directory and executing the
-`configure.py` script:
+### Bazel
 
-```shell
-python configure.py
-```
-
-Follow the prompts and when asked to build TensorFlow with iOS support, enter `y`.
-
-### CocoaPods developers
-
-Add the TensorFlow Lite pod to your `Podfile`:
-
-```ruby
-pod 'TensorFlowLiteObjC'
-```
-
-Then, run `pod install`.
-
-In your Objective-C files, import the umbrella header:
-
-```objectivec
-#import "TFLTensorFlowLite.h"
-```
-
-Or, the module if you set `CLANG_ENABLE_MODULES = YES` in your Xcode project:
-
-```objectivec
-@import TFLTensorFlowLite;
-```
-
-Note: To import the TensorFlow Lite module in your Objective-C files, you must
-also include `use_frameworks!` in your `Podfile`.
-
-### Bazel developers
-
-In your `BUILD` file, add the `TensorFlowLite` dependency to your target:
+In your `BUILD` file, add the `TensorFlowLite` dependency:
 
 ```python
 objc_library(
@@ -56,17 +19,16 @@ objc_library(
 )
 ```
 
-In your Objective-C files, import the umbrella header:
+If you would like to build the Objective-C TensorFlow Lite library using Bazel on Apple
+platforms, clone or download the [TensorFlow GitHub repo](https://github.com/tensorflow/tensorflow),
+then navigate to the root `tensorflow` directory and execute the `configure.py` script:
 
-```objectivec
-#import "TFLTensorFlowLite.h"
+```shell
+python configure.py
 ```
 
-Or, the module if you set `CLANG_ENABLE_MODULES = YES` in your Xcode project:
-
-```objectivec
-@import TFLTensorFlowLite;
-```
+Follow the prompts and when asked to configure the Bazel rules for Apple
+platforms, enter `y`.
 
 Build the `TensorFlowLite` Objective-C library target:
 
@@ -74,17 +36,16 @@ Build the `TensorFlowLite` Objective-C library target:
 bazel build tensorflow/lite/experimental/objc:TensorFlowLite
 ```
 
-Build the `Tests` target:
+Build the `TensorFlowLiteTests` target:
 
 ```shell
-bazel test tensorflow/lite/experimental/objc:Tests
+bazel test tensorflow/lite/experimental/objc:TensorFlowLiteTests
 ```
 
-#### Generate the Xcode project using Tulsi
+### Tulsi
 
-Open the `//tensorflow/lite/experimental/objc/TensorFlowLite.tulsiproj` using
-the [TulsiApp](https://github.com/bazelbuild/tulsi)
-or by running the
+Open the `TensorFlowLite.tulsiproj` using the
+[TulsiApp](https://github.com/bazelbuild/tulsi) or by running the
 [`generate_xcodeproj.sh`](https://github.com/bazelbuild/tulsi/blob/master/src/tools/generate_xcodeproj.sh)
 script from the root `tensorflow` directory:
 

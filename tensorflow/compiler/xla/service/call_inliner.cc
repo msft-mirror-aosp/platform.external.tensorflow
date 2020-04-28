@@ -18,7 +18,6 @@ limitations under the License.
 #include <deque>
 
 #include "tensorflow/compiler/xla/service/call_graph.h"
-#include "tensorflow/compiler/xla/service/dfs_hlo_visitor_with_default.h"
 #include "tensorflow/compiler/xla/service/hlo_dce.h"
 #include "tensorflow/core/lib/core/errors.h"
 

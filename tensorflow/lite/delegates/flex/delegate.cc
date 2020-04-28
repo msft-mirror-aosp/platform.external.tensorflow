@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/lite/delegates/flex/buffer_map.h"
 #include "tensorflow/lite/delegates/flex/kernel.h"
 #include "tensorflow/lite/delegates/flex/util.h"
-#include "tensorflow/lite/minimal_logging.h"
 #include "tensorflow/lite/string_util.h"
 #include "tensorflow/lite/util.h"
 
@@ -39,11 +38,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteDelegate* delegate) {
         context->recommended_num_threads);
   }
 
-  auto status = reinterpret_cast<DelegateData*>(delegate->data_)
-                    ->Prepare(session_options);
-  if (!status.ok()) {
-    context->ReportError(context, "Failed to initialize TensorFlow context: %s",
-                         status.error_message().c_str());
+  if (!reinterpret_cast<DelegateData*>(delegate->data_)
+           ->Prepare(session_options)
+           .ok()) {
+    context->ReportError(context, "Failed to initialize TensorFlow context.");
     return kTfLiteError;
   }
 
@@ -135,8 +133,6 @@ AcquireFlexDelegate() {
 }
 
 std::unique_ptr<FlexDelegate> FlexDelegate::Create() {
-  TFLITE_LOG_PROD_ONCE(TFLITE_LOG_INFO,
-                       "Created TensorFlow Lite delegate for select TF ops.");
   return std::unique_ptr<FlexDelegate>(new FlexDelegate());
 }
 

@@ -80,8 +80,6 @@ Status FusedIrEmitter::DefaultAction(HloInstruction* hlo) {
 }
 
 Status FusedIrEmitter::HandleConstant(HloInstruction* constant) {
-  unsigned global_address_space =
-      llvm_ir::GetGlobalMemoryAddressSpace(*module_);
   indexed_generators_[constant] = [=](const IrArray::Index& index) {
     const Literal& literal = constant->literal();
     llvm::Constant* initializer =
@@ -91,16 +89,11 @@ Status FusedIrEmitter::HandleConstant(HloInstruction* constant) {
         /*isConstant=*/true,
         /*Linkage=*/llvm::GlobalValue::PrivateLinkage,
         /*Initializer=*/initializer,
-        /*Name=*/"", /*InsertBefore=*/nullptr,
-        /*TLMode=*/llvm::GlobalValue::NotThreadLocal,
-        /*AddressSpace=*/global_address_space,
-        /*isExternallyInitialized=*/false);
-
+        /*Name=*/"");
     global->setUnnamedAddr(llvm::GlobalVariable::UnnamedAddr::Global);
-    llvm::Constant* shape_constant =
-        llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(
-            global,
-            llvm_ir::ShapeToIrType(literal.shape(), module_)->getPointerTo());
+    llvm::Constant* shape_constant = llvm::ConstantExpr::getBitCast(
+        global,
+        llvm_ir::ShapeToIrType(literal.shape(), module_)->getPointerTo());
     return IrArray(shape_constant, constant->shape())
         .EmitReadArrayElement(index, b_);
   };
@@ -151,9 +144,10 @@ Status FusedIrEmitter::HandleGetTupleElement(
 Status FusedIrEmitter::HandleParameter(HloInstruction* parameter) {
   indexed_generators_[parameter] =
       [=](const IrArray::Index& index) -> llvm::Value* {
-    int64 param_num = parameter->parameter_number();
-    if (param_shmem_buffers_.size() > param_num) {
-      if (llvm::Value* param_tile_buffer = param_shmem_buffers_[param_num]) {
+    if (tiled_parameter_info_) {
+      if (llvm::Value* param_tile_buffer =
+              tiled_parameter_info_->GetBufferForParameter(
+                  parameter->parameter_number())) {
         // TODO(jlebar): Add AA metadata to this load.  Tile buffers are global
         // variables, so LLVM's points-to analysis doesn't help us much.  And we
         // want the AA info to be present before address spaces are inferred
@@ -161,12 +155,13 @@ Status FusedIrEmitter::HandleParameter(HloInstruction* parameter) {
         // address-space-based AA in LLVM, it wouldn't help us much here.
         return b_->CreateLoad(
             b_->CreateGEP(param_tile_buffer, {index.GetConstantWithIndexType(0),
-                                              tile_param_x_, tile_param_y_}),
+                                              tiled_parameter_info_->x(),
+                                              tiled_parameter_info_->y()}),
             "tiled_buffer");
       }
     }
-    return GetIrArrayForFusedParameter(param_num).EmitReadArrayElement(index,
-                                                                       b_);
+    return GetIrArrayForFusedParameter(parameter->parameter_number())
+        .EmitReadArrayElement(index, b_);
   };
   return Status::OK();
 }
@@ -300,9 +295,9 @@ bool FusedIrEmitter::IsFusedIrEmitterInefficient(
     total += entry.second;
   }
 
-  // Check that the code duplication has at most a factor of 15 (where 15 is an
+  // Check that the code duplication has at most a factor of 8 (where 8 is an
   // arbitrary constant that seems to work).
-  return total > 15 * index_usage_count.size();
+  return total > 8 * index_usage_count.size();
 }
 
 }  // namespace xla

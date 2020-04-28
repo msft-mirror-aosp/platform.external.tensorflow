@@ -63,7 +63,10 @@ class ParallelMapDatasetSerializationTest(
 
   def testSaveRestoreCore(self):
     for ds_fn in [self._build_ds, self._build_ds_with_prefetch]:
-      self.run_core_tests(ds_fn, self._num_outputs)
+      self.run_core_tests(
+          ds_fn,
+          lambda: ds_fn(multiplier=15.0),  # pylint: disable=cell-var-from-loop
+          self._num_outputs)
 
   def testSaveStatefulFunction(self):
 
@@ -76,7 +79,7 @@ class ParallelMapDatasetSerializationTest(
       return dataset_ops.Dataset.range(100).map(
           _map_fn, num_parallel_calls=2).prefetch(2)
 
-    self.verify_error_on_save(_build_ds, 15, errors.FailedPreconditionError)
+    self.verify_error_on_save(_build_ds, 15, errors.InvalidArgumentError)
 
   def testCaptureVariableInMapFn(self):
 
@@ -87,7 +90,7 @@ class ParallelMapDatasetSerializationTest(
           lambda _: counter_var.assign_add(1),
           num_parallel_calls=2).prefetch(2))
 
-    self.verify_error_on_save(_build_ds, 15, errors.FailedPreconditionError)
+    self.verify_error_on_save(_build_ds, 15, errors.InvalidArgumentError)
 
   def testCaptureConstantInMapFn(self):
 
@@ -96,7 +99,7 @@ class ParallelMapDatasetSerializationTest(
       return (dataset_ops.Dataset.from_tensors(0).repeat(10).map(
           lambda x: x + constant_var, num_parallel_calls=2).prefetch(2))
 
-    self.run_core_tests(_build_ds, 10)
+    self.run_core_tests(_build_ds, None, 10)
 
   def testCaptureDefunInMapFn(self):
     num_outputs = 100
@@ -110,7 +113,7 @@ class ParallelMapDatasetSerializationTest(
       return dataset_ops.Dataset.range(num_outputs).map(
           defun_fn, num_parallel_calls=2).prefetch(2)
 
-    self.run_core_tests(_build_ds, num_outputs)
+    self.run_core_tests(_build_ds, None, num_outputs)
 
   def testBuildDefunInMapFn(self):
     num_outputs = 100
@@ -130,7 +133,7 @@ class ParallelMapDatasetSerializationTest(
       return dataset_ops.Dataset.range(num_outputs).map(
           defun_fn, num_parallel_calls=2).prefetch(2)
 
-    self.run_core_tests(_build_ds, num_outputs)
+    self.run_core_tests(_build_ds, None, num_outputs)
 
 
 if __name__ == "__main__":

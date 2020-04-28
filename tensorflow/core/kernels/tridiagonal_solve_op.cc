@@ -1,4 +1,4 @@
-/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,25 +25,14 @@ limitations under the License.
 
 namespace tensorflow {
 
-static const char kNotInvertibleMsg[] = "The matrix is not invertible.";
-
-static const char kNotInvertibleScalarMsg[] =
-    "The matrix is not invertible: it is a scalar with value zero.";
-
-static const char kThomasFailedMsg[] =
-    "The matrix is either not invertible, or requires pivoting. "
-    "Try setting partial_pivoting = True.";
+static const char kErrMsg[] = "The matrix is not invertible.";
 
 template <class Scalar>
 class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
  public:
   INHERIT_LINALG_TYPEDEFS(Scalar);
-  using MatrixMapRow =
-      decltype(std::declval<const ConstMatrixMaps>()[0].row(0));
 
-  explicit TridiagonalSolveOp(OpKernelConstruction* context) : Base(context) {
-    OP_REQUIRES_OK(context, context->GetAttr("partial_pivoting", &pivoting_));
-  }
+  explicit TridiagonalSolveOp(OpKernelConstruction* context) : Base(context) {}
 
   void ValidateInputMatrixShapes(
       OpKernelContext* context,
@@ -82,32 +71,25 @@ class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
     const double mult_cost = Eigen::TensorOpCost::MulCost<Scalar>();
     const double div_cost = Eigen::TensorOpCost::DivCost<Scalar>();
 
-    double cost;
-    if (pivoting_) {
-      // Assuming cases with and without row interchange are equiprobable.
-      cost = num_eqs * (div_cost * (num_rhss + 1) +
-                        (add_cost + mult_cost) * (2.5 * num_rhss + 1.5));
-    } else {
-      cost = num_eqs * (div_cost * (num_rhss + 1) +
-                        (add_cost + mult_cost) * (2 * num_rhss + 1));
-    }
+    // Assuming cases with and without row interchange are equiprobable.
+    const double cost =
+        num_eqs * (div_cost * (num_rhss + 1) +
+                   (add_cost + mult_cost) * (2.5 * num_rhss + 1.5));
     return cost >= static_cast<double>(kint64max) ? kint64max
                                                   : static_cast<int64>(cost);
   }
-
-  bool EnableInputForwarding() const final { return false; }
 
   void ComputeMatrix(OpKernelContext* context, const ConstMatrixMaps& inputs,
                      MatrixMaps* outputs) final {
     const auto diagonals = inputs[0];
 
-    // Superdiagonal elements, first is ignored.
+    // Subdiagonal elements, first is ignored.
     const auto& superdiag = diagonals.row(0);
     // Diagonal elements.
     const auto& diag = diagonals.row(1);
-    // Subdiagonal elements, n-th is ignored.
+    // Superdiagonal elements, n-th is ignored.
     const auto& subdiag = diagonals.row(2);
-    // Right-hand sides.
+    // Right-hand sides (transposed - necessary for GPU impl).
     const auto& rhs = inputs[1];
 
     const int n = diag.size();
@@ -118,31 +100,10 @@ class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
       return;
     }
     if (n == 1) {
-      OP_REQUIRES(context, diag(0) != zero,
-                  errors::InvalidArgument(kNotInvertibleScalarMsg));
+      OP_REQUIRES(context, diag(0) != zero, errors::InvalidArgument(kErrMsg));
       x.row(0) = rhs.row(0) / diag(0);
       return;
     }
-
-    if (pivoting_) {
-      SolveWithGaussianEliminationWithPivoting(context, superdiag, diag,
-                                               subdiag, rhs, x);
-    } else {
-      SolveWithThomasAlgorithm(context, superdiag, diag, subdiag, rhs, x);
-    }
-  }
-
- private:
-  TF_DISALLOW_COPY_AND_ASSIGN(TridiagonalSolveOp);
-
-  void SolveWithGaussianEliminationWithPivoting(OpKernelContext* context,
-                                                const MatrixMapRow& superdiag,
-                                                const MatrixMapRow& diag,
-                                                const MatrixMapRow& subdiag,
-                                                const ConstMatrixMap& rhs,
-                                                MatrixMap& x) {
-    const int n = diag.size();
-    const Scalar zero(0);
 
     // The three columns in u are the diagonal, superdiagonal, and second
     // superdiagonal, respectively, of the U matrix in the LU decomposition of
@@ -158,8 +119,7 @@ class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
     for (int i = 0; i < n - 1; ++i) {
       if (std::abs(u(i)) >= std::abs(subdiag(i + 1))) {
         // No row interchange.
-        OP_REQUIRES(context, u(i) != zero,
-                    errors::InvalidArgument(kNotInvertibleMsg));
+        OP_REQUIRES(context, u(i) != zero, errors::InvalidArgument(kErrMsg));
         const Scalar factor = subdiag(i + 1) / u(i, 0);
         u(i + 1, 0) = diag(i + 1) - factor * u(i, 1);
         x.row(i + 1) = rhs.row(i + 1) - factor * x.row(i);
@@ -181,8 +141,6 @@ class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
         }
       }
     }
-    OP_REQUIRES(context, u(n - 1, 0) != zero,
-                errors::InvalidArgument(kNotInvertibleMsg));
     x.row(n - 1) /= u(n - 1, 0);
     x.row(n - 2) = (x.row(n - 2) - u(n - 2, 1) * x.row(n - 1)) / u(n - 2, 0);
     for (int i = n - 3; i >= 0; --i) {
@@ -191,36 +149,8 @@ class TridiagonalSolveOp : public LinearAlgebraOp<Scalar> {
     }
   }
 
-  void SolveWithThomasAlgorithm(OpKernelContext* context,
-                                const MatrixMapRow& superdiag,
-                                const MatrixMapRow& diag,
-                                const MatrixMapRow& subdiag,
-                                const ConstMatrixMap& rhs, MatrixMap& x) {
-    const int n = diag.size();
-    const Scalar zero(0);
-
-    // The superdiagonal of the U matrix in the LU decomposition of the input
-    // matrix (in Thomas algorithm, the U matrix has ones on the diagonal and
-    // one superdiagonal).
-    Eigen::Matrix<Scalar, Eigen::Dynamic, 1> u(n);
-
-    OP_REQUIRES(context, diag(0) != zero,
-                errors::InvalidArgument(kThomasFailedMsg));
-    u(0) = superdiag(0) / diag(0);
-    x.row(0) = rhs.row(0) / diag(0);
-    for (int i = 1; i < n; ++i) {
-      auto denom = diag(i) - subdiag(i) * u(i - 1);
-      OP_REQUIRES(context, denom != zero,
-                  errors::InvalidArgument(kThomasFailedMsg));
-      u(i) = superdiag(i) / denom;
-      x.row(i) = (rhs.row(i) - subdiag(i) * x.row(i - 1)) / denom;
-    }
-    for (int i = n - 2; i >= 0; --i) {
-      x.row(i) -= u(i) * x.row(i + 1);
-    }
-  }
-
-  bool pivoting_;
+ private:
+  TF_DISALLOW_COPY_AND_ASSIGN(TridiagonalSolveOp);
 };
 
 REGISTER_LINALG_OP_CPU("TridiagonalSolve", (TridiagonalSolveOp<float>), float);

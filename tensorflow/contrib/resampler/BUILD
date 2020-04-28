@@ -1,3 +1,9 @@
+licenses(["notice"])  # Apache 2.0 License
+
+exports_files(["LICENSE"])
+
+package(default_visibility = ["//visibility:public"])
+
 load(
     "//tensorflow:tensorflow.bzl",
     "tf_custom_op_library",
@@ -8,13 +14,6 @@ load(
 load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 load("//tensorflow/compiler/tests:build_defs.bzl", "tf_xla_py_test")
-
-package(
-    default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0 License
-)
-
-exports_files(["LICENSE"])
 
 tf_custom_op_py_library(
     name = "resampler_py",

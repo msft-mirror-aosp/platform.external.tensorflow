@@ -18,29 +18,30 @@ limitations under the License.
 
 #include "absl/types/optional.h"
 #include "absl/types/variant.h"
-#include "tensorflow/stream_executor/device_memory_allocator.h"
+#include "tensorflow/compiler/xla/service/device_memory_allocator.h"
+#include "tensorflow/compiler/xla/service/owning_device_memory.h"
 
 namespace xla {
 
 // MaybeOwningDeviceMemory represents either an owned or unowned device memory.
-// Like std::variant<se::OwningDeviceMemory, DeviceMemory>. When the object goes
+// Like std::variant<OwningDeviceMemory, DeviceMemory>. When the object goes
 // output of scope, it will free the underlying memory if it owns it.
 class MaybeOwningDeviceMemory {
  public:
   MaybeOwningDeviceMemory() = default;
-  explicit MaybeOwningDeviceMemory(tensorflow::se::OwningDeviceMemory owned)
+  explicit MaybeOwningDeviceMemory(OwningDeviceMemory owned)
       : mem_(std::move(owned)) {}
-  explicit MaybeOwningDeviceMemory(tensorflow::se::DeviceMemoryBase unowned)
+  explicit MaybeOwningDeviceMemory(se::DeviceMemoryBase unowned)
       : mem_(unowned) {}
   MaybeOwningDeviceMemory(MaybeOwningDeviceMemory&&) = default;
   ~MaybeOwningDeviceMemory() = default;
 
-  MaybeOwningDeviceMemory& operator=(tensorflow::se::DeviceMemoryBase unowned) {
+  MaybeOwningDeviceMemory& operator=(se::DeviceMemoryBase unowned) {
     mem_ = unowned;
     return *this;
   }
 
-  MaybeOwningDeviceMemory& operator=(tensorflow::se::OwningDeviceMemory owned) {
+  MaybeOwningDeviceMemory& operator=(OwningDeviceMemory owned) {
     mem_ = std::move(owned);
     return *this;
   }
@@ -49,21 +50,19 @@ class MaybeOwningDeviceMemory {
 
   // Fetches the underlying DeviceMemoryBase from a MaybeOwningDeviceMemory. The
   // caller of this function is *not* responsible for freeing the memory.
-  tensorflow::se::DeviceMemoryBase AsDeviceMemoryBase();
+  se::DeviceMemoryBase AsDeviceMemoryBase();
 
-  // Release the tensorflow::se::OwningDeviceMemory without freeing it, and
-  // moves the ownership of the memory buffer from the object to the caller.
+  // Release the OwningDeviceMemory without freeing it, and moves the ownership
+  // of the memory buffer from the object to the caller.
   //
   // A nullopt is returned if the HasOwnership() == false;
-  absl::optional<tensorflow::se::OwningDeviceMemory> Release();
+  absl::optional<OwningDeviceMemory> Release();
 
   // Returns true if the device_memory has ownership over underlying memory.
   bool HasOwnership() const;
 
  private:
-  absl::variant<tensorflow::se::OwningDeviceMemory,
-                tensorflow::se::DeviceMemoryBase>
-      mem_;
+  absl::variant<OwningDeviceMemory, se::DeviceMemoryBase> mem_;
 };
 
 }  // namespace xla

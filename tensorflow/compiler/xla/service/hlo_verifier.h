@@ -57,13 +57,11 @@ class ShapeVerifier : public DfsHloVisitor {
   Status HandleAllReduce(HloInstruction* crs) override;
   Status HandleAllToAll(HloInstruction* hlo) override;
   Status HandleCollectivePermute(HloInstruction* hlo) override;
-  Status HandlePartitionId(HloInstruction* hlo) override;
   Status HandleReplicaId(HloInstruction* hlo) override;
   Status HandleReducePrecision(HloInstruction* reduce_precision) override;
   Status HandleInfeed(HloInstruction*) override;
   Status HandleOutfeed(HloInstruction*) override;
   Status HandleRng(HloInstruction*) override;
-  Status HandleRngGetAndUpdateState(HloInstruction*) override;
   Status HandleReverse(HloInstruction* reverse) override;
   Status HandleSort(HloInstruction* sort) override;
   Status HandleConstant(HloInstruction* constant) override;
@@ -88,8 +86,6 @@ class ShapeVerifier : public DfsHloVisitor {
   Status HandleWhile(HloInstruction* xla_while) override;
   Status HandleConditional(HloInstruction* conditional) override;
   Status HandlePad(HloInstruction* pad) override;
-  Status HandleCopyStart(HloInstruction* copy_start) override;
-  Status HandleCopyDone(HloInstruction* copy_done) override;
   Status HandleSend(HloInstruction* send) override;
   Status HandleSendDone(HloInstruction* send_done) override;
   Status HandleRecv(HloInstruction* recv) override;
@@ -110,8 +106,7 @@ class ShapeVerifier : public DfsHloVisitor {
   // Check the instruction's shape against the shape given by ShapeInference
   // and return an appropriate error if there is a mismatch.
   Status CheckShape(const HloInstruction* instruction,
-                    const Shape& inferred_shape,
-                    bool only_compare_minor_to_major_in_layout = false);
+                    const Shape& inferred_shape);
 
   // Overload which takes a StatusOr to reduce boilerplate in the caller.
   Status CheckShape(const HloInstruction* instruction,
@@ -125,31 +120,14 @@ class ShapeVerifier : public DfsHloVisitor {
 
  private:
   // Helpers that switch on layout_sensitive_.
-  bool ShapesSame(const Shape& a, const Shape& b,
-                  bool minor_to_major_only = false) {
-    if (!layout_sensitive_) {
-      return ShapeUtil::Compatible(a, b);
-    }
-    Shape::Equal equal;
-    if (minor_to_major_only) {
-      equal.MinorToMajorOnlyInLayout();
-    }
-    return equal(a, b);
+  bool ShapesSame(const Shape& a, const Shape& b) {
+    return layout_sensitive_ ? ShapeUtil::Equal(a, b)
+                             : ShapeUtil::Compatible(a, b);
   }
-
-  bool ShapesSameIgnoringFpPrecision(const Shape& a, const Shape& b,
-                                     bool minor_to_major_only = false) {
-    if (!layout_sensitive_) {
-      return ShapeUtil::CompatibleIgnoringFpPrecision(a, b);
-    }
-    Shape::Equal equal;
-    if (minor_to_major_only) {
-      equal.MinorToMajorOnlyInLayout();
-    }
-    equal.IgnoreFpPrecision();
-    return equal(a, b);
+  bool ShapesSameIgnoringFpPrecision(const Shape& a, const Shape& b) {
+    return layout_sensitive_ ? ShapeUtil::EqualIgnoringFpPrecision(a, b)
+                             : ShapeUtil::CompatibleIgnoringFpPrecision(a, b);
   }
-
   string StringifyShape(const Shape& s) {
     return layout_sensitive_ ? ShapeUtil::HumanStringWithLayout(s)
                              : ShapeUtil::HumanString(s);

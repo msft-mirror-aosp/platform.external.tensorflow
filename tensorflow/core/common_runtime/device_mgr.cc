@@ -28,6 +28,9 @@ namespace tensorflow {
 DeviceMgr::DeviceMgr(std::vector<std::unique_ptr<Device>> devices)
     : devices_(std::move(devices)), name_backing_store_(128) {
   for (auto& d : devices_) {
+    CHECK(d->device_mgr_ == nullptr);
+    d->device_mgr_ = this;
+
     // Register under the (1) full name and (2) canonical name.
     for (const string& name :
          DeviceNameUtils::GetNamesForDeviceMappings(d->parsed_name())) {
@@ -48,14 +51,6 @@ DeviceMgr::DeviceMgr(std::unique_ptr<Device> device)
         vector.push_back(std::move(device));
         return vector;
       }()) {}
-
-DeviceMgr::~DeviceMgr() {
-  // Release resources ahead of destroying the device manager as the resource
-  // destructors (e.g. ~IteratorResource) assume devices still exist.
-  for (auto& device : devices_) {
-    device->ClearResourceMgr();
-  }
-}
 
 StringPiece DeviceMgr::CopyToBackingStore(StringPiece s) {
   size_t n = s.size();
@@ -107,7 +102,7 @@ Status DeviceMgr::LookupDevice(StringPiece name, Device** device) const {
       device_names.push_back(itr.first);
     }
     VLOG(1) << "Unknown device: " << name
-            << " all devices: " << absl::StrJoin(device_names, ", ");
+            << " all devices: " << str_util::Join(device_names, ", ");
     return errors::InvalidArgument(name, " unknown device.");
   }
   *device = iter->second;

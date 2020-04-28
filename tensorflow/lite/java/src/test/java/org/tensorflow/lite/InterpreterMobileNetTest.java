@@ -17,83 +17,41 @@ package org.tensorflow.lite;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.io.File;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/**
- * Smoke tests for {@link org.tensorflow.lite.Interpreter} agains MobileNet models.
- *
- * <p>Note that these tests are not intended to validate accuracy, rather, they serve to exercise
- * end-to-end inference, against a meaningful model, to tease out any stability/runtime issues.
- */
+/** Unit tests for {@link org.tensorflow.lite.Interpreter} agains a MobileNet model. */
 @RunWith(JUnit4.class)
 public final class InterpreterMobileNetTest {
 
-  private static final ByteBuffer MOBILENET_FLOAT_MODEL_BUFFER =
-      TestUtils.getTestFileAsBuffer(
-          "third_party/tensorflow/lite/java/demo/app/src/main/assets/mobilenet_v1_1.0_224.tflite");
-
-  private static final ByteBuffer MOBILENET_QUANTIZED_MODEL_BUFFER =
-      TestUtils.getTestFileAsBuffer(
-          "third_party/tensorflow/lite/java/demo/app/src/main/assets/mobilenet_v1_1.0_224_quant.tflite");
+  private static final File MOBILENET_MODEL_FILE =
+      new File("tensorflow/lite/java/src/testdata/mobilenet.tflite.bin");
 
   @Test
-  public void testMobileNet() {
-    runMobileNetFloatTest(new Interpreter.Options());
-  }
-
-  @Test
-  public void testMobileNetMultithreaded() {
-    runMobileNetFloatTest(new Interpreter.Options().setNumThreads(2));
-  }
-
-  @Test
-  public void testMobileNetQuantized() {
-    runMobileNetQuantizedTest(new Interpreter.Options());
-  }
-
-  @Test
-  public void testMobileNetQuantizedMultithreaded() {
-    runMobileNetQuantizedTest(new Interpreter.Options().setNumThreads(2));
-  }
-
-  private static void runMobileNetFloatTest(Interpreter.Options options) {
+  public void testMobilenetRun() {
     // Create a gray image.
-    ByteBuffer img = ByteBuffer.allocateDirect(1 * 224 * 224 * 3 * 4);
-    img.order(ByteOrder.nativeOrder());
-    img.rewind();
-    while (img.hasRemaining()) {
-      img.putFloat(0.5f);
+    float[][][][] img = new float[1][224][224][3];
+    for (int i = 0; i < 224; ++i) {
+      for (int j = 0; j < 224; ++j) {
+        img[0][i][j][0] = 0.5f;
+        img[0][i][j][1] = 0.5f;
+        img[0][i][j][2] = 0.5f;
+      }
     }
 
+    // Allocate memory to receive the output values.
     float[][] labels = new float[1][1001];
-    try (Interpreter interpreter = new Interpreter(MOBILENET_FLOAT_MODEL_BUFFER, options)) {
-      interpreter.run(img, labels);
-      assertThat(interpreter.getInputTensor(0).shape()).isEqualTo(new int[] {1, 224, 224, 3});
-      assertThat(interpreter.getOutputTensor(0).shape()).isEqualTo(new int[] {1, 1001});
-    }
+
+    Interpreter interpreter = new Interpreter(MOBILENET_MODEL_FILE);
+    interpreter.run(img, labels);
+    assertThat(interpreter.getInputTensor(0).shape()).isEqualTo(new int[] {1, 224, 224, 3});
+    assertThat(interpreter.getOutputTensor(0).shape()).isEqualTo(new int[] {1, 1001});
+    interpreter.close();
+
     assertThat(labels[0])
         .usingExactEquality()
         .containsNoneOf(new float[] {Float.NaN, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY});
-  }
-
-  private static void runMobileNetQuantizedTest(Interpreter.Options options) {
-    // Create a gray image.
-    ByteBuffer img = ByteBuffer.allocateDirect(1 * 224 * 224 * 3);
-    img.order(ByteOrder.nativeOrder());
-    img.rewind();
-    while (img.hasRemaining()) {
-      img.put((byte) 128);
-    }
-
-    try (Interpreter interpreter = new Interpreter(MOBILENET_QUANTIZED_MODEL_BUFFER, options)) {
-      byte[][] labels = new byte[1][1001];
-      interpreter.run(img, labels);
-      assertThat(interpreter.getInputTensor(0).shape()).isEqualTo(new int[] {1, 224, 224, 3});
-      assertThat(interpreter.getOutputTensor(0).shape()).isEqualTo(new int[] {1, 1001});
-    }
   }
 }

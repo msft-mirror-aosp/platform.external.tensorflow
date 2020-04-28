@@ -1,78 +1,84 @@
 # TensorFlow Lite for Swift
 
-load("//tensorflow/lite:special_rules.bzl", "ios_visibility_whitelist")
-load("//tensorflow/lite/experimental/ios:ios.bzl", "TFL_DEFAULT_TAGS", "TFL_DISABLED_SANITIZER_TAGS", "TFL_MINIMUM_OS_VERSION")
+package(default_visibility = ["//visibility:private"])
+
+licenses(["notice"])  # Apache 2.0
+
+exports_files(["LICENSE"])
+
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_application", "ios_unit_test")
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
-package(
-    default_visibility = ["//visibility:private"],
-    licenses = ["notice"],  # Apache 2.0
-)
+MINIMUM_OS_VERSION = "9.0"
+
+# Default tags for filtering targets. Targets in this file are restricted to Apple platforms.
+DEFAULT_TAGS = [
+    "apple",
+]
 
 swift_library(
     name = "TensorFlowLite",
     srcs = glob(["Sources/*.swift"]),
     module_name = "TensorFlowLite",
-    tags = TFL_DEFAULT_TAGS,
-    visibility = ios_visibility_whitelist(),
+    tags = DEFAULT_TAGS,
     deps = [
         "//tensorflow/lite/experimental/c:c_api",
     ],
 )
 
 ios_unit_test(
-    name = "Tests",
+    name = "TensorFlowLiteTests",
     size = "small",
-    minimum_os_version = TFL_MINIMUM_OS_VERSION,
-    tags = TFL_DEFAULT_TAGS + TFL_DISABLED_SANITIZER_TAGS + [
-        "nozapfhahn",  # Fails during coverage build, see b/139134323.
+    minimum_os_version = MINIMUM_OS_VERSION,
+    tags = DEFAULT_TAGS + [
+        # DISABLED: Following sanitizer tests are not supported by iOS test targets.
+        "noasan",
+        "nomsan",
+        "notsan",
     ],
     deps = [
-        ":TestsLibrary",
+        ":TestsLib",
+    ],
+)
+
+ios_application(
+    name = "TensorFlowLiteApp",
+    app_icons = glob(["TestApps/TensorFlowLiteApp/TensorFlowLiteApp/Assets.xcassets/AppIcon.appiconset/**"]),
+    bundle_id = "com.tensorflow.lite.swift.TensorFlowLite",
+    families = [
+        "ipad",
+        "iphone",
+    ],
+    infoplists = ["TestApps/TensorFlowLiteApp/TensorFlowLiteApp/Info.plist"],
+    launch_storyboard = "TestApps/TensorFlowLiteApp/TensorFlowLiteApp/Base.lproj/LaunchScreen.storyboard",
+    minimum_os_version = MINIMUM_OS_VERSION,
+    sdk_frameworks = [
+        "CoreGraphics",
+    ],
+    tags = DEFAULT_TAGS + ["manual"],
+    deps = [
+        ":AppLib",
     ],
 )
 
 swift_library(
-    name = "TestsLibrary",
+    name = "TestsLib",
     testonly = 1,
     srcs = glob(["Tests/*.swift"]),
-    tags = TFL_DEFAULT_TAGS + [
-        "nozapfhahn",  # Fails during coverage build, see b/139134323.
-    ],
+    tags = DEFAULT_TAGS,
     deps = [
         ":Resources",
         ":TensorFlowLite",
     ],
 )
 
-ios_application(
-    name = "TestApp",
-    app_icons = glob(["TestApp/TestApp/Assets.xcassets/AppIcon.appiconset/**"]),
-    bundle_id = "com.tensorflow.lite.swift.TestApp",
-    families = [
-        "ipad",
-        "iphone",
-    ],
-    infoplists = ["TestApp/TestApp/Info.plist"],
-    minimum_os_version = TFL_MINIMUM_OS_VERSION,
-    sdk_frameworks = [
-        "CoreGraphics",
-    ],
-    tags = TFL_DEFAULT_TAGS,
-    deps = [
-        ":TestAppLibrary",
-    ],
-)
-
 swift_library(
-    name = "TestAppLibrary",
-    srcs = glob(["TestApp/TestApp/*.swift"]),
-    data = glob(["TestApp/TestApp/Base.lproj/*.storyboard"]),
-    module_name = "TestApp",
-    tags = TFL_DEFAULT_TAGS + ["manual"],
+    name = "AppLib",
+    srcs = glob(["TestApps/TensorFlowLiteApp/TensorFlowLiteApp/*.swift"]),
+    module_name = "AppLib",
+    tags = DEFAULT_TAGS + ["manual"],
     deps = [
-        ":Resources",
+        ":AppResources",
         ":TensorFlowLite",
     ],
 )
@@ -84,5 +90,16 @@ objc_library(
         "//tensorflow/lite:testdata/add_quantized.bin",
         "//tensorflow/lite:testdata/multi_add.bin",
     ],
-    tags = TFL_DEFAULT_TAGS,
+    tags = DEFAULT_TAGS,
+)
+
+objc_library(
+    name = "AppResources",
+    data = glob([
+        "TestApps/TensorFlowLiteApp/TensorFlowLiteApp/Base.lproj/*.storyboard",
+    ]),
+    tags = DEFAULT_TAGS + ["manual"],
+    deps = [
+        ":Resources",
+    ],
 )

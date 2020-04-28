@@ -78,7 +78,7 @@ void SYCLAllocator::ClearStats() override {
   stats_.max_alloc_size = 0;
 }
 
-size_t SYCLAllocator::RequestedSize(const void* ptr) const {
+size_t SYCLAllocator::RequestedSize(void* ptr) {
   mutex_lock lock(mu_);
   if (!sycl_device_) {
     return 0;

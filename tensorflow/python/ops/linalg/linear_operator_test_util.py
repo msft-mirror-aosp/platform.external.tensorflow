@@ -19,12 +19,9 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
-import itertools
 import numpy as np
 import six
 
-from tensorflow.python.eager import backprop
-from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import random_seed
@@ -40,7 +37,7 @@ from tensorflow.python.ops.linalg import linear_operator_util
 from tensorflow.python.platform import test
 
 
-class OperatorShapesInfo(object):
+class OperatorBuildInfo(object):
   """Object encoding expected shape for a test.
 
   Encodes the expected shape of a matrix for a test. Also
@@ -50,15 +47,6 @@ class OperatorShapesInfo(object):
   def __init__(self, shape, **kwargs):
     self.shape = shape
     self.__dict__.update(kwargs)
-
-
-class CheckTapeSafeSkipOptions(object):
-
-  # Skip checking this particular method.
-  DETERMINANT = "determinant"
-  DIAG_PART = "diag_part"
-  LOG_ABS_DETERMINANT = "log_abs_determinant"
-  TRACE = "trace"
 
 
 @six.add_metaclass(abc.ABCMeta)  # pylint: disable=no-init
@@ -77,7 +65,6 @@ class LinearOperatorDerivedClassTest(test.TestCase):
       dtypes.complex64: 1e-6,
       dtypes.complex128: 1e-12
   }
-
   _rtol = {
       dtypes.float16: 1e-3,
       dtypes.float32: 1e-6,
@@ -93,31 +80,31 @@ class LinearOperatorDerivedClassTest(test.TestCase):
     rtol = self._rtol[dtype]
     self.assertAllClose(x, y, atol=atol, rtol=rtol)
 
-  @staticmethod
-  def adjoint_options():
+  @property
+  def _adjoint_options(self):
     return [False, True]
 
-  @staticmethod
-  def adjoint_arg_options():
+  @property
+  def _adjoint_arg_options(self):
     return [False, True]
 
-  @staticmethod
-  def dtypes_to_test():
-    # TODO(langmore) Test tf.float16 once tf.linalg.solve works in 16bit.
+  @property
+  def _dtypes_to_test(self):
+    # TODO(langmore) Test tf.float16 once tf.matrix_solve works in 16bit.
     return [dtypes.float32, dtypes.float64, dtypes.complex64, dtypes.complex128]
 
-  @staticmethod
-  def use_placeholder_options():
+  @property
+  def _use_placeholder_options(self):
     return [False, True]
 
-  @staticmethod
-  def operator_shapes_infos():
-    """Returns list of OperatorShapesInfo, encapsulating the shape to test."""
-    raise NotImplementedError("operator_shapes_infos has not been implemented.")
+  @abc.abstractproperty
+  def _operator_build_infos(self):
+    """Returns list of OperatorBuildInfo, encapsulating the shape to test."""
+    raise NotImplementedError("operator_build_infos has not been implemented.")
 
   @abc.abstractmethod
-  def operator_and_matrix(
-      self, shapes_info, dtype, use_placeholder,
+  def _operator_and_matrix(
+      self, build_info, dtype, use_placeholder,
       ensure_self_adjoint_and_pd=False):
     """Build a batch matrix and an Operator that should have similar behavior.
 
@@ -125,7 +112,7 @@ class LinearOperatorDerivedClassTest(test.TestCase):
     together, and is used by tests.
 
     Args:
-      shapes_info: `OperatorShapesInfo`, encoding shape information about the
+      build_info: `OperatorBuildInfo`, encoding shape information about the
         operator.
       dtype:  Numpy dtype.  Data type of returned array/operator.
       use_placeholder:  Python bool.  If True, initialize the operator with a
@@ -145,7 +132,7 @@ class LinearOperatorDerivedClassTest(test.TestCase):
     raise NotImplementedError("Not implemented yet.")
 
   @abc.abstractmethod
-  def make_rhs(self, operator, adjoint, with_batch=True):
+  def _make_rhs(self, operator, adjoint, with_batch=True):
     """Make a rhs appropriate for calling operator.solve(rhs).
 
     Args:
@@ -159,10 +146,10 @@ class LinearOperatorDerivedClassTest(test.TestCase):
     Returns:
       A `Tensor`
     """
-    raise NotImplementedError("make_rhs is not defined.")
+    raise NotImplementedError("_make_rhs is not defined.")
 
   @abc.abstractmethod
-  def make_x(self, operator, adjoint, with_batch=True):
+  def _make_x(self, operator, adjoint, with_batch=True):
     """Make an 'x' appropriate for calling operator.matmul(x).
 
     Args:
@@ -175,434 +162,282 @@ class LinearOperatorDerivedClassTest(test.TestCase):
     Returns:
       A `Tensor`
     """
-    raise NotImplementedError("make_x is not defined.")
+    raise NotImplementedError("_make_x is not defined.")
 
-  @staticmethod
-  def skip_these_tests():
+  @property
+  def _tests_to_skip(self):
     """List of test names to skip."""
     # Subclasses should over-ride if they want to skip some tests.
     # To skip "test_foo", add "foo" to this list.
     return []
 
-  def assertRaisesError(self, msg):
-    """assertRaisesRegexp or OpError, depending on context.executing_eagerly."""
-    if context.executing_eagerly():
-      return self.assertRaisesRegexp(Exception, msg)
-    return self.assertRaisesOpError(msg)
+  def _skip_if_tests_to_skip_contains(self, test_name):
+    """If self._tests_to_skip contains test_name, raise SkipTest exception.
 
-  def check_tape_safe(self, operator, skip_options=None):
-    """Check gradients are not None w.r.t. operator.variables.
-
-    Meant to be called from the derived class.
-
-    This ensures grads are not w.r.t every variable in operator.variables.  If
-    more fine-grained testing is needed, a custom test should be written.
+    See tests below for usage.
 
     Args:
-      operator: LinearOperator.  Exact checks done will depend on hints.
-      skip_options: Optional list of CheckTapeSafeSkipOptions.
-        Makes this test skip particular checks.
+      test_name:  String name corresponding to a test.
+
+    Raises:
+      SkipTest Exception, if test_name is in self._tests_to_skip.
     """
-    skip_options = skip_options or []
+    if test_name in self._tests_to_skip:
+      self.skipTest(
+          "{} skipped because it was added to self._tests_to_skip.".format(
+              test_name))
 
-    if not operator.variables:
-      raise AssertionError("`operator.variables` was empty")
-
-    def _assert_not_none(iterable):
-      for item in iterable:
-        self.assertIsNotNone(item)
-
-    # Tape tests that can be run on every operator below.
-    with backprop.GradientTape() as tape:
-      _assert_not_none(tape.gradient(operator.to_dense(), operator.variables))
-
-    with backprop.GradientTape() as tape:
-      _assert_not_none(
-          tape.gradient(operator.adjoint().to_dense(), operator.variables))
-
-    x = math_ops.cast(
-        array_ops.ones(shape=operator.H.shape_tensor()[:-1]), operator.dtype)
-
-    with backprop.GradientTape() as tape:
-      _assert_not_none(tape.gradient(operator.matvec(x), operator.variables))
-
-    # Tests for square, but possibly non-singular operators below.
-    if not operator.is_square:
-      return
-
-    for option in [
-        CheckTapeSafeSkipOptions.DETERMINANT,
-        CheckTapeSafeSkipOptions.LOG_ABS_DETERMINANT,
-        CheckTapeSafeSkipOptions.DIAG_PART,
-        CheckTapeSafeSkipOptions.TRACE,
-    ]:
-      with backprop.GradientTape() as tape:
-        if option not in skip_options:
-          _assert_not_none(
-              tape.gradient(getattr(operator, option)(), operator.variables))
-
-    # Tests for non-singular operators below.
-    if operator.is_non_singular is False:  # pylint: disable=g-bool-id-comparison
-      return
-
-    with backprop.GradientTape() as tape:
-      _assert_not_none(
-          tape.gradient(operator.inverse().to_dense(), operator.variables))
-
-    with backprop.GradientTape() as tape:
-      _assert_not_none(tape.gradient(operator.solvevec(x), operator.variables))
-
-    # Tests for SPD operators below.
-    if not (operator.is_self_adjoint and operator.is_positive_definite):
-      return
-
-    with backprop.GradientTape() as tape:
-      _assert_not_none(
-          tape.gradient(operator.cholesky().to_dense(), operator.variables))
-
-
-# pylint:disable=missing-docstring
-
-
-def _test_to_dense(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_to_dense(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_dense = operator.to_dense()
-      if not use_placeholder:
-        self.assertAllEqual(shapes_info.shape, op_dense.get_shape())
-      op_dense_v, mat_v = sess.run([op_dense, mat])
-      self.assertAC(op_dense_v, mat_v)
-  return test_to_dense
+    self._skip_if_tests_to_skip_contains("to_dense")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_dense = operator.to_dense()
+            if not use_placeholder:
+              self.assertAllEqual(build_info.shape, op_dense.get_shape())
+            op_dense_v, mat_v = sess.run([op_dense, mat])
+            self.assertAC(op_dense_v, mat_v)
 
-
-def _test_det(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_det(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_det = operator.determinant()
-      if not use_placeholder:
-        self.assertAllEqual(shapes_info.shape[:-2], op_det.get_shape())
-      op_det_v, mat_det_v = sess.run(
-          [op_det, linalg_ops.matrix_determinant(mat)])
-      self.assertAC(op_det_v, mat_det_v)
-  return test_det
+    self._skip_if_tests_to_skip_contains("det")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_det = operator.determinant()
+            if not use_placeholder:
+              self.assertAllEqual(build_info.shape[:-2], op_det.get_shape())
+            op_det_v, mat_det_v = sess.run(
+                [op_det, linalg_ops.matrix_determinant(mat)])
+            self.assertAC(op_det_v, mat_det_v)
 
-
-def _test_log_abs_det(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_log_abs_det(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_log_abs_det = operator.log_abs_determinant()
-      _, mat_log_abs_det = linalg.slogdet(mat)
-      if not use_placeholder:
-        self.assertAllEqual(
-            shapes_info.shape[:-2], op_log_abs_det.get_shape())
-      op_log_abs_det_v, mat_log_abs_det_v = sess.run(
-          [op_log_abs_det, mat_log_abs_det])
-      self.assertAC(op_log_abs_det_v, mat_log_abs_det_v)
-  return test_log_abs_det
+    self._skip_if_tests_to_skip_contains("log_abs_det")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_log_abs_det = operator.log_abs_determinant()
+            _, mat_log_abs_det = linalg.slogdet(mat)
+            if not use_placeholder:
+              self.assertAllEqual(
+                  build_info.shape[:-2], op_log_abs_det.get_shape())
+            op_log_abs_det_v, mat_log_abs_det_v = sess.run(
+                [op_log_abs_det, mat_log_abs_det])
+            self.assertAC(op_log_abs_det_v, mat_log_abs_det_v)
 
+  def _test_matmul(self, with_batch):
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        # If batch dimensions are omitted, but there are
+        # no batch dimensions for the linear operator, then
+        # skip the test case. This is already checked with
+        # with_batch=True.
+        if not with_batch and len(build_info.shape) <= 2:
+          continue
+        for dtype in self._dtypes_to_test:
+          for adjoint in self._adjoint_options:
+            for adjoint_arg in self._adjoint_arg_options:
+              with self.session(graph=ops.Graph()) as sess:
+                sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+                operator, mat = self._operator_and_matrix(
+                    build_info, dtype, use_placeholder=use_placeholder)
+                x = self._make_x(
+                    operator, adjoint=adjoint, with_batch=with_batch)
+                # If adjoint_arg, compute A X^H^H = A X.
+                if adjoint_arg:
+                  op_matmul = operator.matmul(
+                      linalg.adjoint(x),
+                      adjoint=adjoint,
+                      adjoint_arg=adjoint_arg)
+                else:
+                  op_matmul = operator.matmul(x, adjoint=adjoint)
+                mat_matmul = linear_operator_util.matmul_with_broadcast(
+                    mat, x, adjoint_a=adjoint)
+                if not use_placeholder:
+                  self.assertAllEqual(op_matmul.get_shape(),
+                                      mat_matmul.get_shape())
+                op_matmul_v, mat_matmul_v = sess.run(
+                    [op_matmul, mat_matmul])
+                self.assertAC(op_matmul_v, mat_matmul_v)
 
-def _test_matmul_base(
-    self,
-    use_placeholder,
-    shapes_info,
-    dtype,
-    adjoint,
-    adjoint_arg,
-    with_batch):
-  # If batch dimensions are omitted, but there are
-  # no batch dimensions for the linear operator, then
-  # skip the test case. This is already checked with
-  # with_batch=True.
-  if not with_batch and len(shapes_info.shape) <= 2:
-    return
-  with self.session(graph=ops.Graph()) as sess:
-    sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-    operator, mat = self.operator_and_matrix(
-        shapes_info, dtype, use_placeholder=use_placeholder)
-    x = self.make_x(
-        operator, adjoint=adjoint, with_batch=with_batch)
-    # If adjoint_arg, compute A X^H^H = A X.
-    if adjoint_arg:
-      op_matmul = operator.matmul(
-          linalg.adjoint(x),
-          adjoint=adjoint,
-          adjoint_arg=adjoint_arg)
-    else:
-      op_matmul = operator.matmul(x, adjoint=adjoint)
-    mat_matmul = math_ops.matmul(mat, x, adjoint_a=adjoint)
-    if not use_placeholder:
-      self.assertAllEqual(op_matmul.get_shape(),
-                          mat_matmul.get_shape())
-    op_matmul_v, mat_matmul_v = sess.run(
-        [op_matmul, mat_matmul])
-    self.assertAC(op_matmul_v, mat_matmul_v)
-
-
-def _test_matmul(
-    use_placeholder,
-    shapes_info,
-    dtype,
-    adjoint,
-    adjoint_arg):
+  @test_util.run_deprecated_v1
   def test_matmul(self):
-    _test_matmul_base(
-        self,
-        use_placeholder,
-        shapes_info,
-        dtype,
-        adjoint,
-        adjoint_arg,
-        with_batch=True)
-  return test_matmul
+    self._skip_if_tests_to_skip_contains("matmul")
+    self._test_matmul(with_batch=True)
 
-
-def _test_matmul_with_broadcast(
-    use_placeholder,
-    shapes_info,
-    dtype,
-    adjoint,
-    adjoint_arg):
+  @test_util.run_deprecated_v1
   def test_matmul_with_broadcast(self):
-    _test_matmul_base(
-        self,
-        use_placeholder,
-        shapes_info,
-        dtype,
-        adjoint,
-        adjoint_arg,
-        with_batch=True)
-  return test_matmul_with_broadcast
+    self._skip_if_tests_to_skip_contains("matmul_with_broadcast")
+    self._test_matmul(with_batch=False)
 
-
-def _test_adjoint(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_adjoint(self):
-    with self.test_session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_adjoint = operator.adjoint().to_dense()
-      op_adjoint_h = operator.H.to_dense()
-      mat_adjoint = linalg.adjoint(mat)
-      op_adjoint_v, op_adjoint_h_v, mat_adjoint_v = sess.run(
-          [op_adjoint, op_adjoint_h, mat_adjoint])
-      self.assertAC(mat_adjoint_v, op_adjoint_v)
-      self.assertAC(mat_adjoint_v, op_adjoint_h_v)
-  return test_adjoint
+    self._skip_if_tests_to_skip_contains("adjoint")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.test_session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_adjoint = operator.adjoint().to_dense()
+            op_adjoint_h = operator.H.to_dense()
+            mat_adjoint = linalg.adjoint(mat)
+            op_adjoint_v, op_adjoint_h_v, mat_adjoint_v = sess.run(
+                [op_adjoint, op_adjoint_h, mat_adjoint])
+            self.assertAC(mat_adjoint_v, op_adjoint_v)
+            self.assertAC(mat_adjoint_v, op_adjoint_h_v)
 
-
-def _test_cholesky(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_cholesky(self):
-    with self.test_session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder,
-          ensure_self_adjoint_and_pd=True)
-      op_chol = operator.cholesky().to_dense()
-      mat_chol = linalg_ops.cholesky(mat)
-      op_chol_v, mat_chol_v = sess.run([op_chol, mat_chol])
-      self.assertAC(mat_chol_v, op_chol_v)
-  return test_cholesky
+    self._skip_if_tests_to_skip_contains("cholesky")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.test_session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder,
+                ensure_self_adjoint_and_pd=True)
+            op_chol = operator.cholesky().to_dense()
+            mat_chol = linalg_ops.cholesky(mat)
+            op_chol_v, mat_chol_v = sess.run([op_chol, mat_chol])
+            self.assertAC(mat_chol_v, op_chol_v)
 
+  @test_util.run_deprecated_v1
+  def _test_solve(self, with_batch):
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        # If batch dimensions are omitted, but there are
+        # no batch dimensions for the linear operator, then
+        # skip the test case. This is already checked with
+        # with_batch=True.
+        if not with_batch and len(build_info.shape) <= 2:
+          continue
+        for dtype in self._dtypes_to_test:
+          for adjoint in self._adjoint_options:
+            for adjoint_arg in self._adjoint_arg_options:
+              with self.session(graph=ops.Graph()) as sess:
+                sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+                operator, mat = self._operator_and_matrix(
+                    build_info, dtype, use_placeholder=use_placeholder)
+                rhs = self._make_rhs(
+                    operator, adjoint=adjoint, with_batch=with_batch)
+                # If adjoint_arg, solve A X = (rhs^H)^H = rhs.
+                if adjoint_arg:
+                  op_solve = operator.solve(
+                      linalg.adjoint(rhs),
+                      adjoint=adjoint,
+                      adjoint_arg=adjoint_arg)
+                else:
+                  op_solve = operator.solve(
+                      rhs, adjoint=adjoint, adjoint_arg=adjoint_arg)
+                mat_solve = linear_operator_util.matrix_solve_with_broadcast(
+                    mat, rhs, adjoint=adjoint)
+                if not use_placeholder:
+                  self.assertAllEqual(op_solve.get_shape(),
+                                      mat_solve.get_shape())
+                op_solve_v, mat_solve_v = sess.run([op_solve, mat_solve])
+                self.assertAC(op_solve_v, mat_solve_v)
 
-def _test_solve_base(
-    self,
-    use_placeholder,
-    shapes_info,
-    dtype,
-    adjoint,
-    adjoint_arg,
-    with_batch):
-  # If batch dimensions are omitted, but there are
-  # no batch dimensions for the linear operator, then
-  # skip the test case. This is already checked with
-  # with_batch=True.
-  if not with_batch and len(shapes_info.shape) <= 2:
-    return
-  with self.session(graph=ops.Graph()) as sess:
-    sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-    operator, mat = self.operator_and_matrix(
-        shapes_info, dtype, use_placeholder=use_placeholder)
-    rhs = self.make_rhs(
-        operator, adjoint=adjoint, with_batch=with_batch)
-    # If adjoint_arg, solve A X = (rhs^H)^H = rhs.
-    if adjoint_arg:
-      op_solve = operator.solve(
-          linalg.adjoint(rhs),
-          adjoint=adjoint,
-          adjoint_arg=adjoint_arg)
-    else:
-      op_solve = operator.solve(
-          rhs, adjoint=adjoint, adjoint_arg=adjoint_arg)
-    mat_solve = linear_operator_util.matrix_solve_with_broadcast(
-        mat, rhs, adjoint=adjoint)
-    if not use_placeholder:
-      self.assertAllEqual(op_solve.get_shape(),
-                          mat_solve.get_shape())
-    op_solve_v, mat_solve_v = sess.run([op_solve, mat_solve])
-    self.assertAC(op_solve_v, mat_solve_v)
-
-
-def _test_solve(
-    use_placeholder, shapes_info, dtype, adjoint, adjoint_arg):
+  @test_util.run_deprecated_v1
   def test_solve(self):
-    _test_solve_base(
-        self,
-        use_placeholder,
-        shapes_info,
-        dtype,
-        adjoint,
-        adjoint_arg,
-        with_batch=True)
-  return test_solve
+    self._skip_if_tests_to_skip_contains("solve")
+    self._test_solve(with_batch=True)
 
-
-def _test_solve_with_broadcast(
-    use_placeholder, shapes_info, dtype, adjoint, adjoint_arg):
+  @test_util.run_deprecated_v1
   def test_solve_with_broadcast(self):
-    _test_solve_base(
-        self,
-        use_placeholder,
-        shapes_info,
-        dtype,
-        adjoint,
-        adjoint_arg,
-        with_batch=False)
-  return test_solve_with_broadcast
+    self._skip_if_tests_to_skip_contains("solve_with_broadcast")
+    self._test_solve(with_batch=False)
 
+  def _test_inverse(self):
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_inverse_v, mat_inverse_v = sess.run([
+                operator.inverse().to_dense(), linalg.inv(mat)])
+            self.assertAC(op_inverse_v, mat_inverse_v)
 
-def _test_inverse(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_inverse(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_inverse_v, mat_inverse_v = sess.run([
-          operator.inverse().to_dense(), linalg.inv(mat)])
-      self.assertAC(op_inverse_v, mat_inverse_v)
-  return test_inverse
+    self._skip_if_tests_to_skip_contains("inverse")
+    self._test_inverse()
 
-
-def _test_trace(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_trace(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_trace = operator.trace()
-      mat_trace = math_ops.trace(mat)
-      if not use_placeholder:
-        self.assertAllEqual(op_trace.get_shape(), mat_trace.get_shape())
-      op_trace_v, mat_trace_v = sess.run([op_trace, mat_trace])
-      self.assertAC(op_trace_v, mat_trace_v)
-  return test_trace
+    self._skip_if_tests_to_skip_contains("trace")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_trace = operator.trace()
+            mat_trace = math_ops.trace(mat)
+            if not use_placeholder:
+              self.assertAllEqual(op_trace.get_shape(), mat_trace.get_shape())
+            op_trace_v, mat_trace_v = sess.run([op_trace, mat_trace])
+            self.assertAC(op_trace_v, mat_trace_v)
 
-
-def _test_add_to_tensor(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_add_to_tensor(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_plus_2mat = operator.add_to_tensor(2 * mat)
+    self._skip_if_tests_to_skip_contains("add_to_tensor")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_plus_2mat = operator.add_to_tensor(2 * mat)
 
-      if not use_placeholder:
-        self.assertAllEqual(shapes_info.shape, op_plus_2mat.get_shape())
+            if not use_placeholder:
+              self.assertAllEqual(build_info.shape, op_plus_2mat.get_shape())
 
-      op_plus_2mat_v, mat_v = sess.run([op_plus_2mat, mat])
+            op_plus_2mat_v, mat_v = sess.run([op_plus_2mat, mat])
 
-      self.assertAC(op_plus_2mat_v, 3 * mat_v)
-  return test_add_to_tensor
+            self.assertAC(op_plus_2mat_v, 3 * mat_v)
 
-
-def _test_diag_part(use_placeholder, shapes_info, dtype):
+  @test_util.run_deprecated_v1
   def test_diag_part(self):
-    with self.session(graph=ops.Graph()) as sess:
-      sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
-      operator, mat = self.operator_and_matrix(
-          shapes_info, dtype, use_placeholder=use_placeholder)
-      op_diag_part = operator.diag_part()
-      mat_diag_part = array_ops.matrix_diag_part(mat)
+    self._skip_if_tests_to_skip_contains("diag_part")
+    for use_placeholder in self._use_placeholder_options:
+      for build_info in self._operator_build_infos:
+        for dtype in self._dtypes_to_test:
+          with self.session(graph=ops.Graph()) as sess:
+            sess.graph.seed = random_seed.DEFAULT_GRAPH_SEED
+            operator, mat = self._operator_and_matrix(
+                build_info, dtype, use_placeholder=use_placeholder)
+            op_diag_part = operator.diag_part()
+            mat_diag_part = array_ops.matrix_diag_part(mat)
 
-      if not use_placeholder:
-        self.assertAllEqual(mat_diag_part.get_shape(),
-                            op_diag_part.get_shape())
+            if not use_placeholder:
+              self.assertAllEqual(mat_diag_part.get_shape(),
+                                  op_diag_part.get_shape())
 
-      op_diag_part_, mat_diag_part_ = sess.run(
-          [op_diag_part, mat_diag_part])
+            op_diag_part_, mat_diag_part_ = sess.run(
+                [op_diag_part, mat_diag_part])
 
-      self.assertAC(op_diag_part_, mat_diag_part_)
-  return test_diag_part
-
-# pylint:enable=missing-docstring
-
-
-def add_tests(test_cls):
-  """Add tests for LinearOperator methods."""
-  test_name_dict = {
-      "add_to_tensor": _test_add_to_tensor,
-      "cholesky": _test_cholesky,
-      "det": _test_det,
-      "diag_part": _test_diag_part,
-      "inverse": _test_inverse,
-      "log_abs_det": _test_log_abs_det,
-      "matmul": _test_matmul,
-      "matmul_with_broadcast": _test_matmul_with_broadcast,
-      "solve": _test_solve,
-      "solve_with_broadcast": _test_solve_with_broadcast,
-      "to_dense": _test_to_dense,
-      "trace": _test_trace,
-  }
-  tests_with_adjoint_args = [
-      "matmul",
-      "matmul_with_broadcast",
-      "solve",
-      "solve_with_broadcast",
-  ]
-
-  for name, test_template_fn in test_name_dict.items():
-    if name in test_cls.skip_these_tests():
-      continue
-
-    for dtype, use_placeholder, shape_info in itertools.product(
-        test_cls.dtypes_to_test(),
-        test_cls.use_placeholder_options(),
-        test_cls.operator_shapes_infos()):
-      base_test_name = "_".join([
-          "test", name, "_shape={},dtype={},use_placeholder={}".format(
-              shape_info.shape, dtype, use_placeholder)])
-      if name in tests_with_adjoint_args:
-        for adjoint in test_cls.adjoint_options():
-          for adjoint_arg in test_cls.adjoint_arg_options():
-            test_name = base_test_name + ",adjoint={},adjoint_arg={}".format(
-                adjoint, adjoint_arg)
-            if hasattr(test_cls, test_name):
-              raise RuntimeError("Test %s defined more than once" % test_name)
-            setattr(
-                test_cls,
-                test_name,
-                test_util.run_deprecated_v1(test_template_fn(
-                    use_placeholder,
-                    shape_info,
-                    dtype,
-                    adjoint,
-                    adjoint_arg)))
-      else:
-        if hasattr(test_cls, base_test_name):
-          raise RuntimeError("Test %s defined more than once" % base_test_name)
-        setattr(
-            test_cls,
-            base_test_name,
-            test_util.run_deprecated_v1(test_template_fn(
-                use_placeholder, shape_info, dtype)))
+            self.assertAC(op_diag_part_, mat_diag_part_)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -613,24 +448,24 @@ class SquareLinearOperatorDerivedClassTest(LinearOperatorDerivedClassTest):
   LinearOperatorDerivedClassTest that are not defined here.
   """
 
-  @staticmethod
-  def operator_shapes_infos():
-    shapes_info = OperatorShapesInfo
+  @property
+  def _operator_build_infos(self):
+    build_info = OperatorBuildInfo
     # non-batch operators (n, n) and batch operators.
     return [
-        shapes_info((0, 0)),
-        shapes_info((1, 1)),
-        shapes_info((1, 3, 3)),
-        shapes_info((3, 4, 4)),
-        shapes_info((2, 1, 4, 4))]
+        build_info((0, 0)),
+        build_info((1, 1)),
+        build_info((1, 3, 3)),
+        build_info((3, 4, 4)),
+        build_info((2, 1, 4, 4))]
 
-  def make_rhs(self, operator, adjoint, with_batch=True):
+  def _make_rhs(self, operator, adjoint, with_batch=True):
     # This operator is square, so rhs and x will have same shape.
     # adjoint value makes no difference because the operator shape doesn't
     # change since it is square, but be pedantic.
-    return self.make_x(operator, adjoint=not adjoint, with_batch=with_batch)
+    return self._make_x(operator, adjoint=not adjoint, with_batch=with_batch)
 
-  def make_x(self, operator, adjoint, with_batch=True):
+  def _make_x(self, operator, adjoint, with_batch=True):
     # Value of adjoint makes no difference because the operator is square.
     # Return the number of systems to solve, R, equal to 1 or 2.
     r = self._get_num_systems(operator)
@@ -673,8 +508,8 @@ class NonSquareLinearOperatorDerivedClassTest(LinearOperatorDerivedClassTest):
   LinearOperatorDerivedClassTest that are not defined here.
   """
 
-  @staticmethod
-  def skip_these_tests():
+  @property
+  def _tests_to_skip(self):
     """List of test names to skip."""
     return [
         "cholesky",
@@ -685,23 +520,23 @@ class NonSquareLinearOperatorDerivedClassTest(LinearOperatorDerivedClassTest):
         "log_abs_det"
     ]
 
-  @staticmethod
-  def operator_shapes_infos():
-    shapes_info = OperatorShapesInfo
+  @property
+  def _operator_build_infos(self):
+    build_info = OperatorBuildInfo
     # non-batch operators (n, n) and batch operators.
     return [
-        shapes_info((2, 1)),
-        shapes_info((1, 2)),
-        shapes_info((1, 3, 2)),
-        shapes_info((3, 3, 4)),
-        shapes_info((2, 1, 2, 4))]
+        build_info((2, 1)),
+        build_info((1, 2)),
+        build_info((1, 3, 2)),
+        build_info((3, 3, 4)),
+        build_info((2, 1, 2, 4))]
 
-  def make_rhs(self, operator, adjoint, with_batch=True):
+  def _make_rhs(self, operator, adjoint, with_batch=True):
     # TODO(langmore) Add once we're testing solve_ls.
     raise NotImplementedError(
-        "make_rhs not implemented because we don't test solve")
+        "_make_rhs not implemented because we don't test solve")
 
-  def make_x(self, operator, adjoint, with_batch=True):
+  def _make_x(self, operator, adjoint, with_batch=True):
     # Return the number of systems for the argument 'x' for .matmul(x)
     r = self._get_num_systems(operator)
     # If operator.shape = [B1,...,Bb, M, N] this returns a random matrix of

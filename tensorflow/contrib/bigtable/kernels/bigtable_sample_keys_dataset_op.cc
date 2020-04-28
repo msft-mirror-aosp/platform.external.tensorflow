@@ -25,10 +25,11 @@ class BigtableSampleKeysDatasetOp : public DatasetOpKernel {
   using DatasetOpKernel::DatasetOpKernel;
 
   void MakeDataset(OpKernelContext* ctx, DatasetBase** output) override {
-    core::RefCountPtr<BigtableTableResource> resource;
+    BigtableTableResource* resource;
     OP_REQUIRES_OK(ctx,
                    LookupResource(ctx, HandleFromInput(ctx, 0), &resource));
-    *output = new Dataset(ctx, resource.get());
+    core::ScopedUnref scoped_unref(resource);
+    *output = new Dataset(ctx, resource);
   }
 
  private:
@@ -64,17 +65,12 @@ class BigtableSampleKeysDatasetOp : public DatasetOpKernel {
 
     BigtableTableResource* table() const { return table_; }
 
-    Status CheckExternalState() const override {
-      return errors::FailedPrecondition(DebugString(),
-                                        " depends on external state.");
-    }
-
    protected:
     Status AsGraphDefInternal(SerializationContext* ctx,
                               DatasetGraphDefBuilder* b,
                               Node** output) const override {
-      return errors::Unimplemented(DebugString(),
-                                   " does not support serialization");
+      return errors::Unimplemented("%s does not support serialization",
+                                   DebugString());
     }
 
    private:
@@ -84,14 +80,12 @@ class BigtableSampleKeysDatasetOp : public DatasetOpKernel {
           : DatasetIterator<Dataset>(params) {}
 
       Status Initialize(IteratorContext* ctx) override {
-        ::google::cloud::StatusOr<
-            std::vector<::google::cloud::bigtable::RowKeySample>>
-            sampled_rows = dataset()->table()->table().SampleRows();
-        if (!sampled_rows.ok()) {
+        ::grpc::Status status;
+        row_keys_ = dataset()->table()->table().SampleRows(status);
+        if (!status.ok()) {
           row_keys_.clear();
-          return GcpStatusToTfStatus(sampled_rows.status());
+          return GrpcStatusToTfStatus(status);
         }
-        row_keys_ = std::move(*sampled_rows);
         return Status::OK();
       }
 
@@ -102,7 +96,7 @@ class BigtableSampleKeysDatasetOp : public DatasetOpKernel {
         if (index_ < row_keys_.size()) {
           out_tensors->emplace_back(ctx->allocator({}), DT_STRING,
                                     TensorShape({}));
-          out_tensors->back().scalar<tstring>()() =
+          out_tensors->back().scalar<string>()() =
               string(row_keys_[index_].row_key);
           *end_of_sequence = false;
           index_++;
@@ -110,17 +104,6 @@ class BigtableSampleKeysDatasetOp : public DatasetOpKernel {
           *end_of_sequence = true;
         }
         return Status::OK();
-      }
-
-     protected:
-      Status SaveInternal(IteratorStateWriter* writer) override {
-        return errors::Unimplemented("SaveInternal is currently not supported");
-      }
-
-      Status RestoreInternal(IteratorContext* ctx,
-                             IteratorStateReader* reader) override {
-        return errors::Unimplemented(
-            "RestoreInternal is currently not supported");
       }
 
      private:

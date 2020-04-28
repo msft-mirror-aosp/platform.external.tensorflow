@@ -36,6 +36,12 @@ inline const char* IdentityOrConvertStringToRaw(const std::string& foo) {
   return foo.c_str();
 }
 
+#if defined(PLATFORM_GOOGLE) && defined(HAS_GLOBAL_STRING)
+// Overloaded case where we return string.
+inline const char* IdentityOrConvertStringToRaw(const string& foo) {
+  return foo.c_str();
+}
+#endif  // PLATFORM_GOOGLE
 // Delegate to TensorFlow Appendf function until absl has an equivalent.
 template <typename... Args>
 inline void AppendFHelper(string* destination, const char* fmt,

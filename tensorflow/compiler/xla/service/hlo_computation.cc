@@ -142,26 +142,6 @@ HloInstruction* HloComputation::AddEntryComputationParameter(
   return instructions_.back().get();
 }
 
-Status HloComputation::ReplaceEntryComputationParameter(
-    int64 param_no, HloInstruction* old_instruction,
-    std::unique_ptr<HloInstruction> instruction) {
-  CHECK_GE(param_no, 0);
-  CHECK_LT(param_no, param_instructions_.size());
-  CHECK_EQ(instruction->opcode(), HloOpcode::kParameter);
-  CHECK(parent()->entry_computation() == this);
-
-  HloModuleConfig config = parent()->config();
-  *config.mutable_entry_computation_layout()->mutable_parameter_layout(
-      param_no) = ShapeLayout(instruction->shape());
-  parent()->set_config(config);
-
-  instruction->set_parent(this);
-  param_instructions_[param_no] = instruction.get();
-  AddInstructionInternal(std::move(instruction));
-
-  return ForceRemoveInstruction(old_instruction);
-}
-
 Status HloComputation::RemoveParameter(int64 param_no) {
   CHECK_GE(param_no, 0);
   CHECK_LT(param_no, param_instructions_.size());
@@ -186,23 +166,14 @@ Status HloComputation::RemoveParameter(int64 param_no) {
   return Status::OK();
 }
 
-Status HloComputation::RemoveUnusedParametersFromFusedComputation() {
-  return RemoveUnusedParametersImpl(/*allow_non_fusion=*/false);
-}
-
-Status HloComputation::RemoveUnusedParametersFromAnyComputation() {
-  return RemoveUnusedParametersImpl(/*allow_non_fusion=*/true);
-}
-
-Status HloComputation::RemoveUnusedParametersImpl(bool allow_non_fusion) {
-  CHECK(allow_non_fusion || IsFusionComputation());
+Status HloComputation::RemoveUnusedParameters() {
+  CHECK(IsFusionComputation());
   int64 removed = 0;
   for (int64 i = 0; i < param_instructions_.size(); ++i) {
     HloInstruction* param_instruction = param_instructions_[i];
     if (param_instruction->user_count() == 0 &&
         param_instruction != root_instruction()) {
-      TF_RETURN_IF_ERROR(
-          RemoveInstructionImpl(param_instruction, allow_non_fusion));
+      TF_RETURN_IF_ERROR(RemoveInstruction(param_instruction));
       ++removed;
       continue;
     }
@@ -214,15 +185,14 @@ Status HloComputation::RemoveUnusedParametersImpl(bool allow_non_fusion) {
                                           StrCat("param_", param_no)));
       TF_RETURN_IF_ERROR(param_instruction->ReplaceAllUsesWith(new_instr));
       param_instructions_[param_no] = new_instr;
-      TF_RETURN_IF_ERROR(
-          RemoveInstructionImpl(param_instruction, allow_non_fusion));
+      TF_RETURN_IF_ERROR(RemoveInstruction(param_instruction));
     }
   }
   param_instructions_.resize(param_instructions_.size() - removed);
   return Status::OK();
 }
 
-bool HloComputation::IsSafelyRemovable(const HloInstruction* instruction) {
+bool HloComputation::IsRemovable(const HloInstruction* instruction) {
   // If the instruction has control predecessors or successors then we cannot
   // remove the instruction without violating ordering constraints (added, for
   // example, to avert interference due to buffer aliasing).
@@ -249,11 +219,11 @@ bool HloComputation::HasSideEffect() const {
 }
 
 Status HloComputation::RemoveInstructionAndUnusedOperands(
-    HloInstruction* instruction, std::function<void(HloInstruction*)> cleanup) {
+    HloInstruction* instruction) {
   TF_RET_CHECK(root_instruction() != instruction);
 
   TF_RET_CHECK(instruction->user_count() == 0);
-  TF_RET_CHECK(IsSafelyRemovable(instruction))
+  TF_RET_CHECK(IsRemovable(instruction))
       << "Cannot remove instruction: " << instruction->ToString();
   absl::flat_hash_set<HloInstruction*> removed;
   std::queue<HloInstruction*> worklist;
@@ -263,7 +233,7 @@ Status HloComputation::RemoveInstructionAndUnusedOperands(
     worklist.pop();
 
     if (removed.contains(item) || item->user_count() != 0 ||
-        item == root_instruction() || !IsSafelyRemovable(item) ||
+        item == root_instruction() || !IsRemovable(item) ||
         (item->HasSideEffect() && item != instruction)) {
       continue;
     }
@@ -271,9 +241,6 @@ Status HloComputation::RemoveInstructionAndUnusedOperands(
       worklist.push(item->mutable_operand(i));
     }
 
-    if (cleanup) {
-      cleanup(item);
-    }
     TF_RETURN_IF_ERROR(RemoveInstruction(item));
     removed.insert(item);
   }
@@ -281,18 +248,9 @@ Status HloComputation::RemoveInstructionAndUnusedOperands(
 }
 
 Status HloComputation::RemoveInstruction(HloInstruction* instruction) {
-  return RemoveInstructionImpl(instruction, /*ignore_safety_check=*/false);
-}
-
-Status HloComputation::ForceRemoveInstruction(HloInstruction* instruction) {
-  return RemoveInstructionImpl(instruction, /*ignore_safety_check=*/true);
-}
-
-Status HloComputation::RemoveInstructionImpl(HloInstruction* instruction,
-                                             bool ignore_safety_check) {
   VLOG(2) << "Removing instruction " << instruction->name()
           << " from computation " << name();
-  TF_RET_CHECK(ignore_safety_check || IsSafelyRemovable(instruction))
+  TF_RET_CHECK(IsRemovable(instruction))
       << "cannot remove instruction: " << instruction->ToString();
   TF_RET_CHECK(root_instruction() != instruction)
       << "cannot remove root instruction " << instruction->name();
@@ -332,16 +290,6 @@ void HloComputation::set_root_instruction(HloInstruction* new_root_instruction,
     }
   }
   DCHECK(root_found);
-
-  if (parent() && parent()->has_entry_computation() &&
-      parent()->entry_computation() == this) {
-    if (!Shape::Equal()(new_root_instruction->shape(),
-                        root_instruction_->shape())) {
-      // Rebuild input output alias config now that we have a new output shape.
-      parent()->input_output_alias_config() =
-          HloInputOutputAliasConfig(new_root_instruction->shape());
-    }
-  }
 
   root_instruction_ = new_root_instruction;
 }
@@ -396,7 +344,7 @@ void HloComputation::ComputeInstructionPostOrder(
         case HloOpcode::kRecvDone:
           return inst->channel_id();
         case HloOpcode::kAllReduce:
-          return inst->channel_id();
+          return inst->all_reduce_id();
         default:
           return absl::nullopt;
       }
@@ -451,10 +399,13 @@ HloComputation::ComputeChannelDependencies() const {
     switch (instruction->opcode()) {
       case HloOpcode::kSend:
       case HloOpcode::kRecvDone:
+        channel_dependency_group[instruction->channel_id()].push_back(
+            instruction.get());
+        break;
       case HloOpcode::kAllReduce: {
-        auto channel_id = instruction->channel_id();
-        if (channel_id) {
-          channel_dependency_group[channel_id.value()].push_back(
+        auto all_reduce_id = instruction->all_reduce_id();
+        if (all_reduce_id) {
+          channel_dependency_group[all_reduce_id.value()].push_back(
               instruction.get());
         }
         break;
@@ -532,12 +483,11 @@ string HloComputation::ToString(
     if (options.print_percent()) {
       s << "%";
     }
-    s << PrintName(name(), options.print_ids()) << " ";
+    s << name() << " ";
   }
 
   if (options.print_program_shape()) {
-    s << ShapeUtil::HumanString(ComputeProgramShape(options.print_ids()))
-      << " ";
+    s << ShapeUtil::HumanString(ComputeProgramShape()) << " ";
   }
   s << "{\n";
   {
@@ -754,21 +704,19 @@ StatusOr<HloInstruction*> HloComputation::DeepCopyInstructionWithCustomCopier(
   return DeepCopyHelper(instruction, &index, copy_leaf);
 }
 
-ProgramShape HloComputation::ComputeProgramShape(bool include_ids) const {
+ProgramShape HloComputation::ComputeProgramShape() const {
   ProgramShape program_shape;
 
   for (auto* param_instruction : param_instructions_) {
     *program_shape.add_parameters() = param_instruction->shape();
-    *program_shape.add_parameter_names() =
-        PrintName(param_instruction->name(), include_ids);
+    *program_shape.add_parameter_names() = param_instruction->name();
   }
   *program_shape.mutable_result() = root_instruction_->shape();
 
   return program_shape;
 }
 
-bool HloComputation::Equal(const HloComputation& other,
-                           bool is_layout_sensitive) const {
+bool HloComputation::operator==(const HloComputation& other) const {
   if (this == &other) {
     return true;
   }
@@ -793,8 +741,7 @@ bool HloComputation::Equal(const HloComputation& other,
         [](const HloInstruction*, const HloInstruction*) { return true; },
         [](const HloComputation* a, const HloComputation* b) {
           return *a == *b;
-        },
-        is_layout_sensitive);
+        });
     if (!identical_ignoring_operands) {
       return false;
     }
@@ -810,13 +757,6 @@ Status HloComputation::ReplaceWithNewInstruction(
     std::unique_ptr<HloInstruction> new_instruction) {
   return ReplaceInstruction(old_instruction,
                             AddInstruction(std::move(new_instruction)));
-}
-
-Status HloComputation::ReplaceWithNewEntryComputationParameter(
-    HloInstruction* old_instruction,
-    std::unique_ptr<HloInstruction> new_instruction) {
-  return ReplaceInstruction(old_instruction, AddEntryComputationParameter(
-                                                 std::move(new_instruction)));
 }
 
 Status HloComputation::ReplaceInstruction(HloInstruction* old_instruction,
@@ -837,14 +777,6 @@ Status HloComputation::ReplaceInstruction(HloInstruction* old_instruction,
   if (new_instruction->metadata().op_name().empty()) {
     new_instruction->set_metadata(old_instruction->metadata());
   }
-
-  // Like the metadata above, if the user didn't specify any sharding
-  // information on the new instruction we should copy the old sharding
-  // information (if any).
-  if (!new_instruction->has_sharding()) {
-    new_instruction->set_sharding(old_instruction->sharding_ptr());
-  }
-
   TF_RETURN_IF_ERROR(old_instruction->ReplaceAllUsesWith(new_instruction));
   return RemoveInstructionAndUnusedOperands(old_instruction);
 }
@@ -936,6 +868,18 @@ template Status HloComputation::AcceptOrdered(
     DfsHloVisitor*, absl::Span<HloInstruction* const>) const;
 template Status HloComputation::AcceptOrdered(
     ConstDfsHloVisitor*, absl::Span<HloInstruction* const>) const;
+
+Status HloComputation::Accept(
+    const std::function<Status(HloInstruction*)>& visitor_func) {
+  FunctionVisitor visitor(visitor_func);
+  return this->Accept(&visitor);
+}
+
+Status HloComputation::Accept(
+    const std::function<Status(const HloInstruction*)>& visitor_func) const {
+  ConstFunctionVisitor visitor(visitor_func);
+  return this->Accept(&visitor);
+}
 
 std::unique_ptr<HloComputation> HloComputation::Clone(
     const string& suffix, HloCloneContext* context) {
@@ -1105,7 +1049,4 @@ HloInstruction* HloComputation::GetInstructionWithName(absl::string_view name) {
   return it == instructions_in_computation.end() ? nullptr : *it;
 }
 
-bool HloComputation::IsEntryComputation() const {
-  return parent()->entry_computation() == this;
-}
 }  // namespace xla

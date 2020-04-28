@@ -143,14 +143,6 @@ tensorflow::ImportNumpy();
   $result = PyLong_FromUnsignedLongLong($1);
 }
 
-// Convert TF_OperationGetAttrType TF_DataType* out-argument to Python integer.
-%typemap(in, numinputs=0) TF_DataType *value (TF_DataType temp) {
-  $1 = &temp;
-}
-%typemap(argout) TF_DataType *value {
-  $result = PyInt_FromLong(*$1);
-}
-
 // We use TF_OperationGetControlInputs_wrapper instead of
 // TF_OperationGetControlInputs
 %ignore TF_OperationGetControlInputs;
@@ -524,7 +516,6 @@ TF_ImportGraphDefResultsMissingUnusedInputMappings_wrapper{
 %rename("_TF_NewSessionOptions") TF_NewSessionOptions;
 
 %include "tensorflow/c/c_api.h"
-%include "tensorflow/c/tf_attrtype.h"
 %include "tensorflow/c/python_api.h"
 
 
@@ -580,7 +571,8 @@ def TF_Reset(target, containers=None, config=None):
   from tensorflow.python.framework import errors
   opts = TF_NewSessionOptions(target=target, config=config)
   try:
-    TF_Reset_wrapper(opts, containers)
+    with errors.raise_exception_on_not_ok_status() as status:
+      TF_Reset_wrapper(opts, containers, status)
   finally:
     TF_DeleteSessionOptions(opts)
 %}

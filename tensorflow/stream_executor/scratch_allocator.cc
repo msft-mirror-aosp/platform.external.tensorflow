@@ -22,17 +22,18 @@ namespace stream_executor {
 
 ScratchAllocator::~ScratchAllocator() {}
 
-OneTimeScratchAllocator::OneTimeScratchAllocator(Stream* stream)
-    : stream_(stream) {}
+OneTimeScratchAllocator::OneTimeScratchAllocator() {}
 OneTimeScratchAllocator::~OneTimeScratchAllocator() {}
 
-int64 OneTimeScratchAllocator::GetMemoryLimitInBytes() { return -1; }
+int64 OneTimeScratchAllocator::GetMemoryLimitInBytes(Stream* stream) {
+  return -1;
+}
 
 port::StatusOr<DeviceMemory<uint8>> OneTimeScratchAllocator::AllocateBytes(
-    int64 byte_size) {
+    Stream* stream, int64 byte_size) {
   CHECK(temporary_ == nullptr);
   SE_ASSIGN_OR_RETURN(temporary_,
-                      stream_->AllocateTemporaryArray<uint8>(byte_size));
+                      stream->AllocateTemporaryArray<uint8>(byte_size));
   return temporary_->device_memory();
 }
 

@@ -110,8 +110,7 @@ class Controller(object):
     """At this time, this method evaluates ONLY ONE placement.
 
     Args:
-      sess: a tf.compat.v1.Session() object used to retrieve cached assignment
-        info.
+      sess: a tf.Session() object used to retrieve cached assignment info.
       *args: "".
       **kwargs: "".
 

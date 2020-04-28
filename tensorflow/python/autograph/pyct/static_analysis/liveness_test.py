@@ -18,6 +18,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import six
+
 from tensorflow.python.autograph.pyct import anno
 from tensorflow.python.autograph.pyct import cfg
 from tensorflow.python.autograph.pyct import parser
@@ -28,16 +30,16 @@ from tensorflow.python.autograph.pyct.static_analysis import liveness
 from tensorflow.python.platform import test
 
 
-global_a = 7
-global_b = 17
-
-
-class LivenessAnalyzerTestBase(test.TestCase):
+class LivenessTest(test.TestCase):
 
   def _parse_and_analyze(self, test_fn):
-    node, source = parser.parse_entity(test_fn, future_features=())
+    node, source, _ = parser.parse_entity(test_fn)
     entity_info = transformer.EntityInfo(
-        source_code=source, source_file=None, future_features=(), namespace={})
+        source_code=source,
+        source_file=None,
+        namespace={},
+        arg_values=None,
+        arg_types=None)
     node = qual_names.resolve(node)
     ctx = transformer.Context(entity_info)
     node = activity.resolve(node, ctx)
@@ -62,43 +64,6 @@ class LivenessAnalyzerTestBase(test.TestCase):
     if not isinstance(expected, tuple):
       expected = (expected,)
     self.assertSetEqual(live_in_strs, set(expected))
-
-
-class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
-
-  def test_live_out_try_block(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        try:
-          pass
-        except:  # pylint:disable=bare-except
-          pass
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveOut(fn_body[0], 'x')
-    self.assertHasLiveOut(fn_body[0].body[0], 'x')
-
-  def test_live_out_if_inside_except(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        try:
-          pass
-        except:  # pylint:disable=bare-except
-          if b > 0:
-            x = b
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveOut(fn_body[0], 'x')
-    self.assertHasLiveOut(fn_body[0].body[0], 'x')
-    self.assertHasLiveOut(fn_body[0].body[0].handlers[0].body[0], 'x')
 
   def test_live_out_stacked_if(self):
 
@@ -143,18 +108,6 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     fn_body = node.body
 
     self.assertHasLiveOut(fn_body[0], 'x')
-
-  def test_live_out_for_iterate(self):
-
-    def test_fn(x, a):
-      for i in range(a):
-        x += i
-      return x, i  # pylint:disable=undefined-loop-variable
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveOut(fn_body[0], ('x', 'i'))
 
   def test_live_out_attributes(self):
 
@@ -215,89 +168,6 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     fn_body = node.body
 
     self.assertHasLiveOut(fn_body[0], ())
-
-  def test_live_in_pass(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        pass
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('a', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0], ('x',))
-    self.assertHasLiveIn(fn_body[1], ('x',))
-
-  def test_live_in_return_statement(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        return x
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('a', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0], ('x',))
-    self.assertHasLiveIn(fn_body[1], ('x',))
-
-  def test_live_in_try_block(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        try:
-          pass
-        except:  # pylint:disable=bare-except
-          pass
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('a', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0], ('x',))
-    self.assertHasLiveIn(fn_body[1], ('x',))
-
-  def test_live_in_try_orelse(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        try:
-          pass
-        except:  # pylint:disable=bare-except
-          pass
-        else:
-          x = b
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('a', 'b', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0], ('b', 'x'))
-    self.assertHasLiveIn(fn_body[1], ('x',))
-
-  def test_live_in_if_inside_except(self):
-
-    def test_fn(x, a, b, c):  # pylint:disable=unused-argument
-      if a > 0:
-        try:
-          pass
-        except:  # pylint:disable=bare-except
-          if b > 0:
-            x = b
-      return x
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('a', 'b', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0], ('b', 'x'))
-    self.assertHasLiveIn(fn_body[0].body[0].handlers[0].body[0], ('b', 'x'))
-    self.assertHasLiveIn(fn_body[1], ('x',))
 
   def test_live_in_stacked_if(self):
 
@@ -383,7 +253,10 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     node = self._parse_and_analyze(test_fn)
     fn_body = node.body
 
-    self.assertHasLiveIn(fn_body[0], ('all', 'y'))
+    if six.PY2:
+      self.assertHasLiveIn(fn_body[0], ('all', 'x', 'y'))
+    else:
+      self.assertHasLiveIn(fn_body[0], ('all', 'y'))
 
   def test_live_in_list_comprehension(self):
 
@@ -394,17 +267,10 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     node = self._parse_and_analyze(test_fn)
     fn_body = node.body
 
-    self.assertHasLiveIn(fn_body[0], ('y',))
-
-  def test_live_in_list_comprehension_expression(self):
-
-    def test_fn(y, s):
-      s += foo([x for x in y])  # pylint:disable=undefined-variable
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-
-    self.assertHasLiveIn(fn_body[0], ('y', 'foo', 's'))
+    if six.PY2:
+      self.assertHasLiveIn(fn_body[0], ('x', 'y'))
+    else:
+      self.assertHasLiveIn(fn_body[0], ('y',))
 
   def test_live_in_set_comprehension(self):
 
@@ -415,7 +281,10 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     node = self._parse_and_analyze(test_fn)
     fn_body = node.body
 
-    self.assertHasLiveIn(fn_body[0], ('y',))
+    if six.PY2:
+      self.assertHasLiveIn(fn_body[0], ('x', 'y'))
+    else:
+      self.assertHasLiveIn(fn_body[0], ('y',))
 
   def test_live_in_dict_comprehension(self):
 
@@ -426,23 +295,10 @@ class LivenessAnalyzerTest(LivenessAnalyzerTestBase):
     node = self._parse_and_analyze(test_fn)
     fn_body = node.body
 
-    self.assertHasLiveIn(fn_body[0], ('y',))
-
-  def test_global_symbol(self):
-
-    def test_fn(c):
-      global global_a
-      global global_b
-      if global_a:
-        global_b = c
-      else:
-        global_b = c
-      return global_b
-
-    node = self._parse_and_analyze(test_fn)
-    fn_body = node.body
-    self.assertHasLiveOut(fn_body[2], ('global_b',))
-    self.assertHasLiveIn(fn_body[2], ('global_a', 'c'))
+    if six.PY2:
+      self.assertHasLiveIn(fn_body[0], ('k', 'v', 'y'))
+    else:
+      self.assertHasLiveIn(fn_body[0], ('y',))
 
 
 if __name__ == '__main__':

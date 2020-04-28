@@ -37,7 +37,7 @@ Status GraphMemory::InferStatically(
   TF_RETURN_IF_ERROR(cluster.Provision());
   TF_RETURN_IF_ERROR(cluster.Initialize(item_));
   RunMetadata metadata;
-  Status s = cluster.Run(item_, &metadata);
+  Status s = cluster.Run(item_.graph, item_.feed, item_.fetch, &metadata);
   // The virtual cluster returns the RESOURCE_EXHAUSTED error when it detects
   // that the model would run out of memory. We still get the metadata we need
   // out of the simulation, so we just ignore this error.
@@ -55,7 +55,8 @@ Status GraphMemory::InferDynamically(Cluster* cluster) {
 
   TF_RETURN_IF_ERROR(cluster->Initialize(item_));
   RunMetadata metadata;
-  TF_RETURN_IF_ERROR(cluster->Run(item_, &metadata));
+  TF_RETURN_IF_ERROR(
+      cluster->Run(item_.graph, item_.feed, item_.fetch, &metadata));
   InferFromTrace(metadata.step_stats());
   return Status::OK();
 }

@@ -96,7 +96,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_OK(context,
                     context->ResizeTensor(context, output, output_size_array));
 
-  const bool is_hybrid = IsHybridOp(input, input_weights);
+  const bool is_hybrid =
+      input->type == kTfLiteFloat32 && (input_weights->type == kTfLiteUInt8 ||
+                                        input_weights->type == kTfLiteInt8);
 
   // Allocate temporary tensors to store quantized values of input and
   // hidden_state tensors.

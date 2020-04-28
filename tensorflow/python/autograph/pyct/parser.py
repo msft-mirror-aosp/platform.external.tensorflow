@@ -21,36 +21,34 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
 import textwrap
+import threading
 
 import gast
+import six
 
-from tensorflow.python.autograph.pyct import inspect_utils
 from tensorflow.python.util import tf_inspect
 
 
-STANDARD_PREAMBLE = textwrap.dedent("""
-    from __future__ import division
-    from __future__ import print_function
-""")
-STANDARD_PREAMBLE_LEN = 2
+_parse_lock = threading.Lock()  # Prevents linecache concurrency errors.
 
 
-def parse_entity(entity, future_features):
+def parse_entity(entity):
   """Returns the AST and source code of given entity.
 
   Args:
-    entity: Any, Python function/method/class
-    future_features: Iterable[Text], future features to use (e.g.
-      'print_statement'). See
-      https://docs.python.org/2/reference/simple_stmts.html#future
+    entity: A python function/method/class
 
   Returns:
-    gast.AST, Text: the parsed AST node; the source code that was parsed to
-    generate the AST (including any prefixes that this function may have added).
+    gast.AST, str, gast.ModuleNode: a tuple of the AST node corresponding
+    exactly to the entity; the string that was parsed to generate the AST; and
+    the containing module AST node, which might contain extras like future
+    import nodes.
   """
   try:
-    original_source = inspect_utils.getimmediatesource(entity)
+    with _parse_lock:
+      source = tf_inspect.getsource_no_unwrap(entity)
   except (IOError, OSError) as e:
     raise ValueError(
         'Unable to locate the source code of {}. Note that functions defined'
@@ -63,19 +61,17 @@ def parse_entity(entity, future_features):
   def raise_parse_failure(comment):
     raise ValueError(
         'Failed to parse source code of {}, which Python reported as:\n{}\n'
-        '{}'.format(entity, original_source, comment))
+        '{}'.format(entity, source, comment))
 
   # Comments and multiline strings can appear at arbitrary indentation levels,
   # causing textwrap.dedent to not correctly dedent source code.
   # TODO(b/115884650): Automatic handling of comments/multiline strings.
-  source = textwrap.dedent(original_source)
-
-  future_statements = tuple(
-      'from __future__ import {}'.format(name) for name in future_features)
-  source = '\n'.join(future_statements + (source,))
+  source = textwrap.dedent(source)
 
   try:
-    return parse_str(source, preamble_len=len(future_features)), source
+    module_node = parse_str(source)
+    assert len(module_node.body) == 1
+    return module_node.body[0], source, module_node
 
   except IndentationError:
     # The text below lists the causes of this error known to us. There may
@@ -112,39 +108,32 @@ def parse_entity(entity, future_features):
     lines = lines[:lineno]  # pylint:disable=invalid-slice-index
     # Drop all characters following the error location
     lines[-1] = lines[-1][:offset - 1]  # pylint:disable=invalid-slice-index
-    source = '\n'.join(lines)
+    new_source = '\n'.join(lines)
 
     try:
-      return parse_str(source, preamble_len=len(future_features)), source
+      module_node = parse_str(new_source)
+      return module_node.body[0], new_source, module_node
     except SyntaxError as e:
       raise_parse_failure(
           'If this is a lambda function, the error may be avoided by creating'
-          ' the lambda in a standalone statement.')
+          ' the lambda in a standalone statement. Tried to strip down the'
+          ' source to:\n{}\nBut that did not work.'.format(new_source))
 
 
-# TODO(mdan): This should take futures as input instead.
-def parse_str(src, preamble_len=0, single_node=True):
-  """Returns the AST of given piece of code.
+def parse_str(src):
+  """Returns the AST of given piece of code."""
+  # TODO(mdan): This should exclude the module things are autowrapped in.
 
-  Args:
-    src: Text
-    preamble_len: Int, indicates leading nodes in the parsed AST which should be
-      dropped.
-    single_node: Bool, whether `src` is assumed to be represented by exactly one
-      AST node.
+  if six.PY2 and re.search('\\Wprint\\s*\\(', src):
+    # This special treatment is required because gast.parse is not aware of
+    # whether print_function was present in the original context.
+    src = 'from __future__ import print_function\n' + src
+    parsed_module = gast.parse(src)
+    parsed_module.body = parsed_module.body[1:]
+  else:
+    parsed_module = gast.parse(src)
 
-  Returns:
-    ast.AST
-  """
-  module_node = gast.parse(src)
-  nodes = module_node.body
-  if preamble_len:
-    nodes = nodes[preamble_len:]
-  if single_node:
-    if len(nodes) != 1:
-      raise ValueError('expected exactly one node node, found {}'.format(nodes))
-    return nodes[0]
-  return nodes
+  return parsed_module
 
 
 def parse_expression(src):
@@ -157,10 +146,9 @@ def parse_expression(src):
   Raises:
     ValueError: if src does not consist of a single Expression.
   """
-  src = STANDARD_PREAMBLE + src.strip()
-  node = parse_str(src, preamble_len=STANDARD_PREAMBLE_LEN, single_node=True)
-  if __debug__:
-    if not isinstance(node, gast.Expr):
-      raise ValueError(
-          'expected a single expression, found instead {}'.format(node))
-  return node.value
+  node = parse_str(src)
+  assert isinstance(node, gast.Module)
+  if len(node.body) != 1 or not isinstance(node.body[0], gast.Expr):
+    raise ValueError(
+        'Expected a single expression, found instead %s' % node.body)
+  return node.body[0].value

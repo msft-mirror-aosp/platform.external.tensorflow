@@ -14,22 +14,20 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/profiler/lib/profiler_session.h"
-
 #include <cstddef>
 #include <string>
-#include <vector>
-
-#include "absl/strings/str_split.h"
-#include "absl/strings/string_view.h"
-#include "tensorflow/core/common_runtime/step_stats_collector.h"
+#include "tensorflow/core/common_runtime/eager/context.h"
 #include "tensorflow/core/lib/core/error_codes.pb.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/types.h"
+#include "tensorflow/core/profiler/internal/gpu/tracer.h"
+#include "tensorflow/core/profiler/internal/runtime/eager_profiler.h"
+#include "tensorflow/core/profiler/trace_events.pb.h"
 #include "tensorflow/core/protobuf/config.pb.h"
-#include "tensorflow/core/protobuf/trace_events.pb.h"
 
 namespace tensorflow {
+
 namespace {
 
 // Track whether there's an active ProfilerSession.
@@ -37,15 +35,6 @@ namespace {
 // use singletons that do not allow concurrent profiling request (e.g.,
 // DeviceTracer).
 std::atomic<bool> session_active = ATOMIC_VAR_INIT(false);
-
-// Given a node_name in the format "op_name:op_type", returns the "op_type".
-// If the "op_type" is missing, returns the node_name.
-// This is done so all ops with the same type appear in the same color in trace
-// viewer.
-inline std::string EventName(absl::string_view node_name) {
-  std::vector<absl::string_view> parts = absl::StrSplit(node_name, ':');
-  return std::string(parts.back());
-}
 
 void AssignLanes(RunMetadata* run_metadata) {
   for (size_t device_id = 0;
@@ -79,8 +68,7 @@ void AssignLanes(RunMetadata* run_metadata) {
 
 void ConvertRunMetadataToTraceEvent(RunMetadata* run_metadata,
                                     profiler::Trace* trace,
-                                    const uint64 profile_start_time_micros,
-                                    const uint64 profile_end_time_micros) {
+                                    const uint64 profile_start_time_micros) {
   AssignLanes(run_metadata);
   auto trace_devices = trace->mutable_devices();
 
@@ -107,16 +95,14 @@ void ConvertRunMetadataToTraceEvent(RunMetadata* run_metadata,
     // Emit events.
     for (auto node :
          run_metadata->step_stats().dev_stats(device_id).node_stats()) {
-      if (node.all_start_micros() < profile_start_time_micros ||
-          node.all_start_micros() + node.all_end_rel_micros() >
-              profile_end_time_micros) {
+      if (node.all_start_micros() < profile_start_time_micros) {
         continue;
       }
       auto* event = trace->add_trace_events();
       auto* args = event->mutable_args();
       event->set_device_id(device_id);
       event->set_resource_id(node.thread_id());
-      event->set_name(EventName(node.node_name()));
+      event->set_name(node.node_name());
       event->set_timestamp_ps(
           (node.all_start_micros() - profile_start_time_micros) *
           EnvTime::kMicrosToPicos);
@@ -128,10 +114,12 @@ void ConvertRunMetadataToTraceEvent(RunMetadata* run_metadata,
 
   // TODO(fishx): Convert allocation data as well.
 }
+
 }  // namespace
 
-/*static*/ std::unique_ptr<ProfilerSession> ProfilerSession::Create() {
-  return absl::WrapUnique(new ProfilerSession());
+/*static*/ std::unique_ptr<ProfilerSession> ProfilerSession::Create(
+    ProfilerContext* const context) {
+  return absl::WrapUnique(new ProfilerSession(context));
 }
 
 Status ProfilerSession::Status() {
@@ -139,15 +127,15 @@ Status ProfilerSession::Status() {
   return status_;
 }
 
-Status ProfilerSession::CollectData(RunMetadata* run_metadata) {
+Status ProfilerSession::SerializeToString(string* content) {
   mutex_lock l(mutex_);
   if (!status_.ok()) return status_;
   for (auto& profiler : profilers_) {
     profiler->Stop().IgnoreError();
   }
-
+  RunMetadata run_metadata;
   for (auto& profiler : profilers_) {
-    profiler->CollectData(run_metadata).IgnoreError();
+    profiler->CollectData(&run_metadata).IgnoreError();
   }
 
   if (active_) {
@@ -156,42 +144,35 @@ Status ProfilerSession::CollectData(RunMetadata* run_metadata) {
     active_ = false;
   }
 
-  return Status::OK();
-}
-
-Status ProfilerSession::SerializeToString(string* content) {
-  RunMetadata run_metadata;
-  TF_RETURN_IF_ERROR(CollectData(&run_metadata));
-
   profiler::Trace trace;
-  ConvertRunMetadataToTraceEvent(
-      &run_metadata, &trace, start_time_micros_,
-      Env::Default()->NowNanos() / EnvTime::kMicrosToNanos);
+
+  ConvertRunMetadataToTraceEvent(&run_metadata, &trace, start_time_micros_);
 
   trace.SerializeToString(content);
   return Status::OK();
 }
 
-ProfilerSession::ProfilerSession()
+ProfilerSession::ProfilerSession(ProfilerContext* const context)
     : active_(!session_active.exchange(true)),
       start_time_micros_(Env::Default()->NowNanos() / EnvTime::kMicrosToNanos) {
   if (!active_) {
-    status_ = tensorflow::Status(error::UNAVAILABLE,
-                                 "Another profiler session is active.");
+    status_ = tensorflow::Status(tensorflow::error::Code::UNAVAILABLE,
+                                 "Another profiling session is active.");
     return;
   }
 
-  LOG(INFO) << "Profiler session started.";
+  LOG(INFO) << "Profile Session started.";
 
-  CreateProfilers(&profilers_);
+  if (context->eager_context != nullptr) {
+    profilers_.push_back(tensorflow::profiler::runtime::EagerProfiler::Create(
+        context->eager_context));
+  }
+  profilers_.push_back(tensorflow::profiler::gpu::Tracer::Create());
+
   status_ = Status::OK();
 
   for (auto& profiler : profilers_) {
-    auto start_status = profiler->Start();
-    if (!start_status.ok()) {
-      LOG(WARNING) << "Encountered error while starting profiler: "
-                   << start_status.ToString();
-    }
+    profiler->Start().IgnoreError();
   }
 }
 
@@ -205,4 +186,5 @@ ProfilerSession::~ProfilerSession() {
     session_active.store(false);
   }
 }
+
 }  // namespace tensorflow

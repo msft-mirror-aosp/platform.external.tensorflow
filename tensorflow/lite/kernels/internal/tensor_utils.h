@@ -15,8 +15,6 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_KERNELS_INTERNAL_TENSOR_UTILS_H_
 #define TENSORFLOW_LITE_KERNELS_INTERNAL_TENSOR_UTILS_H_
 
-#include <algorithm>
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 
 #if defined(_MSC_VER)
@@ -69,9 +67,8 @@ void MatrixBatchVectorMultiplyAccumulate(const float* matrix, int m_rows,
 //   1. m_cols is a multiple of 16 so that all blocks are full blocks.
 //   2. m_cols < 254 * 16 so that block index can be represented by uint8.
 void SparseMatrixBatchVectorMultiplyAccumulate(
-    const float* __restrict__ matrix, const uint8_t* __restrict__ ledger,
-    int m_rows, int m_cols, const float* __restrict__ vector, int n_batch,
-    float* __restrict__ result, int result_stride);
+    const float* matrix, const uint8_t* ledger, int m_rows, int m_cols,
+    const float* vector, int n_batch, float* result, int result_stride);
 
 // Same as the function above, but for values quantized using symmetric
 // quantization (e.g. by calling SymmetricQuantizeFloats).
@@ -181,13 +178,7 @@ void ClipVector(const float* vector, int v_size, float abs_limit,
                 float* result);
 
 // Shift left a vector in place with v_size size.
-template <typename T>
-void VectorShiftLeft(T* vector, int v_size, const T& shift_value) {
-  // When copying overlapping ranges, std::copy is appropriate when beginning of
-  // the destination range is outside the source range.
-  std::copy(vector + 1, vector + v_size, vector);
-  vector[v_size - 1] = shift_value;
-}
+void VectorShiftLeft(float* vector, int v_size, float shift_value);
 
 // Reduce-sum on a float input vector:
 // input_vector: float pointer to input vector.

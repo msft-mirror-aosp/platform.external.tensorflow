@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/common_runtime/lower_functional_ops.h"
+#include "tensorflow/core/common_runtime/lower_if_while.h"
 
 #include "tensorflow/cc/client/client_session.h"
 #include "tensorflow/cc/framework/ops.h"
@@ -35,22 +35,12 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
-SessionOptions SessionOptionsWithInlining() {
-  SessionOptions session_options;
-  session_options.config.mutable_graph_options()
-      ->mutable_optimizer_options()
-      ->set_do_function_inlining(true);
-  return session_options;
-}
-
 Status Rewrite(std::unique_ptr<Graph>* graph) {
   FunctionLibraryDefinition flib_def((*graph)->flib_def());
   GraphOptimizationPassOptions opt_options;
-  SessionOptions session_options = SessionOptionsWithInlining();
-  opt_options.session_options = &session_options;
   opt_options.graph = graph;
   opt_options.flib_def = &flib_def;
-  LowerFunctionalOpsPass pass;
+  LowerIfWhilePass pass;
   return pass.Run(opt_options);
 }
 
@@ -64,25 +54,21 @@ TEST(LowerWhileOpTest, Simple) {
 
   Scope root = Scope::NewRootScope().ExitOnError();
   TF_ASSERT_OK(root.graph()->AddFunctionLibrary(f_lib_proto));
-  auto a = ops::Placeholder(root.WithOpName("A"), DT_INT32);
+  auto a = ops::_Arg(root.WithOpName("A"), DT_INT32, 0);
   Node* while_node;
   std::vector<NodeBuilder::NodeOut> inputs({NodeBuilder::NodeOut(a.node())});
   AttrValue cond_func;
   cond_func.mutable_func()->set_name("LessThanOrEqualToN");
   AttrValue body_func;
   body_func.mutable_func()->set_name("XTimesTwo");
-  TF_ASSERT_OK(
-      NodeBuilder("while", "While", &root.graph()->flib_def())
-          .Input(inputs)
-          .Attr("T", {DT_INT32})
-          .Attr("cond", cond_func)
-          .Attr("body", body_func)
-          .Attr("parallel_iterations", 100)
-          .Attr(LowerFunctionalOpsPass::kLowerUsingSwitchMergeAttr, true)
-          .Finalize(root.graph(), &while_node));
-  auto c = ops::Identity(
-      root.WithOpName("C").WithControlDependencies(Output(while_node)),
-      Output(while_node));
+  TF_ASSERT_OK(NodeBuilder("while", "While", &root.graph()->flib_def())
+                   .Input(inputs)
+                   .Attr("T", {DT_INT32})
+                   .Attr("cond", cond_func)
+                   .Attr("body", body_func)
+                   .Attr("parallel_iterations", 100)
+                   .Attr(LowerIfWhilePass::kLowerUsingSwitchMergeAttr, true)
+                   .Finalize(root.graph(), &while_node));
   TF_ASSERT_OK(root.DoShapeInference(while_node));
   TF_ASSERT_OK(root.ToGraph(graph.get()));
 
@@ -109,9 +95,6 @@ TEST(LowerWhileOpTest, Simple) {
   int merge_count = 0;
   int next_iteration_count = 0;
   node_called_while_count = 0;
-  int less_than_or_equan_to_n_count = 0;
-  int x_times_two_count = 0;
-
   for (const auto* op : graph->op_nodes()) {
     if (op->IsEnter()) {
       ++enter_count;
@@ -132,15 +115,6 @@ TEST(LowerWhileOpTest, Simple) {
     if (op->name() == "while") {
       node_called_while_count++;
     }
-    if (op->type_string() == "LessThanOrEqualToN") {
-      less_than_or_equan_to_n_count++;
-    }
-    if (op->type_string() == "XTimesTwo") {
-      x_times_two_count++;
-    }
-    if (op->name() == "C") {
-      ASSERT_EQ(op->in_edges().size(), 2);
-    }
     ASSERT_NE(op->type_string(), "While");
   }
   // One node per loop input.
@@ -152,7 +126,7 @@ TEST(LowerWhileOpTest, Simple) {
   ASSERT_EQ(node_called_while_count, 1);
 
   // Verify execution.
-  ClientSession session(root, SessionOptionsWithInlining());
+  ClientSession session(root);
   {
     ClientSession::FeedType feeds;
     feeds.emplace(Output(a.node()), Input::Initializer(1));
@@ -181,8 +155,8 @@ TEST(LowerWhileOpTest, MultipleInputs) {
 
   Scope root = Scope::NewRootScope().ExitOnError();
   TF_ASSERT_OK(root.graph()->AddFunctionLibrary(f_lib_proto));
-  auto a = ops::Placeholder(root.WithOpName("A"), DT_INT32);
-  auto b = ops::Placeholder(root.WithOpName("B"), DT_INT32);
+  auto a = ops::_Arg(root.WithOpName("A"), DT_INT32, 0);
+  auto b = ops::_Arg(root.WithOpName("B"), DT_INT32, 1);
   Node* while_node;
   std::vector<NodeBuilder::NodeOut> inputs(
       {NodeBuilder::NodeOut(a.node()), NodeBuilder::NodeOut(b.node())});
@@ -190,14 +164,13 @@ TEST(LowerWhileOpTest, MultipleInputs) {
   cond_func.mutable_func()->set_name("XYXLessThanOrEqualToN");
   AttrValue body_func;
   body_func.mutable_func()->set_name("XPlusOneXTimesY");
-  TF_ASSERT_OK(
-      NodeBuilder("while", "While", &root.graph()->flib_def())
-          .Input(inputs)
-          .Attr("T", {DT_INT32, DT_INT32})
-          .Attr("cond", cond_func)
-          .Attr("body", body_func)
-          .Attr(LowerFunctionalOpsPass::kLowerUsingSwitchMergeAttr, true)
-          .Finalize(root.graph(), &while_node));
+  TF_ASSERT_OK(NodeBuilder("while", "While", &root.graph()->flib_def())
+                   .Input(inputs)
+                   .Attr("T", {DT_INT32, DT_INT32})
+                   .Attr("cond", cond_func)
+                   .Attr("body", body_func)
+                   .Attr(LowerIfWhilePass::kLowerUsingSwitchMergeAttr, true)
+                   .Finalize(root.graph(), &while_node));
   TF_ASSERT_OK(root.DoShapeInference(while_node));
   TF_ASSERT_OK(root.ToGraph(graph.get()));
 
@@ -218,9 +191,6 @@ TEST(LowerWhileOpTest, MultipleInputs) {
   int switch_count = 0;
   int merge_count = 0;
   int next_iteration_count = 0;
-  int x_plus_one_x_times_y_count = 0;
-  int x_y_x_less_than_equal_to_n_count = 0;
-
   for (const auto* op : graph->op_nodes()) {
     if (op->IsEnter()) {
       ++enter_count;
@@ -237,12 +207,6 @@ TEST(LowerWhileOpTest, MultipleInputs) {
     if (op->IsNextIteration()) {
       ++next_iteration_count;
     }
-    if (op->type_string() == "XPlusOneXTimesY") {
-      x_plus_one_x_times_y_count++;
-    }
-    if (op->type_string() == "XYXLessThanOrEqualToN") {
-      x_y_x_less_than_equal_to_n_count++;
-    }
     ASSERT_NE(op->type_string(), "While");
   }
   // Two nodes per loop input.
@@ -251,11 +215,9 @@ TEST(LowerWhileOpTest, MultipleInputs) {
   ASSERT_EQ(switch_count, 2);
   ASSERT_EQ(merge_count, 2);
   ASSERT_EQ(next_iteration_count, 2);
-  ASSERT_EQ(x_plus_one_x_times_y_count, 0);
-  ASSERT_EQ(x_y_x_less_than_equal_to_n_count, 0);
 
   // Verify execution.
-  ClientSession session(root, SessionOptionsWithInlining());
+  ClientSession session(root);
   {
     ClientSession::FeedType feeds;
     feeds.emplace(Output(a.node()), Input::Initializer(1));
@@ -297,22 +259,21 @@ TEST(LowerWhileOpTest, DoNotInlineLoweredFunctions) {
 
   Scope root = Scope::NewRootScope().ExitOnError();
   TF_ASSERT_OK(root.graph()->AddFunctionLibrary(f_lib_proto));
-  auto a = ops::Placeholder(root.WithOpName("A"), DT_INT32);
+  auto a = ops::_Arg(root.WithOpName("A"), DT_INT32, 0);
   Node* while_node;
   std::vector<NodeBuilder::NodeOut> inputs({NodeBuilder::NodeOut(a.node())});
   AttrValue cond_func;
   cond_func.mutable_func()->set_name("LessThanOrEqualToN");
   AttrValue body_func;
   body_func.mutable_func()->set_name("XTimesTwo");
-  TF_ASSERT_OK(
-      NodeBuilder("while", "While", &root.graph()->flib_def())
-          .Input(inputs)
-          .Attr("T", {DT_INT32})
-          .Attr("cond", cond_func)
-          .Attr("body", body_func)
-          .Attr("parallel_iterations", 100)
-          .Attr(LowerFunctionalOpsPass::kLowerUsingSwitchMergeAttr, true)
-          .Finalize(root.graph(), &while_node));
+  TF_ASSERT_OK(NodeBuilder("while", "While", &root.graph()->flib_def())
+                   .Input(inputs)
+                   .Attr("T", {DT_INT32})
+                   .Attr("cond", cond_func)
+                   .Attr("body", body_func)
+                   .Attr("parallel_iterations", 100)
+                   .Attr(LowerIfWhilePass::kLowerUsingSwitchMergeAttr, true)
+                   .Finalize(root.graph(), &while_node));
   TF_ASSERT_OK(root.DoShapeInference(while_node));
   TF_ASSERT_OK(root.ToGraph(graph.get()));
 
@@ -336,7 +297,7 @@ TEST(LowerWhileOpTest, DoNotInlineLoweredFunctions) {
   ASSERT_EQ(less_than_or_eq_count, 1);
 
   // Verify execution.
-  ClientSession session(root, SessionOptionsWithInlining());
+  ClientSession session(root);
   {
     ClientSession::FeedType feeds;
     feeds.emplace(Output(a.node()), Input::Initializer(1));

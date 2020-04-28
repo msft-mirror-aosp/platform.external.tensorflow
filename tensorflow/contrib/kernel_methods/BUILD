@@ -1,14 +1,13 @@
 # Description:
 #   Contains kernel methods for TensorFlow.
 
-load("//tensorflow:tensorflow.bzl", "py_test")
-
-package(
-    default_visibility = ["//tensorflow:__subpackages__"],
-    licenses = ["notice"],  # Apache 2.0
-)
+licenses(["notice"])  # Apache 2.0
 
 exports_files(["LICENSE"])
+
+package(default_visibility = ["//tensorflow:__subpackages__"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 py_library(
     name = "kernel_methods",
@@ -48,7 +47,6 @@ py_library(
 py_test(
     name = "random_fourier_features_test",
     srcs = ["python/mappers/random_fourier_features_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":dense_kernel_mapper_py",
@@ -65,7 +63,6 @@ py_test(
 py_test(
     name = "kernel_estimators_test",
     srcs = ["python/kernel_estimators_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     tags = ["notsan"],
     deps = [
@@ -83,7 +80,6 @@ py_test(
 py_test(
     name = "losses_test",
     srcs = ["python/losses_test.py"],
-    python_version = "PY2",
     srcs_version = "PY2AND3",
     deps = [
         ":kernel_methods",

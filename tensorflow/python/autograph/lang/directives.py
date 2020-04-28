@@ -25,7 +25,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.util.tf_export import tf_export
 
 UNSPECIFIED = object()
 
@@ -46,7 +45,6 @@ def set_element_type(entity, dtype, shape=UNSPECIFIED):
   del shape
 
 
-@tf_export('autograph.experimental.set_loop_options')
 def set_loop_options(
     parallel_iterations=UNSPECIFIED,
     back_prop=UNSPECIFIED,
@@ -57,16 +55,6 @@ def set_loop_options(
   The parameters apply to and only to the immediately enclosing loop. It only
   has effect if the loop is staged as a TF while_loop; otherwise the parameters
   have no effect.
-
-  Usage example:
-
-    @tf.function(autograph=True)
-    def dynamic_rnn(..., parallel_iterations=32):
-      num_steps = ...
-      for t in tf.range(num_steps):
-        tf.autograph.experimental.set_loop_options(
-            parallel_iterations=parallel_iterations)
-        ...
 
   Args:
     parallel_iterations: See tf.while_loop.

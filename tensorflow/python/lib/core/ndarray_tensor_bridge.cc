@@ -188,9 +188,13 @@ Status TF_DataType_to_PyArray_TYPE(TF_DataType tf_datatype,
 
 Status ArrayFromMemory(int dim_size, npy_intp* dims, void* data, DataType dtype,
                        std::function<void()> destructor, PyObject** result) {
-  if (dtype == DT_STRING || dtype == DT_RESOURCE) {
+  int size = 1;
+  for (int i = 0; i < dim_size; ++i) {
+    size *= dims[i];
+  }
+  if (dtype == DT_STRING || dtype == DT_RESOURCE || size == 0) {
     return errors::FailedPrecondition(
-        "Cannot convert string or resource Tensors.");
+        "Cannot convert strings, resources, or empty Tensors.");
   }
 
   int type_num = -1;
@@ -200,21 +204,20 @@ Status ArrayFromMemory(int dim_size, npy_intp* dims, void* data, DataType dtype,
     return s;
   }
 
-  auto* np_array = reinterpret_cast<PyArrayObject*>(
-      PyArray_SimpleNewFromData(dim_size, dims, type_num, data));
-  PyArray_CLEARFLAGS(np_array, NPY_ARRAY_OWNDATA);
+  PyObject* np_array =
+      PyArray_SimpleNewFromData(dim_size, dims, type_num, data);
   if (PyType_Ready(&TensorReleaserType) == -1) {
     return errors::Unknown("Python type initialization failed.");
   }
-  auto* releaser = reinterpret_cast<TensorReleaser*>(
+  TensorReleaser* releaser = reinterpret_cast<TensorReleaser*>(
       TensorReleaserType.tp_alloc(&TensorReleaserType, 0));
   releaser->destructor = new std::function<void()>(std::move(destructor));
-  if (PyArray_SetBaseObject(np_array, reinterpret_cast<PyObject*>(releaser)) ==
-      -1) {
+  if (PyArray_SetBaseObject(reinterpret_cast<PyArrayObject*>(np_array),
+                            reinterpret_cast<PyObject*>(releaser)) == -1) {
     Py_DECREF(releaser);
     return errors::Unknown("Python array refused to use memory.");
   }
-  *result = reinterpret_cast<PyObject*>(np_array);
+  *result = PyArray_Return(reinterpret_cast<PyArrayObject*>(np_array));
   return Status::OK();
 }
 

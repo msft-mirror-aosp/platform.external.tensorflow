@@ -75,6 +75,7 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import function
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import sparse_tensor
+from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
@@ -260,7 +261,8 @@ class DenseSplitHandler(InequalitySplitHandler):
 
   def make_splits(self, stamp_token, next_stamp_token, class_id):
     """Create the best split using the accumulated stats and flush the state."""
-    if (self._gradient_shape.rank == 0 and self._hessian_shape.rank == 0):
+    if (self._gradient_shape == tensor_shape.scalar() and
+        self._hessian_shape == tensor_shape.scalar()):
       handler = make_dense_split_scalar
     else:
       handler = make_dense_split_tensor
@@ -439,7 +441,8 @@ class SparseSplitHandler(InequalitySplitHandler):
 
   def make_splits(self, stamp_token, next_stamp_token, class_id):
     """Create the best split using the accumulated stats and flush the state."""
-    if self._gradient_shape.rank == 0 and self._hessian_shape.rank == 0:
+    if (self._gradient_shape == tensor_shape.scalar() and
+        self._hessian_shape == tensor_shape.scalar()):
       handler = make_sparse_split_scalar
     else:
       handler = make_sparse_split_tensor

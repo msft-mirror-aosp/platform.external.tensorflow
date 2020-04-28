@@ -98,8 +98,6 @@
 #
 # This script can be used by Jenkins parameterized / matrix builds.
 
-set -ex
-
 # Helper function: Convert to lower case
 to_lower () {
   echo "$1" | tr '[:upper:]' '[:lower:]'

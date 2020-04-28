@@ -58,7 +58,7 @@ StatusOr<Literal> TransferManager::TransferLiteralFromDevice(
   Status s;
   Literal literal(device_buffer.on_host_shape());
   TransferLiteralFromDevice(
-      substream, device_buffer, &literal,
+      substream, device_buffer, literal,
       [&](Status status) {
         s = status;
         n.Notify();
@@ -123,7 +123,7 @@ StatusOr<Literal> TransferManager::TransferArrayFromDevice(
   Literal literal(shape);
   Status s;
   TransferArrayFromDevice(
-      substream, shape, source, &literal,
+      substream, shape, source, literal,
       [&](Status status) {
         s = status;
         n.Notify();
@@ -178,8 +178,7 @@ void TransferManager::TransferArrayFromDevice(
     se::Stream* stream, const Shape& shape, const se::DeviceMemoryBase& source,
     const MutableBorrowingLiteral& literal, std::function<void(Status)> done,
     const TransferMetadata* transfer_metadata) {
-  if (!Shape::Equal().MinorToMajorOnlyInLayout()(HostShapeToDeviceShape(shape),
-                                                 shape)) {
+  if (!ShapeUtil::Equal(HostShapeToDeviceShape(shape), shape)) {
     auto error = StrCat("Shape ", ShapeUtil::HumanString(shape),
                         " has a differently shaped representation on-device: ",
                         ShapeUtil::HumanString(HostShapeToDeviceShape(shape)));
@@ -244,8 +243,7 @@ Status TransferManager::WriteTupleIndexTablesAsync(
   return ShapeUtil::ForEachSubshapeWithStatus(
       device_buffer.on_device_shape(),
       [&](const Shape& device_subshape, const ShapeIndex& index) -> Status {
-        if (device_subshape.IsTuple() &&
-            ShapeUtil::TupleElementCount(device_subshape) > 0) {
+        if (device_subshape.IsTuple()) {
           se::DeviceMemoryBase device_memory = device_buffer.buffer(index);
           TF_RET_CHECK(GetByteSizeRequirement(device_subshape) ==
                        device_memory.size());
@@ -269,9 +267,6 @@ Status TransferManager::WriteTupleIndexTablesAsync(
 Status TransferManager::WriteRootTupleIndexTable(
     se::Stream* stream, const ShapedBuffer& device_buffer) {
   TF_RET_CHECK(device_buffer.on_device_shape().IsTuple());
-  if (ShapeUtil::TupleElementCount(device_buffer.on_device_shape()) == 0) {
-    return Status::OK();
-  }
   se::DeviceMemoryBase device_memory = device_buffer.buffer({});
   TF_RET_CHECK(GetByteSizeRequirement(device_buffer.on_device_shape()) ==
                device_memory.size());
@@ -290,7 +285,7 @@ Status TransferManager::TransferBufferFromDevice(
     void* destination) {
   if (source.size() < size) {
     return FailedPrecondition(
-        "Source allocation on device not large enough for data transfer: "
+        "Source allocation on device not large enough for data tranfer: "
         "%d < %d",
         source.size(), size);
   }
@@ -303,7 +298,7 @@ Status TransferManager::TransferBufferToDevice(
     se::DeviceMemoryBase* destination) {
   if (destination->size() < size) {
     return FailedPrecondition(
-        "Destination allocation on device not large enough for data transfer: "
+        "Destination allocation on device not large enough for data tranfer: "
         "%d < %d",
         destination->size(), size);
   }
@@ -312,39 +307,33 @@ Status TransferManager::TransferBufferToDevice(
 }
 
 StatusOr<ScopedShapedBuffer> TransferManager::AllocateScopedShapedBuffer(
-    const Shape& on_host_shape, se::DeviceMemoryAllocator* allocator,
+    const Shape& on_host_shape, DeviceMemoryAllocator* allocator,
     int device_ordinal) {
   if (!LayoutUtil::HasLayout(on_host_shape)) {
     return InvalidArgument("Shape must have a layout: %s",
                            ShapeUtil::HumanStringWithLayout(on_host_shape));
   }
   TF_RETURN_IF_ERROR(ShapeUtil::ValidateShape(on_host_shape));
-  Shape on_device_shape = HostShapeToDeviceShape(on_host_shape);
+  const Shape on_device_shape = HostShapeToDeviceShape(on_host_shape);
   TF_RET_CHECK(LayoutUtil::HasLayout(on_device_shape));
 
-  ScopedShapedBuffer shaped_buffer(on_host_shape, std::move(on_device_shape),
-                                   allocator, device_ordinal);
+  ScopedShapedBuffer shaped_buffer(on_host_shape, on_device_shape, allocator,
+                                   device_ordinal);
 
   // Allocate an appropriate sized buffer for each element in the shape
   // including the tuple pointer arrays.
   for (auto& pair : shaped_buffer.buffers()) {
     const ShapeIndex& index = pair.first;
     se::DeviceMemoryBase& memory_base = pair.second;
-    const Shape& subshape =
-        ShapeUtil::GetSubshape(shaped_buffer.on_device_shape(), index);
+    const Shape& subshape = ShapeUtil::GetSubshape(on_device_shape, index);
     TF_ASSIGN_OR_RETURN(auto memory,
                         allocator->Allocate(shaped_buffer.device_ordinal(),
                                             GetByteSizeRequirement(subshape)));
     // Move the allocated buffer into the ScopedShapedBuffer, which owns it.
-    memory_base = memory.Release();
+    memory_base = memory.Forget();
   }
 
   return std::move(shaped_buffer);
-}
-
-StatusOr<Shape> TransferManager::ChooseCompactLayoutForShape(
-    const Shape& host_shape) const {
-  return LayoutUtil::GetWithDefaultLayout(host_shape);
 }
 
 }  // namespace xla

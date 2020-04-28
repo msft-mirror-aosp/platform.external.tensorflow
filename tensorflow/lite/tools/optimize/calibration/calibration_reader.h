@@ -42,9 +42,7 @@ class CalibrationReader {
 
   // Annotates the tensors in the given model with statistics captured during
   // calibration.
-  // "update" is a flag: when set to true, the min/max are updated, instead of
-  // being overwritten.
-  virtual TfLiteStatus AddCalibrationToModel(ModelT* model, bool update) const;
+  virtual TfLiteStatus AddCalibrationToModel(ModelT* model) const;
 
   virtual ~CalibrationReader() {}
 

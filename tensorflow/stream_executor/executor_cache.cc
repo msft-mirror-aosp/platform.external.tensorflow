@@ -15,8 +15,7 @@ limitations under the License.
 
 #include "tensorflow/stream_executor/executor_cache.h"
 
-#include "absl/strings/str_format.h"
-#include "absl/synchronization/mutex.h"
+#include "tensorflow/stream_executor/lib/stringprintf.h"
 
 namespace stream_executor {
 
@@ -33,7 +32,7 @@ port::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
 
   Entry* entry = nullptr;
   {
-    absl::MutexLock lock{&mutex_};
+    mutex_lock lock{mutex_};
     entry = &cache_[config.ordinal];
     // Release the map lock; the address of 'entry' is stable because
     // std::map guarantees reference stability.
@@ -42,7 +41,7 @@ port::StatusOr<StreamExecutor*> ExecutorCache::GetOrCreate(
   // Acquire the per-Entry mutex without holding the map mutex. Initializing
   // an Executor may be expensive, so we want to allow concurrent
   // initialization of different entries.
-  absl::MutexLock lock{&entry->configurations_mutex};
+  mutex_lock lock{entry->configurations_mutex};
   for (const auto& iter : entry->configurations) {
     if (iter.first.plugin_config == config.plugin_config &&
         iter.first.device_options == config.device_options) {
@@ -67,23 +66,21 @@ port::StatusOr<StreamExecutor*> ExecutorCache::Get(
     const StreamExecutorConfig& config) {
   Entry* entry = nullptr;
   {
-    absl::ReaderMutexLock lock{&mutex_};
+    tf_shared_lock lock{mutex_};
     auto it = cache_.find(config.ordinal);
     if (it != cache_.end()) {
       entry = &it->second;
     } else {
-      return port::Status(
-          port::error::NOT_FOUND,
-          absl::StrFormat("No executors registered for ordinal %d",
-                          config.ordinal));
+      return port::Status(port::error::NOT_FOUND,
+                          port::Printf("No executors registered for ordinal %d",
+                                       config.ordinal));
     }
   }
-  absl::ReaderMutexLock lock{&entry->configurations_mutex};
+  tf_shared_lock lock{entry->configurations_mutex};
   if (entry->configurations.empty()) {
     return port::Status(
         port::error::NOT_FOUND,
-        absl::StrFormat("No executors registered for ordinal %d",
-                        config.ordinal));
+        port::Printf("No executors registered for ordinal %d", config.ordinal));
   }
   for (const auto& iter : entry->configurations) {
     if (iter.first.plugin_config == config.plugin_config &&
@@ -97,12 +94,12 @@ port::StatusOr<StreamExecutor*> ExecutorCache::Get(
 }
 
 void ExecutorCache::DestroyAllExecutors() {
-  absl::MutexLock lock{&mutex_};
+  mutex_lock lock{mutex_};
   cache_.clear();
 }
 
 ExecutorCache::Entry::~Entry() {
-  absl::MutexLock lock{&configurations_mutex};
+  mutex_lock lock{configurations_mutex};
   configurations.clear();
 }
 

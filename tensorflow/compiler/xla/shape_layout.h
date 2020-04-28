@@ -45,8 +45,7 @@ class ShapeLayout {
   // Returns true if the Layouts in this ShapeLayout match the layouts in the
   // given shape. Returns false otherwise. If the given shape is not compatible
   // with the ShapeLayout's shape, then false is returned.
-  bool MatchesLayoutInShape(const Shape& shape,
-                            bool minor_to_major_only = false) const;
+  bool MatchesLayoutInShape(const Shape& shape) const;
 
   // Copies the layout from the given shape into this ShapeLayout. 'other_shape'
   // must be compatible with the ShapeLayout's shape.

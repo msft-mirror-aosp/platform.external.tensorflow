@@ -140,8 +140,7 @@ Status LocalExecutable::ValidateExecutionOptions(
   return Status::OK();
 }
 
-StatusOr<std::pair<ServiceExecutableRunOptions, StreamPool::Ptr>>
-LocalExecutable::RunHelper(
+StatusOr<ScopedShapedBuffer> LocalExecutable::Run(
     const absl::Span<const ShapedBuffer* const> arguments,
     ExecutableRunOptions run_options) {
   TF_RETURN_IF_ERROR(
@@ -150,7 +149,7 @@ LocalExecutable::RunHelper(
   StreamPool::Ptr stream;
   if (run_options.stream() == nullptr) {
     // NB!  The lifetime of `stream` needs to match the lifetime of
-    // `service_options` (otherwise we will end up using a returned stream in
+    // `actual_options` (otherwise we will end up using a returned stream in
     // ExecuteOnStreamWrapper), which is why it isn't declared in the inner "if"
     // scope.
     TF_ASSIGN_OR_RETURN(
@@ -168,71 +167,54 @@ LocalExecutable::RunHelper(
   //    backend_->eigen_intra_op_thread_pool().
   ServiceExecutableRunOptions service_options(run_options,
                                               backend_->StreamBorrower());
-  return std::make_pair(service_options, std::move(stream));
-}
 
-StatusOr<ScopedShapedBuffer> LocalExecutable::Run(
-    const absl::Span<const ShapedBuffer* const> arguments,
-    ExecutableRunOptions run_options) {
-  TF_ASSIGN_OR_RETURN(auto options_and_stream,
-                      RunHelper(arguments, run_options));
-  ExecutableRunOptions options = options_and_stream.first.run_options();
-  options.set_device_ordinal(-1);
-  auto result = RunAsync(arguments, options);
-  Status block_status = options.stream()->BlockHostUntilDone();
-  TF_RETURN_IF_ERROR(result.status());
-  TF_RETURN_IF_ERROR(block_status);
-  return result;
-}
-
-StatusOr<ScopedShapedBuffer> LocalExecutable::RunAsync(
-    const absl::Span<const ShapedBuffer* const> arguments,
-    ExecutableRunOptions run_options) {
-  TF_ASSIGN_OR_RETURN(auto options_and_stream,
-                      RunHelper(arguments, run_options));
-  se::Stream* stream = run_options.stream();
-
-  std::shared_ptr<HloSnapshot> snapshot;
   if (executable_->dumping_snapshot()) {
-    snapshot = std::make_shared<HloSnapshot>();
-    snapshot->set_execution_platform(backend_->platform()->Name());
-    *snapshot->mutable_hlo() = *executable_->hlo_proto();
-    for (const ShapedBuffer* arg : arguments) {
-      auto literal = std::make_shared<Literal>(arg->on_host_shape());
-      backend_->transfer_manager()->TransferLiteralFromDevice(
-          stream, *arg, literal.get(), [snapshot, literal](Status status) {
-            if (!status.ok()) {
-              LOG(ERROR) << "TransferLiteralFromDevice for HLO snapshot inputs "
-                            "failed: "
-                         << status;
-              return;
-            }
-            *snapshot->add_arguments() = literal->ToProto();
-          });
-    }
+    return ExecuteAndDump(&service_options, arguments);
   }
+  return executable_->ExecuteOnStreamWrapper(
+      &service_options, run_options.execution_profile(), arguments);
+}
 
-  TF_ASSIGN_OR_RETURN(ScopedShapedBuffer outputs,
-                      executable_->ExecuteAsyncOnStreamWrapper(
-                          &options_and_stream.first, arguments));
+StatusOr<ScopedShapedBuffer> LocalExecutable::ExecuteAndDump(
+    const ServiceExecutableRunOptions* run_options,
+    const absl::Span<const ShapedBuffer* const> arguments) {
+  executable_->hlo_snapshot()->set_execution_platform(
+      backend_->platform()->Name());
+  TF_RETURN_IF_ERROR(RecordArguments(arguments, executable_->hlo_snapshot()));
+  TF_ASSIGN_OR_RETURN(
+      ScopedShapedBuffer result,
+      executable_->ExecuteOnStream(run_options, arguments,
+                                   /*hlo_execution_profile=*/nullptr));
+  TF_RETURN_IF_ERROR(RecordResult(&result, executable_->hlo_snapshot()));
+  DumpHloSnapshotIfEnabled(executable_->module(), *executable_->hlo_snapshot());
+  return std::move(result);
+}
 
-  // Transfer the outputs and save the snapshot to disk.
-  if (snapshot) {
-    auto literal = std::make_shared<Literal>(outputs.on_host_shape());
-    backend_->transfer_manager()->TransferLiteralFromDevice(
-        stream, outputs, literal.get(), [snapshot, literal](Status status) {
-          if (status.ok()) {
-            *snapshot->mutable_result() = literal->ToProto();
-          } else {
-            LOG(ERROR)
-                << "TransferLiteralFromDevice for HLO snapshot outputs failed: "
-                << status;
-          }
-          DumpHloSnapshotIfEnabled(*snapshot, GetDebugOptionsFromFlags());
-        });
+Status LocalExecutable::RecordArguments(
+    const absl::Span<const ShapedBuffer* const> arguments,
+    HloSnapshot* hlo_snapshot) {
+  hlo_snapshot->clear_arguments();
+  for (const ShapedBuffer* argument : arguments) {
+    TF_ASSIGN_OR_RETURN(Literal literal, LiteralFromShapedBuffer(*argument));
+    *hlo_snapshot->add_arguments() = literal.ToProto();
   }
+  return Status::OK();
+}
 
-  return std::move(outputs);
+Status LocalExecutable::RecordResult(const ShapedBuffer* result,
+                                     HloSnapshot* hlo_snapshot) {
+  hlo_snapshot->clear_result();
+  TF_ASSIGN_OR_RETURN(Literal literal, LiteralFromShapedBuffer(*result));
+  *hlo_snapshot->mutable_result() = literal.ToProto();
+  return Status::OK();
+}
+
+StatusOr<Literal> LocalExecutable::LiteralFromShapedBuffer(
+    const ShapedBuffer& shaped_buffer) {
+  TF_ASSIGN_OR_RETURN(auto stream,
+                      backend_->BorrowStream(shaped_buffer.device_ordinal()));
+  return backend_->transfer_manager()->TransferLiteralFromDevice(stream.get(),
+                                                                 shaped_buffer);
 }
 
 se::Platform* LocalClient::platform() const {
@@ -278,8 +260,8 @@ StatusOr<std::unique_ptr<LocalExecutable>> LocalClient::Compile(
 }
 
 StatusOr<ScopedShapedBuffer> LocalClient::LiteralToShapedBuffer(
-    const LiteralSlice& literal, int device_ordinal,
-    se::DeviceMemoryAllocator* allocator) {
+    const Literal& literal, int device_ordinal,
+    DeviceMemoryAllocator* allocator) {
   if (allocator == nullptr) {
     allocator = backend().memory_allocator();
   }
@@ -306,7 +288,7 @@ StatusOr<const ShapedBuffer*> LocalClient::GlobalDataToShapedBuffer(
   return local_service_->GlobalDataToShapedBuffer(data, replica_number);
 }
 
-Status LocalClient::TransferToInfeedLocal(const LiteralSlice& literal,
+Status LocalClient::TransferToInfeedLocal(const Literal& literal,
                                           int device_ordinal) {
   TF_ASSIGN_OR_RETURN(se::StreamExecutor * executor,
                       backend().stream_executor(device_ordinal));

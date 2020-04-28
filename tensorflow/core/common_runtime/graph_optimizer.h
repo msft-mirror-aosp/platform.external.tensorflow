@@ -46,17 +46,9 @@ class GraphOptimizer {
     // If not null then only nodes for which cf_consider_fn returns true will be
     // considered for CF.
     NodePredicate cf_consider_fn = nullptr;
-
-    // If true, multi-device functions will be inlined if
-    // opts_.do_function_inlining() is true.
-    bool inline_multi_device_functions = false;
-
-    // If true, functions in implementation selection group will be inlined if
-    // opts_.do_function_inlining() is true.
-    bool inline_impl_selection_group_functions = false;
   };
 
-  explicit GraphOptimizer(const OptimizerOptions& opts);
+  GraphOptimizer(const OptimizerOptions& opts);
   ~GraphOptimizer();
 
   // Applies optimization passes specified in 'opts' to 'graph'.
@@ -64,19 +56,17 @@ class GraphOptimizer {
   // on which the 'graph' will execute. It's passed to the optimizers
   // so that they can respect constraints if any, that should be
   // respected.
-  void Optimize(FunctionLibraryRuntime* runtime, Env* env, const Device* device,
+  void Optimize(FunctionLibraryRuntime* runtime, Env* env, Device* device,
                 std::unique_ptr<Graph>* graph,
                 const Options& graph_optimizer_options);
   // DEPRECATED: Consider passing a GraphOptimizer::Options object instead.
   void Optimize(
-      FunctionLibraryRuntime* runtime, Env* env, const Device* device,
+      FunctionLibraryRuntime* runtime, Env* env, Device* device,
       std::unique_ptr<Graph>* graph,
       const std::unordered_map<string, std::vector<PartialTensorShape>>*
           shape_map,
       const NodePredicate& cse_consider_fn = nullptr,
-      const NodePredicate& cf_consider_fn = nullptr,
-      bool inline_multi_device_functions = false,
-      bool inline_impl_selection_group_functions = false);
+      const NodePredicate& cf_consider_fn = nullptr);
 
   const OptimizerOptions& options() { return opts_; }
 

@@ -249,7 +249,7 @@ class EventListenerTestServicer(grpc_debug_server.EventListenerBaseServicer):
 
   def _initialize_toggle_watch_state(self, toggle_watches):
     self._toggle_watches = toggle_watches
-    self._toggle_watch_state = {}
+    self._toggle_watch_state = dict()
     if self._toggle_watches:
       for watch_key in self._toggle_watches:
         self._toggle_watch_state[watch_key] = False

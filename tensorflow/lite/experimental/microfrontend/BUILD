@@ -6,13 +6,15 @@ load(
     "tf_gen_op_libs",
     "tf_gen_op_wrapper_py",
     "tf_py_test",
+    "tf_cc_test",
 )
 load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 package(
     default_visibility = ["//visibility:public"],
-    licenses = ["notice"],  # Apache 2.0
 )
+
+licenses(["notice"])  # Apache 2.0
 
 cc_library(
     name = "audio_microfrontend",
@@ -26,7 +28,7 @@ cc_library(
     ],
 )
 
-cc_test(
+tf_cc_test(
     name = "audio_microfrontend_test",
     size = "small",
     srcs = ["audio_microfrontend_test.cc"],

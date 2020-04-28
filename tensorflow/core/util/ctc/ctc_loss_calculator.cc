@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/util/ctc/ctc_loss_calculator.h"
-#include <cmath>
 
 namespace tensorflow {
 namespace ctc {
@@ -35,10 +34,10 @@ void CTCLossCalculator::CalculateForwardVariables(
   CHECK_EQ(U, log_alpha->rows());
 
   // Initial alpha values in (GravesTh) Eq 7.5 and Eq 7.6.
-  log_alpha->coeffRef(0, 0) = std::log(y(blank_index_, output_delay_));
+  log_alpha->coeffRef(0, 0) = log(y(blank_index_, output_delay_));
   // Below, l_prime[1] == labels[0]
   auto label_0 = (l_prime.size() > 1) ? l_prime[1] : blank_index_;
-  log_alpha->coeffRef(1, 0) = std::log(y(label_0, output_delay_));
+  log_alpha->coeffRef(1, 0) = log(y(label_0, output_delay_));
 
   for (int t = 1; t < T; ++t) {
     // If there is not enough time to output the remaining labels or
@@ -70,7 +69,7 @@ void CTCLossCalculator::CalculateForwardVariables(
       }
       // Multiply the summed alphas with the activation log probability.
       log_alpha->coeffRef(u, t) =
-          std::log(y(l_prime[u], output_delay_ + t)) + sum_log_alpha;
+          log(y(l_prime[u], output_delay_ + t)) + sum_log_alpha;
     }  // End (GravesTh) Eq 7.9.
   }
 }
@@ -103,7 +102,7 @@ void CTCLossCalculator::CalculateBackwardVariables(
         log_beta->coeffRef(u, t) =
             LogSumExp(log_beta->coeff(u, t),
                       log_beta->coeff(u, t + 1) +
-                          std::log(y(l_prime[u], output_delay_ + t + 1)));
+                          log(y(l_prime[u], output_delay_ + t + 1)));
       }
 
       // Add in the u + 1, t + 1 term.
@@ -111,7 +110,7 @@ void CTCLossCalculator::CalculateBackwardVariables(
         log_beta->coeffRef(u, t) =
             LogSumExp(log_beta->coeff(u, t),
                       log_beta->coeff(u + 1, t + 1) +
-                          std::log(y(l_prime[u + 1], output_delay_ + t + 1)));
+                          log(y(l_prime[u + 1], output_delay_ + t + 1)));
       }
 
       // Add in the u + 2, t + 1 term if l_prime(u) != blank or l_prime(u+2).
@@ -123,7 +122,7 @@ void CTCLossCalculator::CalculateBackwardVariables(
           log_beta->coeffRef(u, t) =
               LogSumExp(log_beta->coeff(u, t),
                         log_beta->coeff(u + 2, t + 1) +
-                            std::log(y(l_prime[u + 2], output_delay_ + t + 1)));
+                            log(y(l_prime[u + 2], output_delay_ + t + 1)));
         }
       }  // End (GravesTh) Eq. 7.15
     }

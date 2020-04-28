@@ -38,12 +38,9 @@ from tensorflow.python.training import training_util
 _WATCHDOG = None
 
 
-class CoordinatorResetError(errors.AbortedError):
-  """Raised when the monitored session should reset."""
-
-  def __init__(self):
-    errors.AbortedError.__init__(
-        self, None, None, 'Resetting session loop due to worker shutdown.')
+class CoordinatorShutdownException(Exception):
+  """Raised when the coordinator needs to shutdown."""
+  pass
 
 
 def _clone_session(session, graph=None):
@@ -62,7 +59,7 @@ class WorkerHeartbeatManager(object):
     (Prefer using `WorkerHeartbeatManager.from_devices` when possible.)
 
     Args:
-      session: `tf.compat.v1.Session`, session to use for heartbeat operations.
+      session: `tf.Session`, session to use for heartbeat operations.
       devices: `list[string]` Set of devices to connect to.
       heartbeat_ops: `list[tf.Operation]` Heartbeat operations.
       request_placeholder: `tf.Placeholder[String]` Placeholder used to specify
@@ -143,20 +140,18 @@ class WorkerHeartbeatManager(object):
   def __repr__(self):
     return 'HeartbeatManager(%s)' % ','.join(self._devices)
 
-  # Default timeout is set to allow other shutdown triggered operations (log
-  # flushing etc) to finish before terminating the worker.
-  def shutdown(self, wait_time_in_ms=60000):
+  def shutdown(self, timeout_ms=10000):
     """Shutdown all workers after `shutdown_timeout_secs`."""
     logging.info('Shutting down %s.', self)
     req = event_pb2.WorkerHeartbeatRequest(
-        watchdog_config=event_pb2.WatchdogConfig(timeout_ms=wait_time_in_ms),
-        shutdown_mode=event_pb2.SHUTDOWN_AFTER_TIMEOUT)
+        watchdog_config=event_pb2.WatchdogConfig(timeout_ms=timeout_ms),
+        shutdown_mode=event_pb2.WAIT_FOR_COORDINATOR)
     self.configure(req)
 
-    # Wait for workers to shutdown.
-    sleep_sec = 10.0 + wait_time_in_ms / 1000
-    logging.info('Waiting %.2f seconds for worker shutdown.', sleep_sec)
-    time.sleep(sleep_sec)
+    # Wait for workers to shutdown.  This isn't strictly required
+    # but it avoids triggering multiple checkpoints with the same lame worker.
+    logging.info('Waiting %dms for worker shutdown.', timeout_ms)
+    time.sleep(timeout_ms / 1000)
 
 
 def all_worker_devices(session):
@@ -370,11 +365,11 @@ class GracefulShutdownHook(session_run_hook.SessionRunHook):
 
   def after_run(self, run_context, run_values):
     del run_values
+
     if not self._heartbeat_supported:
       return
 
     lame_workers = self._workers.lame_workers()
-
     if lame_workers:
       logging.info('ShutdownHook: lame workers found: %s', lame_workers)
 
@@ -394,22 +389,22 @@ class GracefulShutdownHook(session_run_hook.SessionRunHook):
         fn(run_context, self._workers, lame_workers)
 
 
-class ResetComputation(object):
-  """Hook to reset a TPUEstimator computation loop.
+class RestartComputation(object):
+  """Restart the entire computation.
 
-  This hook shuts down all workers and resets the monitored session loop by
-  throwing a CoordinatorResetError.
+  This hook shuts down all workers and returns control to the top-level by
+  throwing a CoordinatorShutdownException.
   """
 
-  def __init__(self):
-    pass
+  def __init__(self, timeout_ms=10000):
+    self.timeout_ms = timeout_ms
 
   def __call__(self, run_context, all_workers, lame_workers):
     del run_context, lame_workers
-    all_workers.shutdown()
+    all_workers.shutdown(timeout_ms=self.timeout_ms)
 
-    logging.info('Resetting coordinator.')
-    raise CoordinatorResetError()
+    logging.info('Terminating coordinator.')
+    raise CoordinatorShutdownException()
 
 
 class ShutdownLameWorkers(object):
@@ -419,22 +414,8 @@ class ShutdownLameWorkers(object):
   workers to be restarted).
   """
 
-  def __init__(self):
-    pass
+  def __init__(self, timeout_ms=10000):
+    self.timeout_in_ms = timeout_ms
 
   def __call__(self, run_context, all_workers, lame_workers):
-    lame_workers.shutdown()
-
-
-class ShutdownAllWorkers(object):
-  """Shutdown all workers.
-
-  Processing will continue normally (typically by waiting for the down
-  workers to be restarted).
-  """
-
-  def __init__(self):
-    pass
-
-  def __call__(self, run_context, all_workers, lame_workers):
-    all_workers.shutdown()
+    lame_workers.shutdown(timeout_ms=self.timeout_in_ms)

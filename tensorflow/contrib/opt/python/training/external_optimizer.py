@@ -297,7 +297,7 @@ class ExternalOptimizerInterface(object):
 
 
 class ScipyOptimizerInterface(ExternalOptimizerInterface):
-  """Wrapper allowing `scipy.optimize.minimize` to operate a `tf.compat.v1.Session`.
+  """Wrapper allowing `scipy.optimize.minimize` to operate a `tf.Session`.
 
   Example:
 
@@ -309,7 +309,7 @@ class ScipyOptimizerInterface(ExternalOptimizerInterface):
 
   optimizer = ScipyOptimizerInterface(loss, options={'maxiter': 100})
 
-  with tf.compat.v1.Session() as session:
+  with tf.Session() as session:
     optimizer.minimize(session)
 
   # The value of vector should now be [0., 0.].
@@ -326,7 +326,7 @@ class ScipyOptimizerInterface(ExternalOptimizerInterface):
   optimizer = ScipyOptimizerInterface(
       loss, var_to_bounds={vector: ([1, 2], np.infty)})
 
-  with tf.compat.v1.Session() as session:
+  with tf.Session() as session:
     optimizer.minimize(session)
 
   # The value of vector should now be [1., 2.].
@@ -349,7 +349,7 @@ class ScipyOptimizerInterface(ExternalOptimizerInterface):
   optimizer = ScipyOptimizerInterface(
       loss, equalities=equalities, inequalities=inequalities, method='SLSQP')
 
-  with tf.compat.v1.Session() as session:
+  with tf.Session() as session:
     optimizer.minimize(session)
 
   # The value of vector should now be [1., 1.].

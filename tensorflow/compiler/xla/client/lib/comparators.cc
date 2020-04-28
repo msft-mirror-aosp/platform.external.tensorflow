@@ -32,7 +32,8 @@ limitations under the License.
 namespace xla {
 namespace {
 
-using XlaOpGenerator = XlaOp (*)(XlaOp, XlaOp, absl::Span<const int64>);
+using XlaOpGenerator = XlaOp (*)(const XlaOp&, const XlaOp&,
+                                 absl::Span<const int64>);
 
 XlaOp BitcastConvertFloatingPointToIntegral(const XlaOp& value,
                                             int64 bit_width) {

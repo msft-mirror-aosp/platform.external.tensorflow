@@ -1,8 +1,7 @@
-load("//tensorflow:tensorflow.bzl", "tf_cc_test", "tf_cuda_library")
+licenses(["notice"])  # Apache 2.0
 
-package(
-    licenses = ["notice"],  # Apache 2.0
-)
+load("//tensorflow:tensorflow.bzl", "tf_cuda_library")
+load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 
 tf_cuda_library(
     name = "capture_profile",
@@ -21,7 +20,6 @@ tf_cuda_library(
         "//tensorflow/core:lib",
         "//tensorflow/core/distributed_runtime/rpc:grpc_util",
         "//tensorflow/core/profiler:protos_all_cc",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -35,8 +33,7 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:grpc_services",
         "//tensorflow/core:lib",
-        "//tensorflow/core:protos_all_cc",
-        "//tensorflow/core/profiler:op_profile_proto_cc",
+        "//tensorflow/core/profiler:protos_all_cc",
     ],
 )
 
@@ -46,7 +43,7 @@ cc_library(
     hdrs = ["trace_events_to_json.h"],
     deps = [
         "//tensorflow/core:lib",
-        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core/profiler:protos_all_cc",
         "@jsoncpp_git//:jsoncpp",
     ],
 )
@@ -57,7 +54,6 @@ tf_cc_test(
     deps = [
         ":trace_events_to_json",
         "//tensorflow/core:lib",
-        "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core/profiler:protos_all_cc",

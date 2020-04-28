@@ -19,5 +19,5 @@ from __future__ import division
 from __future__ import print_function
 
 # pylint: disable=unused-import,line-too-long
-from tensorflow.python.compiler.tensorrt import trt_convert as trt
+from tensorflow.python.compiler.tensorrt.trt_convert import create_inference_graph
 # pylint: enable=unused-import,line-too-long

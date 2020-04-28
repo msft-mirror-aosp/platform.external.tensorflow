@@ -1,14 +1,12 @@
 # Where component owners are known, add them here.
 
-/tensorflow/c/eager @jaingaurav @alextp
-/tensorflow/core/common_runtime/eager @jaingaurav @alextp
 /tenosrflow/core/debug @caisq
 /tensorflow/core/nccl/ @azaks2 @chsigg
 /tensorflow/core/platform/windows/ @mrry
 /tensorflow/core/platform/s3 @yongtang
-/tensorflow/python/autograph/ @mdanatg @kkimdev
+/tensorflow/go @asimshankar
+/tensorflow/java/ @asimshankar
 /tensorflow/python/debug @caisq
-/tensorflow/python/eager @jaingaurav @alextp
 /tensorflow/python/tools/api/generator/ @annarev
 /tensorflow/tensorboard/ @jart
 /tensorflow/tools/docs/ @markdaoust
@@ -16,7 +14,6 @@
 # contrib
 
 # NEED OWNER: /tensorflow/contrib/all_reduce
-/tensorflow/contrib/autograph/ @mdanatg @kkimdev
 /tensorflow/contrib/batching/ @alextp @chrisolston
 /tensorflow/contrib/bayesflow/ @ebrevdo @rsepassi @jvdillon
 /tensorflow/contrib/boosted_trees/ @sshrdp @yk5 @nataliaponomareva
@@ -28,7 +25,7 @@
 /tensorflow/contrib/data/ @mrry
 /tensorflow/tensorflow/contrib/distribute @joshl @priyag @sourabhbajaj @frankchn
 /tensorflow/contrib/distributions/ @jvdillon @langmore @rsepassi
-/tensorflow/contrib/eager @jaingaurav @alextp
+/tensorflow/contrib/eager @alextp @asimshankar
 /tensorflow/contrib/factorization/ @agarwal-ashish @xavigonzalvo
 /tensorflow/contrib/ffmpeg/ @fredbertsch
 /tensorflow/contrib/framework/ @ebrevdo

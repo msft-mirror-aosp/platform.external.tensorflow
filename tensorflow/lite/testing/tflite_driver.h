@@ -31,19 +31,7 @@ namespace testing {
 // A test runner that feeds inputs into TF Lite and verifies its outputs.
 class TfLiteDriver : public TestRunner {
  public:
-  enum class DelegateType {
-    kNone,
-    kNnapi,
-    kGpu,
-    kFlex,
-  };
-
-  /**
-   * Creates a new TfLiteDriver
-   * @param  delegate         The (optional) delegate to use.
-   * @param  reference_kernel Whether to use the builtin reference kernel ops.
-   */
-  explicit TfLiteDriver(DelegateType delegate_type = DelegateType::kNone,
+  explicit TfLiteDriver(bool use_nnapi, const string& delegate = "",
                         bool reference_kernel = false);
   ~TfLiteDriver() override;
 
@@ -59,11 +47,9 @@ class TfLiteDriver : public TestRunner {
   void ResetTensor(int id) override;
   void SetInput(int id, const string& csv_values) override;
   void SetExpectation(int id, const string& csv_values) override;
-  void SetShapeExpectation(int id, const string& csv_values) override;
   void Invoke() override;
   bool CheckResults() override;
   string ReadOutput(int id) override;
-  void SetThreshold(double relative_threshold, double absolute_threshold);
 
  private:
   void DeallocateStringTensor(TfLiteTensor* t) {
@@ -83,15 +69,13 @@ class TfLiteDriver : public TestRunner {
   class Expectation;
 
   std::unique_ptr<OpResolver> resolver_;
-  Interpreter::TfLiteDelegatePtr delegate_;
+  std::unique_ptr<FlexDelegate> delegate_;
+  bool use_nnapi_ = false;
   std::unique_ptr<FlatBufferModel> model_;
   std::unique_ptr<Interpreter> interpreter_;
   std::map<int, std::unique_ptr<Expectation>> expected_output_;
-  std::map<int, std::unique_ptr<Expectation>> expected_output_shape_;
   bool must_allocate_tensors_ = true;
   std::map<int, TfLiteTensor*> tensors_to_deallocate_;
-  double relative_threshold_;
-  double absolute_threshold_;
 };
 
 }  // namespace testing

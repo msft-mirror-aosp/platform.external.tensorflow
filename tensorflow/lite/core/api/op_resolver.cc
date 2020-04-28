@@ -48,8 +48,9 @@ TfLiteStatus GetRegistrationFromOpCode(
     const char* name = opcode->custom_code()->c_str();
     *registration = op_resolver.FindOp(name, version);
     if (*registration == nullptr) {
-      // Do not report error for unresolved custom op, we do the final check
-      // while preparing ops.
+      error_reporter->Report(
+          "Didn't find custom op for name '%s' with version %d\n", name,
+          version);
       status = kTfLiteError;
     }
   }

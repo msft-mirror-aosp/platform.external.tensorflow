@@ -91,14 +91,12 @@ StatusOr<CusolverContext> CusolverContext::Create(se::Stream* stream) {
   TF_RETURN_IF_ERROR(CusolverStatusToStatus(cusolverDnCreate(&handle)));
   CusolverContext context(stream, handle);
 
-  if (stream) {
-    // StreamExecutor really should just expose the Cuda stream to clients...
-    const cudaStream_t* cuda_stream =
-        CHECK_NOTNULL(reinterpret_cast<const cudaStream_t*>(
-            stream->implementation()->GpuStreamMemberHack()));
-    TF_RETURN_IF_ERROR(
-        CusolverStatusToStatus(cusolverDnSetStream(handle, *cuda_stream)));
-  }
+  // StreamExecutor really should just expose the Cuda stream to clients...
+  const cudaStream_t* cuda_stream =
+      CHECK_NOTNULL(reinterpret_cast<const cudaStream_t*>(
+          stream->implementation()->GpuStreamMemberHack()));
+  TF_RETURN_IF_ERROR(
+      CusolverStatusToStatus(cusolverDnSetStream(handle, *cuda_stream)));
 
   return std::move(context);
 }
@@ -133,40 +131,17 @@ CusolverContext::~CusolverContext() {
 
 #define DN_SOLVER_FN(method, type_prefix) cusolverDn##type_prefix##method
 
-// Note: NVidia have promised that it is safe to pass 'nullptr' as the argument
-// buffers to cuSolver buffer size methods and this will be a documented
-// behavior in a future cuSolver release.
-StatusOr<int64> CusolverContext::PotrfBufferSize(PrimitiveType type,
-                                                 se::blas::UpperLower uplo,
-                                                 int n, int lda) {
-  int size = -1;
-  switch (type) {
-    case F32: {
-      TF_RETURN_IF_ERROR(CusolverStatusToStatus(cusolverDnSpotrf_bufferSize(
-          handle(), CUDABlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
-      break;
-    }
-    case F64: {
-      TF_RETURN_IF_ERROR(CusolverStatusToStatus(cusolverDnDpotrf_bufferSize(
-          handle(), CUDABlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
-      break;
-    }
-    case C64: {
-      TF_RETURN_IF_ERROR(CusolverStatusToStatus(cusolverDnCpotrf_bufferSize(
-          handle(), CUDABlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
-      break;
-    }
-    case C128: {
-      TF_RETURN_IF_ERROR(CusolverStatusToStatus(cusolverDnZpotrf_bufferSize(
-          handle(), CUDABlasUpperLower(uplo), n, /*A=*/nullptr, lda, &size)));
-      break;
-    }
-    default:
-      return InvalidArgument("Invalid type for cholesky decomposition: %s",
-                             PrimitiveType_Name(type));
+#define POTRF_BUFFER_SIZE_INSTANCE(T, type_prefix)                            \
+  StatusOr<int64> CusolverContext::PotrfBufferSize(                           \
+      se::blas::UpperLower uplo, int n, se::DeviceMemory<T> A, int lda) {     \
+    int size = -1;                                                            \
+    TF_RETURN_IF_ERROR(CusolverStatusToStatus(DN_SOLVER_FN(                   \
+        potrf_bufferSize, type_prefix)(handle(), CUDABlasUpperLower(uplo), n, \
+                                       ToDevicePointer(A), lda, &size)));     \
+    return size;                                                              \
   }
-  return size;
-}
+
+CALL_LAPACK_TYPES(POTRF_BUFFER_SIZE_INSTANCE);
 
 #define POTRF_INSTANCE(T, type_prefix)                                    \
   Status CusolverContext::Potrf(                                          \

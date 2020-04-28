@@ -114,9 +114,8 @@ class HloTestBase : public ::testing::Test {
 
   // Parses the given string and returns module as a VerifiedHloModule.
   StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
-      absl::string_view hlo_text);
-  StatusOr<std::unique_ptr<VerifiedHloModule>> ParseAndReturnVerifiedModule(
-      absl::string_view hlo_text, const HloModuleConfig& config);
+      absl::string_view hlo_text,
+      const HloModuleConfig& config = HloModuleConfig());
 
   // Runs the hlo_pass with the provided module and returns the result. This
   // function also verifies that the module remains unchanged when hlo_pass
@@ -181,7 +180,7 @@ class HloTestBase : public ::testing::Test {
   // Executable::ExecuteOnStreams.
   StatusOr<std::vector<Literal>> ExecuteReplicated(
       std::unique_ptr<HloModule> module, absl::Span<Literal* const> arguments,
-      int64 num_replicas, bool use_threads, bool run_hlo_passes = false);
+      int64 num_replicas, bool use_threads);
 
   // Same as above, but uses specified device assignment.
   StatusOr<std::vector<Literal>> ExecuteReplicated(

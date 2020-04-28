@@ -52,7 +52,10 @@ class ConvolutionThunk : public Thunk {
   ConvolutionThunk(const ConvolutionThunk&) = delete;
   ConvolutionThunk& operator=(const ConvolutionThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  // Does the convolution for the thunk on "stream".
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   const HloCustomCallInstruction* cudnn_call_;

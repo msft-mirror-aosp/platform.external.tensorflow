@@ -19,8 +19,8 @@ limitations under the License.
 #include <fstream>
 #include <vector>
 
-#include "tensorflow/core/platform/logging.h"
-#include "tensorflow/lite/c/c_api_internal.h"
+#include "tensorflow/core/lib/core/errors.h"
+#include "tensorflow/core/lib/core/status.h"
 
 namespace tensorflow {
 namespace metrics {
@@ -36,17 +36,14 @@ class CSVWriter {
  public:
   CSVWriter(const std::vector<string>& columns, std::ofstream* output_stream)
       : num_columns_(columns.size()), output_stream_(output_stream) {
-    if (WriteRow(columns, output_stream_) != kTfLiteOk) {
-      LOG(ERROR) << "Could not write column names to file";
-    }
+    TF_CHECK_OK(WriteRow(columns, output_stream_));
   }
 
   template <typename T>
-  TfLiteStatus WriteRow(const std::vector<T>& values) {
+  Status WriteRow(const std::vector<T>& values) {
     if (values.size() != num_columns_) {
-      LOG(ERROR) << "Invalid size for row:" << values.size()
-                 << " expected: " << num_columns_;
-      return kTfLiteError;
+      return errors::InvalidArgument("Invalid size for row:", values.size(),
+                                     " expected: ", num_columns_);
     }
     return WriteRow(values, output_stream_);
   }
@@ -57,8 +54,8 @@ class CSVWriter {
 
  private:
   template <typename T>
-  static TfLiteStatus WriteRow(const std::vector<T>& values,
-                               std::ofstream* output_stream) {
+  static Status WriteRow(const std::vector<T>& values,
+                         std::ofstream* output_stream) {
     bool first = true;
     for (const auto& v : values) {
       if (!first) {
@@ -70,10 +67,9 @@ class CSVWriter {
     }
     (*output_stream) << "\n";
     if (!output_stream->good()) {
-      LOG(ERROR) << "Writing to stream failed.";
-      return kTfLiteError;
+      return errors::Internal("Writing to stream failed.");
     }
-    return kTfLiteOk;
+    return Status::OK();
   }
   const size_t num_columns_;
   std::ofstream* output_stream_;

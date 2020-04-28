@@ -27,11 +27,12 @@ from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops.ragged import ragged_array_ops
 from tensorflow.python.ops.ragged import ragged_factory_ops
+from tensorflow.python.ops.ragged import ragged_test_util
 from tensorflow.python.platform import googletest
 
 
 @test_util.run_all_in_graph_and_eager_modes
-class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
+class RaggedBooleanMaskOpTest(ragged_test_util.RaggedTensorTestCase,
                               parameterized.TestCase):
   # Define short constants for true & false, so the data & mask can be lined
   # up in the examples below.  This makes it easier to read the examples, to
@@ -47,67 +48,104 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           descr='Docstring example 1',
           data=[[1, 2, 3], [4, 5, 6], [7, 8, 9]],
           mask=[[T, F, T], [F, F, F], [T, F, F]],
-          expected=ragged_factory_ops.constant_value([[1, 3], [], [7]])),
+          keepdims=False,
+          expected=[1, 3, 7]),
       dict(
           descr='Docstring example 2',
-          data=ragged_factory_ops.constant_value([[1, 2, 3], [4], [5, 6]]),
-          mask=ragged_factory_ops.constant_value([[F, F, T], [F], [T, T]]),
-          expected=ragged_factory_ops.constant_value([[3], [], [5, 6]])),
+          data=[[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+          mask=[[T, F, T], [F, F, F], [T, F, F]],
+          keepdims=True,
+          expected=ragged_factory_ops.constant_value([[1, 3], [], [7]])),
       dict(
           descr='Docstring example 3',
           data=ragged_factory_ops.constant_value([[1, 2, 3], [4], [5, 6]]),
+          mask=ragged_factory_ops.constant_value([[F, F, T], [F], [T, T]]),
+          keepdims=False,
+          expected=[3, 5, 6]),
+      dict(
+          descr='Docstring example 4',
+          data=ragged_factory_ops.constant_value([[1, 2, 3], [4], [5, 6]]),
+          mask=ragged_factory_ops.constant_value([[F, F, T], [F], [T, T]]),
+          keepdims=True,
+          expected=ragged_factory_ops.constant_value([[3], [], [5, 6]])),
+      dict(
+          descr='Docstring example 5',
+          data=ragged_factory_ops.constant_value([[1, 2, 3], [4], [5, 6]]),
           mask=[True, False, True],
+          keepdims=False,
           expected=ragged_factory_ops.constant_value([[1, 2, 3], [5, 6]])),
       #=========================================================================
       # Uniform data and uniform mask.
       #=========================================================================
       dict(
-          descr='data.shape=[7]; mask.shape=[7]',
+          descr='data.shape=[7]; mask.shape=[7]; keepdims=True',
           data=[1, 2, 3, 4, 5, 6, 7],
           mask=[T, F, T, T, F, F, F],
+          keepdims=True,
           expected=[1, 3, 4]),
       dict(
-          descr='data.shape=[5, 3]; mask.shape=[5]',
+          descr='data.shape=[5, 3]; mask.shape=[5]; keepdims=True',
           data=[[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12], [13, 14, 15]],
           mask=[True, False, True, True, False],
+          keepdims=True,
           expected=[[1, 2, 3], [7, 8, 9], [10, 11, 12]]),
       dict(
-          descr='data.shape=[5, 3]; mask.shape=[5, 3]',
+          descr='data.shape=[5, 3]; mask.shape=[5, 3]; keepdims=True',
           data=[[1, 2, 3], [4, 5, 6], [7, 8, 9], [0, 1, 2], [3, 4, 5]],
           mask=[[F, F, F], [T, F, T], [T, T, T], [F, F, F], [T, T, F]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[], [4, 6], [7, 8, 9], [], [3, 4]])),
       dict(
-          descr='data.shape=[3, 2, 2]; mask.shape=[3]',
+          descr='data.shape=[3, 2, 2]; mask.shape=[3]; keepdims=True',
           data=[[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
           mask=[F, F, T],
+          keepdims=True,
           expected=[[[2, 4], [6, 8]]]),
       dict(
-          descr='data.shape=[3, 2, 2]; mask.shape=[3]',
+          descr='data.shape=[3, 2, 2]; mask.shape=[3]; keepdims=False',
           data=[[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
           mask=[F, F, T],
+          keepdims=False,
           expected=[[[2, 4], [6, 8]]]),
       dict(
-          descr='data.shape=[3, 2, 2]; mask.shape=[3, 2]',
+          descr='data.shape=[3, 2, 2]; mask.shape=[3, 2]; keepdims=True',
           data=[[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
           mask=[[T, F], [T, T], [F, F]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2]], [[5, 6], [7, 8]], []],
               ragged_rank=1)),
       dict(
-          descr='data.shape=[3, 2, 2]; mask.shape=[3, 2, 2]',
+          descr='data.shape=[3, 2, 2]; mask.shape=[3, 2]; keepdims=False',
+          data=[[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
+          mask=[[T, F], [T, T], [F, F]],
+          keepdims=False,
+          expected=[[1, 2], [5, 6], [7, 8]]),
+      dict(
+          descr='data.shape=[3, 2, 2]; mask.shape=[3, 2, 2]; keepdims=True',
           data=[[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
           mask=[[[T, T], [F, T]], [[F, F], [F, F]], [[T, F], [T, T]]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2], [4]], [[], []], [[2], [6, 8]]])),
       dict(
-          descr='data.shape=mask.shape=[2, 2, 2, 2]',
+          descr='data.shape=mask.shape=[2, 2, 2, 2]; keepdims=True',
           data=[[[[1, 2], [3, 4]], [[5, 6], [7, 8]]],
                 [[[2, 4], [6, 8]], [[1, 3], [5, 7]]]],
           mask=[[[[T, T], [F, F]], [[T, F], [F, F]]],
                 [[[F, F], [F, F]], [[T, T], [T, F]]]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[[1, 2], []], [[5], []]], [[[], []], [[1, 3], [5]]]])),
+      dict(
+          descr='data.shape=mask.shape=[2, 2, 2, 2]; keepdims=False',
+          data=[[[[1, 2], [3, 4]], [[5, 6], [7, 8]]],
+                [[[2, 4], [6, 8]], [[1, 3], [5, 7]]]],
+          mask=[[[[T, T], [F, F]], [[T, F], [F, F]]],
+                [[[F, F], [F, F]], [[T, T], [T, F]]]],
+          keepdims=False,
+          expected=[1, 2, 5, 1, 3, 5]),
 
       #=========================================================================
       # Ragged data and ragged mask.
@@ -118,6 +156,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[1, 2], [3, 4, 5, 6], [7, 8, 9], [], [1, 2, 3]]),
           mask=ragged_factory_ops.constant_value(
               [[F, F], [F, T, F, T], [F, F, F], [], [T, F, T]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[], [4, 6], [], [], [1, 3]])),
       dict(
@@ -125,23 +164,41 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           data=ragged_factory_ops.constant_value(
               [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]]),
           mask=ragged_factory_ops.constant_value([[T, F], [T, T], [F, F]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2]], [[5, 6], [7, 8]], []])),
+      dict(
+          descr='data.shape=[3, (D2), (D3)]; mask.shape=[3, (D2)]',
+          data=ragged_factory_ops.constant_value(
+              [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]]),
+          mask=ragged_factory_ops.constant_value([[T, F], [T, T], [F, F]]),
+          keepdims=False,
+          expected=ragged_factory_ops.constant_value([[1, 2], [5, 6], [7, 8]])),
       dict(
           descr='data.shape=[3, (D2), D3]; mask.shape=[3, (D2)]',
           data=ragged_factory_ops.constant_value(
               [[[1, 2], [3, 4]], [[5, 6], [7, 8], [2, 4]], [[6, 8]]],
               ragged_rank=1),
           mask=ragged_factory_ops.constant_value([[T, F], [T, T, F], [F]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2]], [[5, 6], [7, 8]], []],
               ragged_rank=1)),
+      dict(
+          descr='data.shape=[3, (D2), D3]; mask.shape=[3, (D2)]',
+          data=ragged_factory_ops.constant_value(
+              [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4], [6, 8]]],
+              ragged_rank=1),
+          mask=ragged_factory_ops.constant_value([[T, F], [T, T], [F, F]]),
+          keepdims=False,
+          expected=[[1, 2], [5, 6], [7, 8]]),
       dict(
           descr='data.shape=[3, (D2), (D3)]; mask.shape=[3, (D2), (D3)]',
           data=ragged_factory_ops.constant_value(
               [[[1, 2], [3, 4]], [[5, 6], [7, 8]], [[2, 4]]]),
           mask=ragged_factory_ops.constant_value(
               [[[T, T], [F, T]], [[F, F], [F, F]], [[T, F]]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2], [4]], [[], []], [[2]]])),
       dict(
@@ -151,6 +208,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[[[1, 2], [3, 4]], [[5, 6]]], [[[2, 4], [6, 8]]]]),
           mask=ragged_factory_ops.constant_value(
               [[[[T, T], [F, F]], [[T, F]]], [[[F, F], [T, T]]]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[[1, 2], []], [[5]]], [[[], [6, 8]]]])),
 
@@ -161,11 +219,13 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           descr='data.shape=[2, 3]; mask.shape=[2, (3)]',
           data=[[1, 2, 3], [4, 5, 6]],
           mask=ragged_factory_ops.constant_value([[T, F, F], [F, T, T]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value([[1], [5, 6]])),
       dict(
           descr='data.shape=[2, 3, 2]; mask.shape=[2, (3)]',
           data=[[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 0], [2, 4]]],
           mask=ragged_factory_ops.constant_value([[T, F, F], [F, T, T]]),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2]], [[9, 0], [2, 4]]],
               ragged_rank=1)),
@@ -175,6 +235,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           mask=ragged_factory_ops.constant_value(
               [[[T, F], [F, F], [T, T]], [[T, F], [F, T], [F, F]]],
               ragged_rank=1),
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1], [], [5, 6]], [[7], [0], []]])),
 
@@ -185,12 +246,14 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           descr='data.shape=[4, (D2)]; mask.shape=[4]',
           data=ragged_factory_ops.constant_value([[1, 2, 3], [4], [], [5, 6]]),
           mask=[T, F, T, F],
+          keepdims=False,
           expected=ragged_factory_ops.constant_value([[1, 2, 3], []])),
       dict(
           descr='data.shape=[4, (D2), (D3)]; mask.shape=[4]',
           data=ragged_factory_ops.constant_value(
               [[[1, 2, 3]], [[4], []], [[5, 6]], []]),
           mask=[T, F, T, T],
+          keepdims=False,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2, 3]], [[5, 6]], []])),
       dict(
@@ -199,6 +262,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[[1, 2], [3, 4]], [], [[5, 6]], [[7, 8], [9, 0], [1, 2]]],
               ragged_rank=1),
           mask=[T, F, F, T],
+          keepdims=False,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2], [3, 4]], [[7, 8], [9, 0], [1, 2]]],
               ragged_rank=1)),
@@ -208,6 +272,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[[1, 2], [3, 4]], [], [[5, 6]], [[7, 8], [9, 0], [1, 2]]],
               ragged_rank=1),
           mask=[T, F, F, T],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2], [3, 4]], [[7, 8], [9, 0], [1, 2]]],
               ragged_rank=1)),
@@ -215,12 +280,14 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
           descr='data.shape=[1, (2)]; mask.shape=[1, 2]',
           data=ragged_factory_ops.constant_value([[1, 2]]),
           mask=[[T, F]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value([[1]])),
       dict(
           descr='data.shape=[2, (2), (D3)]; mask.shape=[2, 2]',
           data=ragged_factory_ops.constant_value(
               [[[1], [2, 3]], [[], [4, 5, 6]]]),
           mask=[[T, F], [T, T]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value([[[1]], [[], [4, 5, 6]]])),
       dict(
           descr='data.shape=[2, (2), 3]; mask.shape=[2, 2]',
@@ -228,6 +295,7 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [2, 4, 6]]],
               ragged_rank=1),
           mask=[[T, F], [T, T]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1, 2, 3]], [[7, 8, 9], [2, 4, 6]]],
               ragged_rank=1)),
@@ -237,12 +305,13 @@ class RaggedBooleanMaskOpTest(test_util.TensorFlowTestCase,
               [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [2, 4, 6]]],
               ragged_rank=1),
           mask=[[[T, F, F], [T, F, T]], [[T, F, T], [F, F, F]]],
+          keepdims=True,
           expected=ragged_factory_ops.constant_value(
               [[[1], [4, 6]], [[7, 9], []]])),
   ])  # pyformat: disable
-  def testBooleanMask(self, descr, data, mask, expected):
-    actual = ragged_array_ops.boolean_mask(data, mask)
-    self.assertAllEqual(actual, expected)
+  def testBooleanMask(self, descr, data, mask, keepdims, expected):
+    actual = ragged_array_ops.boolean_mask(data, mask, keepdims=keepdims)
+    self.assertRaggedEqual(actual, expected)
 
   def testErrors(self):
     if not context.executing_eagerly():

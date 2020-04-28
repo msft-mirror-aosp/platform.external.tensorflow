@@ -47,10 +47,6 @@ class TestCollectiveExecutor : public CollectiveExecutor {
                   const StatusCallback& done) override {
     done(errors::Internal("Unimplemented"));
   }
-
-  void RunClosure(std::function<void()>) override {
-    LOG(FATAL) << "Unimplemented";
-  }
 };
 
 class TestCollectiveExecutorMgr : public CollectiveExecutorMgrInterface {

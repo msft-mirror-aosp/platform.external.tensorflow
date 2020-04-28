@@ -65,7 +65,7 @@ void FakeClockEnv::BlockUntilThreadsAsleep(int num_threads) {
   }
 }
 
-uint64 FakeClockEnv::NowMicros() const {
+uint64 FakeClockEnv::NowMicros() {
   {
     mutex_lock l(mu_);
     return current_time_;

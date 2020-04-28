@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <initializer_list>
 #include <set>
-#include <unordered_set>
 
 #include "tensorflow/core/grappler/graph_analyzer/gen_node.h"
 #include "tensorflow/core/grappler/graph_analyzer/map_tools.h"

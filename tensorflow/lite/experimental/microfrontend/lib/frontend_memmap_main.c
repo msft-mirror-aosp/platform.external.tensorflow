@@ -14,8 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include <stdio.h>
 
-#include "memmap.h"
 #include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
+#include "memmap.h"
 
 int main(int argc, char** argv) {
   struct FrontendState* frontend_state = GetFrontendStateMemmap();

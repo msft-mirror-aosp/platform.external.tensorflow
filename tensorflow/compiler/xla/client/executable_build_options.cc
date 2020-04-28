@@ -22,12 +22,12 @@ limitations under the License.
 namespace xla {
 
 ExecutableBuildOptions& ExecutableBuildOptions::set_device_allocator(
-    se::DeviceMemoryAllocator* allocator) {
+    DeviceMemoryAllocator* allocator) {
   device_allocator_ = allocator;
   return *this;
 }
 
-se::DeviceMemoryAllocator* ExecutableBuildOptions::device_allocator() const {
+DeviceMemoryAllocator* ExecutableBuildOptions::device_allocator() const {
   return device_allocator_;
 }
 

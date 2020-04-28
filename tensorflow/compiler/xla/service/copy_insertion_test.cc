@@ -235,8 +235,8 @@ TEST_F(CopyInsertionTest, BitcastParameter) {
   auto builder = HloComputation::Builder(TestName());
   HloInstruction* x = builder.AddInstruction(
       HloInstruction::CreateParameter(0, ShapeUtil::MakeShape(F32, {4}), "x"));
-  HloInstruction* bitcast = builder.AddInstruction(
-      HloInstruction::CreateBitcast(ShapeUtil::MakeShape(F32, {2, 2}), x));
+  HloInstruction* bitcast = builder.AddInstruction(HloInstruction::CreateUnary(
+      ShapeUtil::MakeShape(F32, {2, 2}), HloOpcode::kBitcast, x));
 
   auto module = CreateNewVerifiedModule();
   module->AddEntryComputation(builder.Build());
@@ -258,9 +258,8 @@ TEST_F(CopyInsertionTest, BitcastConstant) {
   HloInstruction* constant =
       builder.AddInstruction(HloInstruction::CreateConstant(
           LiteralUtil::CreateR1<float>({1.0, 42.0})));
-  HloInstruction* bitcast =
-      builder.AddInstruction(HloInstruction::CreateBitcast(
-          ShapeUtil::MakeShape(F32, {2, 2}), constant));
+  HloInstruction* bitcast = builder.AddInstruction(HloInstruction::CreateUnary(
+      ShapeUtil::MakeShape(F32, {2, 2}), HloOpcode::kBitcast, constant));
 
   auto module = CreateNewVerifiedModule();
   module->AddEntryComputation(builder.Build());
@@ -280,8 +279,8 @@ TEST_F(CopyInsertionTest, BitcastTupleElementParameter) {
   auto builder = HloComputation::Builder(TestName());
   HloInstruction* x = builder.AddInstruction(
       HloInstruction::CreateParameter(0, ShapeUtil::MakeShape(F32, {4}), "x"));
-  HloInstruction* bitcast = builder.AddInstruction(
-      HloInstruction::CreateBitcast(ShapeUtil::MakeShape(F32, {2, 2}), x));
+  HloInstruction* bitcast = builder.AddInstruction(HloInstruction::CreateUnary(
+      ShapeUtil::MakeShape(F32, {2, 2}), HloOpcode::kBitcast, x));
   builder.AddInstruction(HloInstruction::CreateTuple({bitcast}));
 
   auto module = CreateNewVerifiedModule();

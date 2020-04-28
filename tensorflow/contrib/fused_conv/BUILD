@@ -2,19 +2,8 @@
 #   A Fused Conv Bias Activation operator wrapper.
 #   APIs are meant to change over time.
 
-load(
-    "//tensorflow:tensorflow.bzl",
-    "tf_custom_op_library",
-    "tf_gen_op_libs",
-    "tf_gen_op_wrapper_py",
-    "tf_kernel_library",
-)
-load("//tensorflow:tensorflow.bzl", "cuda_py_test")
-load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
-
 package(
     default_visibility = ["//visibility:private"],
-    licenses = ["notice"],  # Apache 2.0
 )
 
 package_group(
@@ -24,7 +13,19 @@ package_group(
     ],
 )
 
+licenses(["notice"])  # Apache 2.0
+
 exports_files(["LICENSE"])
+
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_kernel_library",
+    "tf_custom_op_library",
+    "tf_gen_op_libs",
+    "tf_gen_op_wrapper_py",
+)
+load("//tensorflow:tensorflow.bzl", "cuda_py_test")
+load("//tensorflow:tensorflow.bzl", "tf_custom_op_py_library")
 
 tf_custom_op_py_library(
     name = "fused_conv_py",
@@ -72,17 +73,13 @@ tf_kernel_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_proto_parsing",
-        "//tensorflow/core:logger",
         "//tensorflow/core:stream_executor",
         "//tensorflow/core/kernels:bounds_check",
         "//tensorflow/core/kernels:conv_2d_hdrs",
         "//tensorflow/core/kernels:conv_ops_gpu_hdrs",
-        "//tensorflow/core/kernels:cwise_lib_hdrs",
-        "//tensorflow/core/kernels:eigen_contraction_kernel",
         "//tensorflow/core/kernels:gpu_util_hdrs",
         "//tensorflow/core/kernels:ops_util_hdrs",
         "//third_party/eigen3",
-        "@com_google_absl//absl/time",
         "@local_config_cuda//cuda:cudnn_header",
     ],
     alwayslink = 1,
@@ -103,8 +100,6 @@ tf_custom_op_library(
         "//tensorflow/core/kernels:bounds_check_lib",
         "//tensorflow/core/kernels:conv_2d_hdrs",
         "//tensorflow/core/kernels:conv_ops_gpu_hdrs",
-        "//tensorflow/core/kernels:cwise_lib_hdrs",
-        "//tensorflow/core/kernels:eigen_contraction_kernel",
         "//tensorflow/core/kernels:gpu_util_hdrs",
         "//tensorflow/core/kernels:ops_util_hdrs",
         "@local_config_cuda//cuda:cudnn_header",
@@ -183,23 +178,4 @@ cuda_py_test(
         "nogpu",
         "requires-gpu-sm70",
     ],
-)
-
-cuda_py_test(
-    name = "tensorrt_fused_conv_test",
-    srcs = ["python/ops/tensorrt_fused_conv_test.py"],
-    additional_deps = [
-        ":fused_conv_py",
-        "//tensorflow/python/compiler/tensorrt:tf_trt_integration_test_base",
-        "//tensorflow/python:client_testlib",
-        "//tensorflow/python:framework_test_lib",
-    ],
-    tags = [
-        "manual",  # TODO(b/117128481): re-enable after fixing OSS build
-        "no_cuda_on_cpu_tap",
-        "no_rocm",
-        "no_windows",
-        "nomac",
-    ],
-    xla_enable_strict_auto_jit = True,
 )

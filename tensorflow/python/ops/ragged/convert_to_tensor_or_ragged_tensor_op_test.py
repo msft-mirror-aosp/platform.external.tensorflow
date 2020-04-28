@@ -26,12 +26,13 @@ from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops.ragged import ragged_factory_ops
 from tensorflow.python.ops.ragged import ragged_tensor
+from tensorflow.python.ops.ragged import ragged_test_util
 from tensorflow.python.platform import googletest
 
 
 @test_util.run_all_in_graph_and_eager_modes
-class RaggedConvertToTensorOrRaggedTensorTest(test_util.TensorFlowTestCase,
-                                              parameterized.TestCase):
+class RaggedConvertToTensorOrRaggedTensorTest(
+    ragged_test_util.RaggedTensorTestCase, parameterized.TestCase):
 
   #=============================================================================
   # Tests where the 'value' param is a RaggedTensor
@@ -40,17 +41,6 @@ class RaggedConvertToTensorOrRaggedTensorTest(test_util.TensorFlowTestCase,
       dict(pylist=[[1, 2], [3]]),
       dict(pylist=[[1, 2], [3]], preferred_dtype=dtypes.float32),
       dict(pylist=[[1, 2], [3]], preferred_dtype=dtypes.string),
-      # Note: Conversion of a single np.array is tested below. These tests
-      # check nestings consisting of multiple or irregularily-shaped np.arrays.
-      dict(
-          pylist=[np.array([1, 2]), np.array([3])],
-          preferred_dtype=dtypes.string),
-      dict(pylist=np.array([[1, 2], [3]]), preferred_dtype=dtypes.float32),
-      dict(pylist=np.array([[1, 2], [3]]), preferred_dtype=dtypes.string),
-      dict(
-          pylist=[np.array([[1], np.array([2])]), [np.array([3])]],
-          preferred_dtype=dtypes.float32),
-      dict(pylist=[np.array(1)], preferred_dtype=dtypes.string),
   ])
   def testConvertRaggedTensor(self, pylist, dtype=None, preferred_dtype=None):
     rt = ragged_factory_ops.constant(pylist)
@@ -61,11 +51,6 @@ class RaggedConvertToTensorOrRaggedTensorTest(test_util.TensorFlowTestCase,
   @parameterized.parameters([
       dict(
           pylist=[[1, 2], [3, 4]],
-          dtype=dtypes.float32,
-          message=('Tensor conversion requested dtype float32 for '
-                   'RaggedTensor with dtype int32')),
-      dict(
-          pylist=np.array([[1, 2], [3, 4]]),
           dtype=dtypes.float32,
           message=('Tensor conversion requested dtype float32 for '
                    'RaggedTensor with dtype int32')),
@@ -125,7 +110,7 @@ class RaggedConvertToTensorOrRaggedTensorTest(test_util.TensorFlowTestCase,
         value, dtype, preferred_dtype)
     self.assertEqual(value.ragged_rank, converted.ragged_rank)
     self.assertEqual(dtypes.as_dtype(expected_dtype), converted.dtype)
-    self.assertAllEqual(value, converted)
+    self.assertEqual(value.to_list(), self.eval_to_list(converted))
 
   @parameterized.parameters([
       dict(

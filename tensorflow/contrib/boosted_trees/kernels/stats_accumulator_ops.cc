@@ -27,7 +27,6 @@
 #include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/refcount.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/work_sharder.h"
@@ -131,8 +130,9 @@ using StatsAccumulatorTensorResource =
     StatsAccumulatorResource<std::vector<float>, std::vector<float>>;
 
 void SerializeScalarAccumulatorToOutput(
-    const StatsAccumulatorScalarResource& resource, OpKernelContext* context) {
-  int64 num_slots = resource.values().size();
+    const StatsAccumulatorScalarResource& accumulator_resource,
+    OpKernelContext* context) {
+  int64 num_slots = accumulator_resource.values().size();
   Tensor* partition_ids_t = nullptr;
   OP_REQUIRES_OK(context, context->allocate_output("output_partition_ids",
                                                    TensorShape({num_slots}),
@@ -159,7 +159,7 @@ void SerializeScalarAccumulatorToOutput(
   auto hessians = hessians_t->vec<float>();
 
   int i = 0;
-  for (const auto& iter : resource.values()) {
+  for (const auto& iter : accumulator_resource.values()) {
     partition_ids(i) = iter.first.partition_id;
     feature_ids(i, 0) = iter.first.feature_id;
     feature_ids(i, 1) = iter.first.dimension;
@@ -171,8 +171,9 @@ void SerializeScalarAccumulatorToOutput(
 }
 
 void SerializeTensorAccumulatorToOutput(
-    const StatsAccumulatorTensorResource& resource, OpKernelContext* context) {
-  int64 num_slots = resource.values().size();
+    const StatsAccumulatorTensorResource& accumulator_resource,
+    OpKernelContext* context) {
+  int64 num_slots = accumulator_resource.values().size();
   Tensor* partition_ids_t = nullptr;
   OP_REQUIRES_OK(context, context->allocate_output("output_partition_ids",
                                                    TensorShape({num_slots}),
@@ -185,7 +186,7 @@ void SerializeTensorAccumulatorToOutput(
                                                    &feature_ids_t));
   auto feature_ids = feature_ids_t->matrix<int64>();
 
-  TensorShape gradient_shape = resource.gradient_shape();
+  TensorShape gradient_shape = accumulator_resource.gradient_shape();
   int64 num_gradient_elements = gradient_shape.num_elements();
   gradient_shape.InsertDim(0, num_slots);
   Tensor* gradients_t = nullptr;
@@ -194,7 +195,7 @@ void SerializeTensorAccumulatorToOutput(
                                           &gradients_t));
   auto gradients = gradients_t->flat_outer_dims<float>();
 
-  TensorShape hessian_shape = resource.hessian_shape();
+  TensorShape hessian_shape = accumulator_resource.hessian_shape();
   int64 num_hessian_elements = hessian_shape.num_elements();
   hessian_shape.InsertDim(0, num_slots);
   Tensor* hessians_t = nullptr;
@@ -203,7 +204,7 @@ void SerializeTensorAccumulatorToOutput(
   auto hessians = hessians_t->flat_outer_dims<float>();
 
   int i = 0;
-  for (const auto& iter : resource.values()) {
+  for (const auto& iter : accumulator_resource.values()) {
     partition_ids(i) = iter.first.partition_id;
     feature_ids(i, 0) = iter.first.feature_id;
     feature_ids(i, 1) = iter.first.dimension;
@@ -219,10 +220,11 @@ void SerializeTensorAccumulatorToOutput(
 }
 
 void AddToScalarAccumulator(
-    const core::RefCountPtr<StatsAccumulatorScalarResource>& resource,
+    StatsAccumulatorScalarResource* accumulator_resource,
     const Tensor& partition_ids_t, const Tensor& feature_ids_t,
     const Tensor& gradients_t, const Tensor& hessians_t) {
-  resource->set_num_updates(resource->num_updates() + 1);
+  accumulator_resource->set_num_updates(accumulator_resource->num_updates() +
+                                        1);
   const TensorShape& partition_ids_shape = partition_ids_t.shape();
   const auto& partition_ids = partition_ids_t.vec<int32>();
   const auto& feature_ids_and_dimensions = feature_ids_t.matrix<int64>();
@@ -230,7 +232,7 @@ void AddToScalarAccumulator(
   const auto& hessians = hessians_t.vec<float>();
 
   int64 num_updates = partition_ids_shape.dim_size(0);
-  auto stats_map = resource->mutable_values();
+  auto stats_map = accumulator_resource->mutable_values();
   for (int64 i = 0; i < num_updates; ++i) {
     const auto key =
         PartitionKey(partition_ids(i), feature_ids_and_dimensions(i, 0),
@@ -246,7 +248,7 @@ void AddToScalarAccumulator(
 }
 
 void AddToScalarAccumulator(
-    const core::RefCountPtr<StatsAccumulatorScalarResource>& resource,
+    StatsAccumulatorScalarResource* accumulator_resource,
     OpKernelContext* context) {
   const Tensor* partition_ids_t;
   OP_REQUIRES_OK(context, context->input("partition_ids", &partition_ids_t));
@@ -256,16 +258,17 @@ void AddToScalarAccumulator(
   OP_REQUIRES_OK(context, context->input("gradients", &gradients_t));
   const Tensor* hessians_t;
   OP_REQUIRES_OK(context, context->input("hessians", &hessians_t));
-  AddToScalarAccumulator(resource, *partition_ids_t, *feature_ids_t,
+  AddToScalarAccumulator(accumulator_resource, *partition_ids_t, *feature_ids_t,
                          *gradients_t, *hessians_t);
 }
 
 void AddToTensorAccumulator(
-    const core::RefCountPtr<StatsAccumulatorTensorResource>& resource,
+    StatsAccumulatorTensorResource* accumulator_resource,
     const Tensor& partition_ids_t, const Tensor& feature_ids_t,
     const Tensor& gradients_t, const Tensor& hessians_t,
     OpKernelContext* context) {
-  resource->set_num_updates(resource->num_updates() + 1);
+  accumulator_resource->set_num_updates(accumulator_resource->num_updates() +
+                                        1);
 
   const TensorShape& partition_ids_shape = partition_ids_t.shape();
   const auto& partition_ids = partition_ids_t.vec<int32>();
@@ -280,19 +283,19 @@ void AddToTensorAccumulator(
 
   // TODO(soroush): Move gradient and hessian shape check to ShapeFn.
   OP_REQUIRES(
-      context, gradients_shape == resource->gradient_shape(),
+      context, gradients_shape == accumulator_resource->gradient_shape(),
       errors::InvalidArgument(strings::StrCat(
           "Gradients dimensions must match: ", gradients_shape.DebugString(),
-          ", ", resource->gradient_shape().DebugString())));
+          ", ", accumulator_resource->gradient_shape().DebugString())));
 
   OP_REQUIRES(
-      context, hessians_shape == resource->hessian_shape(),
+      context, hessians_shape == accumulator_resource->hessian_shape(),
       errors::InvalidArgument(strings::StrCat(
           "Hessian dimensions must match: ", hessians_shape.DebugString(), ", ",
-          resource->hessian_shape().DebugString())));
+          accumulator_resource->hessian_shape().DebugString())));
 
   int64 num_updates = partition_ids_shape.dim_size(0);
-  auto stats_map = resource->mutable_values();
+  auto stats_map = accumulator_resource->mutable_values();
   for (int64 i = 0; i < num_updates; ++i) {
     const auto key =
         PartitionKey(partition_ids(i), feature_ids_and_dimensions(i, 0),
@@ -322,7 +325,7 @@ void AddToTensorAccumulator(
 }
 
 void AddToTensorAccumulator(
-    const core::RefCountPtr<StatsAccumulatorTensorResource>& resource,
+    StatsAccumulatorTensorResource* accumulator_resource,
     OpKernelContext* context) {
   const Tensor* partition_ids_t;
   OP_REQUIRES_OK(context, context->input("partition_ids", &partition_ids_t));
@@ -332,7 +335,7 @@ void AddToTensorAccumulator(
   OP_REQUIRES_OK(context, context->input("gradients", &gradients_t));
   const Tensor* hessians_t;
   OP_REQUIRES_OK(context, context->input("hessians", &hessians_t));
-  AddToTensorAccumulator(resource, *partition_ids_t, *feature_ids_t,
+  AddToTensorAccumulator(accumulator_resource, *partition_ids_t, *feature_ids_t,
                          *gradients_t, *hessians_t, context);
 }
 
@@ -449,18 +452,20 @@ class StatsAccumulatorScalarAddOp : public OpKernel {
                 resource_handle_list[resource_handle_idx]
                     .flat<ResourceHandle>()(0);
 
-            core::RefCountPtr<StatsAccumulatorScalarResource> resource;
-            OP_REQUIRES_OK(context, LookupResource(context, handle, &resource));
-            mutex_lock l(*resource->mutex());
+            StatsAccumulatorScalarResource* accumulator_resource;
+            OP_REQUIRES_OK(context, LookupResource(context, handle,
+                                                   &accumulator_resource));
+            mutex_lock l(*accumulator_resource->mutex());
+            core::ScopedUnref unref_me(accumulator_resource);
 
             // If the stamp is invalid we drop the update.
-            if (!resource->is_stamp_valid(stamp_token)) {
+            if (!accumulator_resource->is_stamp_valid(stamp_token)) {
               VLOG(1) << "Invalid stamp token in StatsAccumulatorScalarAddOp. "
                       << "Passed stamp token: " << stamp_token << " "
-                      << "Current token: " << resource->stamp();
+                      << "Current token: " << accumulator_resource->stamp();
               return;
             }
-            AddToScalarAccumulator(resource,
+            AddToScalarAccumulator(accumulator_resource,
                                    partition_ids_list[resource_handle_idx],
                                    feature_ids_list[resource_handle_idx],
                                    gradients_list[resource_handle_idx],
@@ -512,18 +517,20 @@ class StatsAccumulatorTensorAddOp : public OpKernel {
                 resource_handle_list[resource_handle_idx]
                     .flat<ResourceHandle>()(0);
 
-            core::RefCountPtr<StatsAccumulatorTensorResource> resource;
-            OP_REQUIRES_OK(context, LookupResource(context, handle, &resource));
-            mutex_lock l(*resource->mutex());
+            StatsAccumulatorTensorResource* accumulator_resource;
+            OP_REQUIRES_OK(context, LookupResource(context, handle,
+                                                   &accumulator_resource));
+            mutex_lock l(*accumulator_resource->mutex());
+            core::ScopedUnref unref_me(accumulator_resource);
 
             // If the stamp is invalid we drop the update.
-            if (!resource->is_stamp_valid(stamp_token)) {
+            if (!accumulator_resource->is_stamp_valid(stamp_token)) {
               VLOG(1) << "Invalid stamp token in StatsAccumulatorScalarAddOp. "
                       << "Passed stamp token: " << stamp_token << " "
-                      << "Current token: " << resource->stamp();
+                      << "Current token: " << accumulator_resource->stamp();
               return;
             }
-            AddToTensorAccumulator(resource,
+            AddToTensorAccumulator(accumulator_resource,
                                    partition_ids_list[resource_handle_idx],
                                    feature_ids_list[resource_handle_idx],
                                    gradients_list[resource_handle_idx],
@@ -542,10 +549,11 @@ class StatsAccumulatorScalarFlushOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorScalarResource> resource;
+    StatsAccumulatorScalarResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
 
     const Tensor* stamp_token_t;
     OP_REQUIRES_OK(context, context->input(kStampTokenName, &stamp_token_t));
@@ -554,7 +562,7 @@ class StatsAccumulatorScalarFlushOp : public OpKernel {
     // If the stamp is invalid we restart the PS. It shouldn't happen since
     // only Chief should call this function and chief is guaranteed to be in
     // a consistent state.
-    CHECK(resource->is_stamp_valid(stamp_token));
+    CHECK(accumulator_resource->is_stamp_valid(stamp_token));
 
     const Tensor* next_stamp_token_t;
     OP_REQUIRES_OK(context,
@@ -562,15 +570,15 @@ class StatsAccumulatorScalarFlushOp : public OpKernel {
     int64 next_stamp_token = next_stamp_token_t->scalar<int64>()();
     CHECK(stamp_token != next_stamp_token);
 
-    SerializeScalarAccumulatorToOutput(*resource, context);
+    SerializeScalarAccumulatorToOutput(*accumulator_resource, context);
     Tensor* num_updates_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("num_updates", TensorShape({}),
                                             &num_updates_t));
-    num_updates_t->scalar<int64>()() = resource->num_updates();
+    num_updates_t->scalar<int64>()() = accumulator_resource->num_updates();
 
-    resource->Clear();
-    resource->set_stamp(next_stamp_token);
+    accumulator_resource->Clear();
+    accumulator_resource->set_stamp(next_stamp_token);
   }
 };
 
@@ -583,10 +591,11 @@ class StatsAccumulatorTensorFlushOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorTensorResource> resource;
+    StatsAccumulatorTensorResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
 
     const Tensor* stamp_token_t;
     OP_REQUIRES_OK(context, context->input(kStampTokenName, &stamp_token_t));
@@ -600,16 +609,16 @@ class StatsAccumulatorTensorFlushOp : public OpKernel {
     // If the stamp is invalid we restart the PS. It shouldn't happen since
     // only Chief should call this function and chief is guaranteed to be in
     // a consistent state.
-    CHECK(resource->is_stamp_valid(stamp_token));
+    CHECK(accumulator_resource->is_stamp_valid(stamp_token));
     CHECK(stamp_token != next_stamp_token);
-    SerializeTensorAccumulatorToOutput(*resource, context);
+    SerializeTensorAccumulatorToOutput(*accumulator_resource, context);
     Tensor* num_updates_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("num_updates", TensorShape({}),
                                             &num_updates_t));
-    num_updates_t->scalar<int64>()() = resource->num_updates();
-    resource->Clear();
-    resource->set_stamp(next_stamp_token);
+    num_updates_t->scalar<int64>()() = accumulator_resource->num_updates();
+    accumulator_resource->Clear();
+    accumulator_resource->set_stamp(next_stamp_token);
   }
 };
 
@@ -622,21 +631,22 @@ class StatsAccumulatorScalarDeserializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorScalarResource> resource;
+    StatsAccumulatorScalarResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
 
     // Check the stamp token.
     const Tensor* stamp_token_t;
     OP_REQUIRES_OK(context, context->input(kStampTokenName, &stamp_token_t));
     int64 stamp_token = stamp_token_t->scalar<int64>()();
-    resource->Clear();
-    resource->set_stamp(stamp_token);
-    AddToScalarAccumulator(resource, context);
+    accumulator_resource->Clear();
+    accumulator_resource->set_stamp(stamp_token);
+    AddToScalarAccumulator(accumulator_resource, context);
     const Tensor* num_updates_t;
     OP_REQUIRES_OK(context, context->input("num_updates", &num_updates_t));
-    resource->set_num_updates(num_updates_t->scalar<int64>()());
+    accumulator_resource->set_num_updates(num_updates_t->scalar<int64>()());
   }
 };
 
@@ -650,21 +660,22 @@ class StatsAccumulatorTensorDeserializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorTensorResource> resource;
+    StatsAccumulatorTensorResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
 
     // Check the stamp token.
     const Tensor* stamp_token_t;
     OP_REQUIRES_OK(context, context->input(kStampTokenName, &stamp_token_t));
     int64 stamp_token = stamp_token_t->scalar<int64>()();
-    resource->Clear();
-    resource->set_stamp(stamp_token);
-    AddToTensorAccumulator(resource, context);
+    accumulator_resource->Clear();
+    accumulator_resource->set_stamp(stamp_token);
+    AddToTensorAccumulator(accumulator_resource, context);
     const Tensor* num_updates_t;
     OP_REQUIRES_OK(context, context->input("num_updates", &num_updates_t));
-    resource->set_num_updates(num_updates_t->scalar<int64>()());
+    accumulator_resource->set_num_updates(num_updates_t->scalar<int64>()());
   }
 };
 
@@ -678,22 +689,23 @@ class StatsAccumulatorScalarSerializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorScalarResource> resource;
+    StatsAccumulatorScalarResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
-    SerializeScalarAccumulatorToOutput(*resource, context);
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
+    SerializeScalarAccumulatorToOutput(*accumulator_resource, context);
     Tensor* stamp_token_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("stamp_token", TensorShape({}),
                                             &stamp_token_t));
-    stamp_token_t->scalar<int64>()() = resource->stamp();
+    stamp_token_t->scalar<int64>()() = accumulator_resource->stamp();
 
     Tensor* num_updates_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("num_updates", TensorShape({}),
                                             &num_updates_t));
-    num_updates_t->scalar<int64>()() = resource->num_updates();
+    num_updates_t->scalar<int64>()() = accumulator_resource->num_updates();
   }
 };
 
@@ -707,22 +719,23 @@ class StatsAccumulatorTensorSerializeOp : public OpKernel {
       : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    core::RefCountPtr<StatsAccumulatorTensorResource> resource;
+    StatsAccumulatorTensorResource* accumulator_resource;
     OP_REQUIRES_OK(context, LookupResource(context, HandleFromInput(context, 0),
-                                           &resource));
-    mutex_lock l(*resource->mutex());
-    SerializeTensorAccumulatorToOutput(*resource, context);
+                                           &accumulator_resource));
+    mutex_lock l(*accumulator_resource->mutex());
+    core::ScopedUnref unref_me(accumulator_resource);
+    SerializeTensorAccumulatorToOutput(*accumulator_resource, context);
     Tensor* stamp_token_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("stamp_token", TensorShape({}),
                                             &stamp_token_t));
-    stamp_token_t->scalar<int64>()() = resource->stamp();
+    stamp_token_t->scalar<int64>()() = accumulator_resource->stamp();
 
     Tensor* num_updates_t = nullptr;
     OP_REQUIRES_OK(context,
                    context->allocate_output("num_updates", TensorShape({}),
                                             &num_updates_t));
-    num_updates_t->scalar<int64>()() = resource->num_updates();
+    num_updates_t->scalar<int64>()() = accumulator_resource->num_updates();
   }
 };
 
@@ -738,11 +751,12 @@ class StatsAccumulatorScalarMakeSummaryOp : public OpKernel {
   void Compute(OpKernelContext* context) override {
     TensorShape gradient_shape = TensorShape({});
     TensorShape hessian_shape = TensorShape({});
-    core::RefCountPtr<StatsAccumulatorScalarResource> resource(
-        new StatsAccumulatorScalarResource(gradient_shape, hessian_shape));
+    StatsAccumulatorScalarResource* accumulator_resource =
+        new StatsAccumulatorScalarResource(gradient_shape, hessian_shape);
+    core::ScopedUnref unref_me(accumulator_resource);
     // Check the stamp token.
-    AddToScalarAccumulator(resource, context);
-    SerializeScalarAccumulatorToOutput(*resource, context);
+    AddToScalarAccumulator(accumulator_resource, context);
+    SerializeScalarAccumulatorToOutput(*accumulator_resource, context);
   }
 };
 
@@ -766,11 +780,12 @@ class StatsAccumulatorTensorMakeSummaryOp : public OpKernel {
     TensorShape hessians_shape = hessians_t->shape();
     hessians_shape.RemoveDim(0);
 
-    core::RefCountPtr<StatsAccumulatorTensorResource> resource(
-        new StatsAccumulatorTensorResource(gradients_shape, hessians_shape));
+    StatsAccumulatorTensorResource* accumulator_resource =
+        new StatsAccumulatorTensorResource(gradients_shape, hessians_shape);
+    core::ScopedUnref unref_me(accumulator_resource);
     // Check the stamp token.
-    AddToTensorAccumulator(resource, context);
-    SerializeTensorAccumulatorToOutput(*resource, context);
+    AddToTensorAccumulator(accumulator_resource, context);
+    SerializeTensorAccumulatorToOutput(*accumulator_resource, context);
   }
 };
 

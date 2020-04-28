@@ -57,7 +57,6 @@ string Tile::ToString() const {
     *layout.add_tiles() = Tile::CreateFromProto(tile_proto);
   }
   layout.set_element_size_in_bits(proto.element_size_in_bits());
-  layout.set_memory_space(proto.memory_space());
   return layout;
 }
 
@@ -73,7 +72,6 @@ LayoutProto Layout::ToProto() const {
     *proto.add_tiles() = tile.ToProto();
   }
   proto.set_element_size_in_bits(element_size_in_bits());
-  proto.set_memory_space(memory_space_);
   return proto;
 }
 
@@ -89,9 +87,6 @@ string Layout::ToString() const {
     if (element_size_in_bits() != 0) {
       absl::StrAppend(&colon_string, "E(", element_size_in_bits(), ")");
     }
-    if (memory_space() != 0) {
-      absl::StrAppend(&colon_string, "S(", memory_space(), ")");
-    }
     return absl::StrCat("{", absl::StrJoin(minor_to_major(), ","),
                         colon_string.empty() ? "" : ":", colon_string, "}");
   } else {
@@ -101,13 +96,8 @@ string Layout::ToString() const {
 }
 
 bool Layout::Equal::operator()(const Layout& lhs, const Layout& rhs) {
-  if (lhs.format() != rhs.format()) {
-    return false;
-  }
-  if (lhs.format() == DENSE && lhs.minor_to_major() != rhs.minor_to_major()) {
-    return false;
-  }
-  if (lhs.format() == SPARSE &&
+  if (lhs.format() != rhs.format() ||
+      lhs.minor_to_major() != rhs.minor_to_major() ||
       lhs.max_sparse_elements() != rhs.max_sparse_elements()) {
     return false;
   }
@@ -116,9 +106,6 @@ bool Layout::Equal::operator()(const Layout& lhs, const Layout& rhs) {
   }
   if (!ignore_element_size_ &&
       lhs.element_size_in_bits() != rhs.element_size_in_bits()) {
-    return false;
-  }
-  if (!ignore_memory_space_ && lhs.memory_space() != rhs.memory_space()) {
     return false;
   }
   return true;

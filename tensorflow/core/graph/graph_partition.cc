@@ -40,7 +40,6 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/util/device_name_utils.h"
-#include "tensorflow/core/util/dump_graph.h"
 
 namespace tensorflow {
 
@@ -227,7 +226,7 @@ NodeDef* AddSend(const PartitionOptions& opts, const GraphInfo& g_info,
     }
 
     NodeDef* cast = gdef->add_node();
-    *status = cast_builder.Finalize(cast, /*consume=*/true);
+    *status = cast_builder.Finalize(cast);
     if (!status->ok()) return nullptr;
 
     // Connect the Send op to the cast.
@@ -244,7 +243,7 @@ NodeDef* AddSend(const PartitionOptions& opts, const GraphInfo& g_info,
     send_builder.Attr("_start_time", start_time);
   }
   NodeDef* send = gdef->add_node();
-  *status = send_builder.Finalize(send, /*consume=*/true);
+  *status = send_builder.Finalize(send);
   return send;
 }
 
@@ -263,34 +262,11 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
   }
 
   // host_memory = true iff we need to use HostRecv/HostCast.
-  // Also log the introduction of the send-recv pair, for performance debugging.
   bool host_memory = false;
   if (!edge->IsControlEdge()) {
     auto dst_it = g_info.input_types.find({dst->id(), dst_port});
     DCHECK(dst_it != g_info.input_types.end());
     host_memory = (dst_it->second == HOST_MEMORY);
-    bool src_host_memory = false;
-    if (VLOG_IS_ON(1)) {
-      const int src_port = edge->src_output();
-      auto src_it = g_info.output_types.find({src->id(), src_port});
-      DCHECK(src_it != g_info.output_types.end());
-      src_host_memory = (src_it->second == HOST_MEMORY);
-    }
-    VLOG(1) << "Receiving data"
-            << " from " << src->name() << " (" << src->type_string() << ")"
-            << " on " << src->assigned_device_name() << " in "
-            << (src_host_memory ? "host memory" : "device memory") << " for "
-            << dst->name() << " (" << dst->type_string() << ")"
-            << " on " << dst->assigned_device_name() << " in "
-            << (host_memory ? "host memory" : "device memory");
-  } else {
-    // Log control-edge transfers too, but don't mention memory space since it's
-    // irrelevant.
-    VLOG(1) << "Receiving control"
-            << " from " << src->name() << " (" << src->type_string() << ")"
-            << " on " << src->assigned_device_name() << " for " << dst->name()
-            << " (" << dst->type_string() << ")"
-            << " on " << dst->assigned_device_name();
   }
 
   // Add the recv node.
@@ -301,7 +277,7 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
   recv_builder.Device(dst->assigned_device_name())
       .Attr("tensor_type", cast_dtype);
   NodeDef* recv = gdef->add_node();
-  *status = recv_builder.Finalize(recv, /*consume=*/true);
+  *status = recv_builder.Finalize(recv);
   if (!status->ok()) return nullptr;
   *real_recv = recv;
 
@@ -314,7 +290,7 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
     cast_builder.Device(dst->assigned_device_name())
         .Input(recv->name(), 0, cast_dtype);
     NodeDef* cast = gdef->add_node();
-    *status = cast_builder.Finalize(cast, /*consume=*/true);
+    *status = cast_builder.Finalize(cast);
     if (!status->ok()) return nullptr;
     return cast;
   } else if (edge->IsControlEdge()) {
@@ -324,7 +300,7 @@ NodeDef* AddRecv(const PartitionOptions& opts, const GraphInfo& g_info,
     id_builder.Device(dst->assigned_device_name())
         .Input(recv->name(), 0, cast_dtype);
     NodeDef* id = gdef->add_node();
-    *status = id_builder.Finalize(id, /*consume=*/true);
+    *status = id_builder.Finalize(id);
     if (!status->ok()) return nullptr;
     return id;
   } else {
@@ -341,7 +317,7 @@ NodeDef* AddDummyConst(const PartitionOptions& opts, GraphDef* gdef,
                 .Device(src->assigned_device_name())
                 .Attr("dtype", DT_FLOAT)
                 .Attr("value", tensor)
-                .Finalize(result, /*consume=*/true);
+                .Finalize(result);
   return result;
 }
 
@@ -354,7 +330,7 @@ NodeDef* AddControlTrigger(const PartitionOptions& opts, GraphDef* gdef,
                            "ControlTrigger")
                 .Device(assigned_device_name)
                 .Attr("_start_time", starttime)
-                .Finalize(result, /*consume=*/true);
+                .Finalize(result);
   return result;
 }
 
@@ -412,7 +388,7 @@ string ControlLoopName(const string& name) {
 
 bool IsControlLoop(const Node* node) {
   const string& name = node->name();
-  return absl::StartsWith(name, "_cloop");
+  return str_util::StartsWith(name, "_cloop");
 }
 
 // An enter node for control flow.
@@ -424,7 +400,7 @@ Node* AddControlEnter(Graph* g, const string& node_name,
   node_builder.Attr("frame_name", frame_name);
   node_builder.Attr("parallel_iterations", parallel_iterations);
   Node* res_node;
-  *status = node_builder.Finalize(g, &res_node, /*consume=*/true);
+  *status = node_builder.Finalize(g, &res_node);
   if (!status->ok()) return nullptr;
   res_node->set_assigned_device_name(device_name);
   return res_node;
@@ -437,7 +413,7 @@ Node* AddControlMerge(const string& in_name1, const string& in_name2, Graph* g,
   NodeBuilder node_builder(node_name, "Merge", g->op_registry());
   node_builder.Input({{in_name1, 0, DT_FLOAT}, {in_name2, 0, DT_FLOAT}});
   Node* res_node;
-  *status = node_builder.Finalize(g, &res_node, /*consume=*/true);
+  *status = node_builder.Finalize(g, &res_node);
   if (!status->ok()) return nullptr;
   res_node->set_assigned_device_name(device_name);
   return res_node;
@@ -947,13 +923,13 @@ void SetIncarnation(const PartitionOptions& opts, NodeDef* ndef) {
     // Not related to send/recv.
     return;
   }
-  const string& send_device = GetNodeAttrString(*ndef, "send_device");
-  if (send_device.empty()) {
+  string send_device;
+  if (!GetNodeAttr(*ndef, "send_device", &send_device).ok()) {
     // No known send_device. The runtime will detect it later.
     return;
   }
   int64 incarnation = PartitionOptions::kIllegalIncarnation;
-  if (!TryGetNodeAttr(*ndef, "send_device_incarnation", &incarnation) ||
+  if (!GetNodeAttr(*ndef, "send_device_incarnation", &incarnation).ok() ||
       (incarnation == PartitionOptions::kIllegalIncarnation)) {
     incarnation = opts.get_incarnation(send_device);
     SetAttrValue(incarnation,
@@ -1238,14 +1214,6 @@ Status Partition(const PartitionOptions& opts, Graph* g,
 
   VLOG(1) << "Added send/recv: controls=" << num_control
           << ", data=" << num_data;
-  if (VLOG_IS_ON(2)) {
-    for (auto& it : *partitions) {
-      GraphDef* gdef = &it.second;
-      DumpGraphDefToFile(strings::StrCat("partition_", it.first, "_",
-                                         reinterpret_cast<uintptr_t>(gdef)),
-                         *gdef);
-    }
-  }
   return Status::OK();
 }
 

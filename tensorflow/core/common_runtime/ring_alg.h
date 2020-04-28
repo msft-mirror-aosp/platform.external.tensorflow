@@ -42,8 +42,7 @@ class RingAlg : public CollectiveImplementationInterface {
   Status InitializeCollectiveContext(CollectiveContext* col_ctx) override;
 
   // No-op for ring alg.
-  Status InitializeCollectiveGroupRuntimeDetails(
-      CollGroupRuntimeDetails*) override {
+  Status InitializeInstanceBeforeGroupDiscovery(CollectiveParams*) override {
     return Status::OK();
   }
 

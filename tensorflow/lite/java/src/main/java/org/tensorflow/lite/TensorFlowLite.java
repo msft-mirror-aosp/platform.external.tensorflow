@@ -23,21 +23,8 @@ public final class TensorFlowLite {
 
   private TensorFlowLite() {}
 
-  /**
-   * Returns the version of the underlying TensorFlowLite model schema.
-   *
-   * @deprecated Prefer using {@link #runtimeVersion() or #schemaVersion()}.
-   */
-  @Deprecated
-  public static String version() {
-    return schemaVersion();
-  }
-
   /** Returns the version of the underlying TensorFlowLite runtime. */
-  public static native String runtimeVersion();
-
-  /** Returns the version of the underlying TensorFlowLite model schema. */
-  public static native String schemaVersion();
+  public static native String version();
 
   /**
    * Initialize tensorflow's libraries. This will throw an exception if used when TensorFlow isn't

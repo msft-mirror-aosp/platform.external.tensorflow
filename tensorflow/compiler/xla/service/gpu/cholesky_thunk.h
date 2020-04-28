@@ -51,7 +51,9 @@ class CholeskyThunk : public Thunk {
   CholeskyThunk(const CholeskyThunk&) = delete;
   CholeskyThunk& operator=(const CholeskyThunk&) = delete;
 
-  Status ExecuteOnStream(const ExecuteParams& params) override;
+  Status ExecuteOnStream(const BufferAllocations& buffer_allocations,
+                         se::Stream* stream,
+                         HloExecutionProfiler* profiler) override;
 
  private:
   se::blas::UpperLower uplo_;

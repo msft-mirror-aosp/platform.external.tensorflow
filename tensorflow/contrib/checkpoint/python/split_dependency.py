@@ -27,14 +27,13 @@ from tensorflow.python.training.tracking import base as trackable
 class _CallbackSaveable(saver_lib.BaseSaverBuilder.SaveableObject):
   """Wraps save and restore callbacks as a `SaveableObject`."""
 
-  def __init__(self, name, dtype, device, save_callback, restore_callback):
+  def __init__(self, name, dtype, save_callback, restore_callback):
     self._restore_callback = restore_callback
     spec = saver_lib.BaseSaverBuilder.SaveSpec(
         tensor=save_callback,
         slice_spec="",
         name=name,
-        dtype=dtype,
-        device=device)
+        dtype=dtype)
     super(_CallbackSaveable, self).__init__(
         save_callback, [spec], name)
 
@@ -47,13 +46,12 @@ class _CallbackSaveable(saver_lib.BaseSaverBuilder.SaveableObject):
 class _SplitDependency(trackable.Trackable):
   """Looks like a regular variable while synchronizing save/restores."""
 
-  def __init__(self, save_buffer, restore_buffer, name, dtype, device,
-               num_components, fill_save_buffer_fn, consume_restore_buffer_fn):
+  def __init__(self, save_buffer, restore_buffer, name, dtype, num_components,
+               fill_save_buffer_fn, consume_restore_buffer_fn):
     self._save_buffer = save_buffer
     self._restore_buffer = restore_buffer
     self._name = name
     self._dtype = dtype
-    self._device = device
     self._num_components = num_components
     self._fill_save_buffer_fn = fill_save_buffer_fn
     self._consume_restore_buffer_fn = consume_restore_buffer_fn
@@ -88,15 +86,13 @@ class _SplitDependency(trackable.Trackable):
         trackable.VARIABLE_VALUE_KEY:
         functools.partial(_CallbackSaveable,
                           dtype=self._dtype,
-                          device=self._device,
                           save_callback=self._save,
                           restore_callback=self._restore)
     }
 
 
 def split_dependency(component_names, component_dtypes,
-                     fill_save_buffer_fn, consume_restore_buffer_fn,
-                     device):
+                     fill_save_buffer_fn, consume_restore_buffer_fn):
   """Creates multiple dependencies with a synchronized save/restore.
 
   Useful when a single op produces `Tensor`s which should each be saved under
@@ -119,7 +115,6 @@ def split_dependency(component_names, component_dtypes,
       `component_names` as keys mapping to restored individual `Tensor`s and
       returns a restore op (or if executing eagerly, runs the restoration and
       may return `None`).
-    device: The device on which to run save and restore operations.
 
   Returns:
     A dictionary mapping from names to Trackable objects. If one is
@@ -135,7 +130,6 @@ def split_dependency(component_names, component_dtypes,
         restore_buffer=restore_buffer,
         name=name,
         dtype=dtype,
-        device=device,
         num_components=len(component_names),
         fill_save_buffer_fn=fill_save_buffer_fn,
         consume_restore_buffer_fn=consume_restore_buffer_fn)

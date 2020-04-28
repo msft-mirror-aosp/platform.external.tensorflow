@@ -33,9 +33,8 @@ def ignore_errors():
   ```python
   dataset = tf.data.Dataset.from_tensor_slices([1., 2., 0., 4.])
 
-  # Computing `tf.debugging.check_numerics(1. / 0.)` will raise an
-  InvalidArgumentError.
-  dataset = dataset.map(lambda x: tf.debugging.check_numerics(1. / x, "error"))
+  # Computing `tf.check_numerics(1. / 0.)` will raise an InvalidArgumentError.
+  dataset = dataset.map(lambda x: tf.check_numerics(1. / x, "error"))
 
   # Using `ignore_errors()` will drop the element that causes an error.
   dataset =
@@ -60,7 +59,7 @@ class _IgnoreErrorsDataset(dataset_ops.UnaryUnchangedStructureDataset):
     """See `Dataset.ignore_errors()` for details."""
     self._input_dataset = input_dataset
     variant_tensor = (
-        gen_experimental_dataset_ops.ignore_errors_dataset(
+        gen_experimental_dataset_ops.experimental_ignore_errors_dataset(
             self._input_dataset._variant_tensor,  # pylint: disable=protected-access
-            **self._flat_structure))
+            **dataset_ops.flat_structure(self)))
     super(_IgnoreErrorsDataset, self).__init__(input_dataset, variant_tensor)
