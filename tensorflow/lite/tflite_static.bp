@@ -202,4 +202,9 @@ cc_library_static {
         "-Wno-visibility",
     ],
     stl: "libc++_static",
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.extservices",
+    ],
 }
