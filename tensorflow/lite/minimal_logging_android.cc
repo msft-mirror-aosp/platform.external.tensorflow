@@ -42,7 +42,8 @@ void MinimalLogger::LogFormatted(LogSeverity severity, const char* format,
   // First log to Android's explicit log(cat) API.
   va_list args_for_android_log;
   va_copy(args_for_android_log, args);
-  __android_log_vprint(GetPlatformSeverity(severity), "tflite", format, args);
+  __android_log_vprint(GetPlatformSeverity(severity), "tflite", format,
+      args_for_android_log);
   va_end(args_for_android_log);
 
   // Also print to stderr for standard console applications.
