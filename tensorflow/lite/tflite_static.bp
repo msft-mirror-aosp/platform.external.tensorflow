@@ -171,7 +171,7 @@ cc_library_static {
         "external/eigen",
         "external/flatbuffers/include",
         "external/gemmlowp",
-        "external/libtextclassifier",
+        "external/libtextclassifier/native/",
         "external/tensorflow",
     ],
     whole_static_libs: [
@@ -202,4 +202,9 @@ cc_library_static {
         "-Wno-visibility",
     ],
     stl: "libc++_static",
+
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.extservices",
+    ],
 }
