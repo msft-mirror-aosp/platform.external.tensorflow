@@ -16,6 +16,7 @@
 cc_library_static {
     name: "libtflite_static",
     sdk_version: "current",
+    min_sdk_version: "30",
     rtti: true,
     srcs: [
         "allocation.cc",
