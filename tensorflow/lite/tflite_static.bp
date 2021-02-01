@@ -15,6 +15,8 @@
 // Create a static version for apps to use.
 cc_library_static {
     name: "libtflite_static",
+    host_supported: true,
+    vendor_available: true,
     sdk_version: "current",
     min_sdk_version: "30",
     rtti: true,
@@ -168,6 +170,7 @@ cc_library_static {
         "experimental/ruy/wait.cc",
         "tools/optimize/sparsity/format_converter.cc",
     ],
+    header_libs: ["liblog_headers"],
     include_dirs: [
         "external/eigen",
         "external/flatbuffers/include",
