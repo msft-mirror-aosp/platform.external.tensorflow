@@ -40,7 +40,8 @@ limitations under the License.
 #if !defined(__ANDROID__) || __ANDROID_API__ >= 28
 // Neither Apple nor Windows provide aligned_alloc.
 #if !defined(__APPLE__) && !defined(_WIN32)
-#define TFLITE_USE_STD_ALIGNED_ALLOC
+// TODO(miaowang): Re-enable std::aligned_alloc when it is avalaible in Android.
+// #define TFLITE_USE_STD_ALIGNED_ALLOC
 #endif
 #endif
 #endif

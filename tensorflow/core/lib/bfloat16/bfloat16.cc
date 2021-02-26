@@ -1,4 +1,4 @@
-/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,17 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_CORE_PLATFORM_CORD_H_
-#define TENSORFLOW_CORE_PLATFORM_CORD_H_
+#include "tensorflow/core/lib/bfloat16/bfloat16.h"
 
-#include "tensorflow/core/platform/platform.h"
+#include "third_party/eigen3/Eigen/Core"
 
-// No Cord implementation on Android
-// Include appropriate platform-dependent implementations
-//#if defined(PLATFORM_GOOGLE)
-//#include "tensorflow/core/platform/google/cord.h"
-//#else
-//#include "tensorflow/core/platform/default/cord.h"
-//#endif
+namespace tensorflow {
 
-#endif  // TENSORFLOW_CORE_PLATFORM_CORD_H_
+const uint16_t bfloat16::NAN_VALUE;
+const uint16_t bfloat16::ZERO_VALUE;
+
+B16_DEVICE_FUNC bfloat16::operator Eigen::half() const {
+  return static_cast<Eigen::half>(float(*this));
+}
+}  // end namespace tensorflow

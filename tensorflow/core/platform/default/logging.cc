@@ -41,11 +41,16 @@ limitations under the License.
 #include <queue>
 #include <unordered_map>
 
+#ifdef __ANDROID__
+#include <unistd.h>
+#endif
+
 namespace tensorflow {
 
 namespace internal {
 namespace {
 
+#ifdef TF_ANDROID_ENABLE_LOGSINK
 // This is an internal singleton class that manages the log sinks. It allows
 // adding and removing the log sinks, as well as handling sending log messages
 // to all the registered log sinks.
@@ -103,7 +108,6 @@ TFLogSinks& TFLogSinks::Instance() {
   static TFLogSinks* instance = new TFLogSinks();
   return *instance;
 }
-#endif  // TF_ANDROID_ENABLE_LOGSINK
 
 void TFLogSinks::Add(TFLogSink* sink) {
   assert(sink != nullptr && "The sink must not be a nullptr");
@@ -166,6 +170,7 @@ void TFLogSinks::SendToSink(TFLogSink& sink, const TFLogEntry& entry) {
   sink.Send(entry);
   sink.WaitTillSent();
 }
+#endif  // TF_ANDROID_ENABLE_LOGSINK
 
 int ParseInteger(const char* str, size_t size) {
   // Ideally we would use env_var / safe_strto64, but it is
@@ -253,14 +258,12 @@ VmoduleMap* VmodulesMapFromEnv() {
   return result;
 }
 
-#if !defined(PLATFORM_POSIX_ANDROID)
 bool EmitThreadIdFromEnv() {
   const char* tf_env_var_val = getenv("TF_CPP_LOG_THREAD_ID");
   return tf_env_var_val == nullptr
              ? false
              : ParseInteger(tf_env_var_val, strlen(tf_env_var_val)) != 0;
 }
-#endif
 
 }  // namespace
 
@@ -312,7 +315,26 @@ LogMessage::~LogMessage() {
 }
 
 void LogMessage::GenerateLogMessage() {
+#ifdef TF_ANDROID_ENABLE_LOGSINK
   TFLogSinks::Instance().Send(TFLogEntry(severity_, fname_, line_, str()));
+#else
+  static bool log_thread_id = EmitThreadIdFromEnv();
+  uint64 now_micros = EnvTime::NowMicros();
+  time_t now_seconds = static_cast<time_t>(now_micros / 1000000);
+  int32 micros_remainder = static_cast<int32>(now_micros % 1000000);
+  const size_t time_buffer_size = 30;
+  char time_buffer[time_buffer_size];
+  strftime(time_buffer, time_buffer_size, "%Y-%m-%d %H:%M:%S",
+           localtime(&now_seconds));
+  const size_t tid_buffer_size = 10;
+  char tid_buffer[tid_buffer_size] = "";
+  if (log_thread_id) {
+    snprintf(tid_buffer, sizeof(tid_buffer), " %7u", gettid());
+  }
+  // TODO(jeff,sanjay): Replace this with something that logs through the env.
+  fprintf(stderr, "%s.%06d: %c%s %s:%d] %s\n", time_buffer, micros_remainder,
+          "IWEF"[severity_], tid_buffer, fname_, line_, str().c_str());
+#endif  // TF_ANDROID_ENABLE_LOGSINK
 }
 
 int64 LogMessage::MaxVLogLevel() {
@@ -412,6 +434,7 @@ uint32 LossyIncrement(std::atomic<uint32>* counter) {
   counter->store(value + 1, std::memory_order_relaxed);
   return value;
 }
+
 }  // namespace
 
 bool LogEveryNState::ShouldLog(int n) {
@@ -450,6 +473,7 @@ bool LogEveryNSecState::ShouldLog(double seconds) {
 
 }  // namespace internal
 
+#ifdef TF_ANDROID_ENABLE_LOGSINK
 void TFAddLogSink(TFLogSink* sink) {
   internal::TFLogSinks::Instance().Add(sink);
 }
@@ -549,5 +573,6 @@ void TFDefaultLogSink::Send(const TFLogEntry& entry) {
           entry.ToString().c_str());
 #endif  // PLATFORM_POSIX_ANDROID
 }
+#endif  // TF_ANDROID_ENABLE_LOGSINK
 
 }  // namespace tensorflow

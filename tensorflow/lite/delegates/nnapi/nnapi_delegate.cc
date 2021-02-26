@@ -57,7 +57,7 @@ limitations under the License.
 #include "tensorflow/lite/nnapi/nnapi_implementation.h"
 #include "tensorflow/lite/nnapi/nnapi_util.h"
 #include "tensorflow/lite/util.h"
-#include <farmhash.h>
+#include "utils/hash/farmhash.h"
 
 namespace tflite {
 namespace {
@@ -3665,7 +3665,7 @@ TfLiteStatus NNAPIDelegateKernel::Init(TfLiteContext* context,
     // Using farmhash fingerprint instead of std::hash, as the latter is not
     // guaranteed to be stable across program invocations.
     token_parts[0] =
-        ::util::Fingerprint64(model_token, std::strlen(model_token));
+        farmhash::Fingerprint64(model_token, std::strlen(model_token));
     // Create bits from params->nodes_to_replace.
     token_parts[1] = GetHash(params->nodes_to_replace);
     // Create bits from params->input_tensors. These include the input tensor

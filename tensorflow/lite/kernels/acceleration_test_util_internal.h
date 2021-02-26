@@ -18,12 +18,10 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <iterator>
 #include <string>
 #include <vector>
-
-#include "absl/types/optional.h"
-#include "re2/re2.h"
 
 namespace tflite {
 
@@ -93,7 +91,7 @@ std::optional<T> GetAccelerationTestParam(std::string test_id) {
       [&test_id](ConfigurationEntry<T> elem) { return elem.Matches(test_id); });
   if (test_config_iter != test_config->end() &&
       !test_config_iter->IsDenylistEntry()) {
-    return absl::optional<T>(test_config_iter->TestConfig());
+    return std::optional<T>(test_config_iter->TestConfig());
   } else {
     return std::optional<T>();
   }

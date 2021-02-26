@@ -311,7 +311,8 @@ BuiltinOpResolver::BuiltinOpResolver() {
              /* max_version = */ 3);
   AddBuiltin(BuiltinOperator_CALL_ONCE,
              tflite::ops::builtin::Register_CALL_ONCE());
-  AddBuiltin(BuiltinOperator_RFFT2D, Register_RFFT2D());
+  // TODO: reenable once fft2d is imported to Android
+  //AddBuiltin(BuiltinOperator_RFFT2D, Register_RFFT2D());
   AddBuiltin(BuiltinOperator_CONV_3D, Register_CONV_3D());
   AddBuiltin(BuiltinOperator_IMAG, Register_IMAG());
   AddBuiltin(BuiltinOperator_REAL, Register_REAL());

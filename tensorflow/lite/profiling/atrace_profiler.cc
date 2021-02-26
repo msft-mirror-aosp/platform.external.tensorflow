@@ -21,7 +21,7 @@ limitations under the License.
 
 #include <type_traits>
 
-#include "absl/strings/str_cat.h"
+#include <string>
 
 namespace tflite {
 namespace profiling {
@@ -71,8 +71,9 @@ class ATraceProfiler : public tflite::Profiler {
       // Regardless the 'event_type', we encode the perfetto event name as
       // tag@event_metadata1/event_metadata2. In case of OPERATOR_INVOKE_EVENT,
       // the perfetto event name will be op_name@node_index/subgraph_index
-      std::string trace_event_tag =
-          absl::StrCat(tag, "@", event_metadata1, "/", event_metadata2);
+      std::string trace_event_tag = std::string(tag) + "@" +
+                                    std::to_string(event_metadata1) + "/" +
+                                    std::to_string(event_metadata2);
       atrace_begin_section_(trace_event_tag.c_str());
     }
     return 0;

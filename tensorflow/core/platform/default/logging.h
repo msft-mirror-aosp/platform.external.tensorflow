@@ -544,9 +544,9 @@ class TFDefaultLogSink : public TFLogSink {
 // Add or remove a `LogSink` as a consumer of logging data.  Thread-safe.
 void TFAddLogSink(TFLogSink* sink);
 void TFRemoveLogSink(TFLogSink* sink);
-
 // Get all the log sinks.  Thread-safe.
 std::vector<TFLogSink*> TFGetLogSinks();
+#endif  // TF_ANDROID_ENABLE_LOGSINK
 
 }  // namespace tensorflow
 
