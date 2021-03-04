@@ -12,8 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package {
+    // See: http://go/android-license-faq
+    // A large-scale-change added 'default_applicable_licenses' to import
+    // all of the 'license_kinds' from "external_tensorflow_license"
+    // to get the below license kinds:
+    //   SPDX-license-identifier-Apache-2.0
+    //   SPDX-license-identifier-MIT
+    default_applicable_licenses: ["external_tensorflow_license"],
+}
+
 cc_defaults {
     name: "tflite_defaults",
+    vendor_available: true,
+    host_supported: true,
     header_libs: [
         "tensorflow_headers",
     ],
@@ -95,6 +107,7 @@ cc_library_static {
     header_libs: [
         "libeigen",
         "flatbuffer_headers",
+        "libbase_headers",
         "gemmlowp_headers",
     ],
     cflags: [
@@ -114,6 +127,7 @@ cc_library_shared {
     defaults: ["tflite_defaults"],
     shared_libs: [
         "libtextclassifier_hash",
+        "libflatbuffers-cpp",
     ],
     whole_static_libs: [
         "libtflite_context",
