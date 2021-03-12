@@ -27,6 +27,6 @@ filegroup {
         "src/main/java/org/tensorflow/lite/nnapi/*.java",
     ],
     visibility: [
-        "//visibility:public"
+        "//visibility:public",
     ],
 }
