@@ -45,19 +45,20 @@ cc_library_shared {
         "src/main/native/*.cc",
     ],
     header_libs: [
+        "flatbuffer_headers",
         "jni_headers",
         "tensorflow_headers",
-        "flatbuffer_headers",
     ],
     static_libs: [
+        "libruy_static",
         "libtflite_static",
     ],
     shared_libs: [
         "liblog",
     ],
     cflags: [
-        "-Wno-unused-parameter",
         "-Wno-unused-function",
+        "-Wno-unused-parameter",
     ],
     stl: "libc++_static",
 }
