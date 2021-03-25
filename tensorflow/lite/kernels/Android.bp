@@ -127,6 +127,7 @@ cc_library_static {
         "pooling.cc",
         "pow.cc",
         "quantize.cc",
+        "random_uniform.cc",
         "range.cc",
         "rank.cc",
         "reduce.cc",
