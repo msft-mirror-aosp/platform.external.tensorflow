@@ -109,6 +109,7 @@ cc_library_static {
         "kernels/pooling.cc",
         "kernels/pow.cc",
         "kernels/quantize.cc",
+        "kernels/random_uniform.cc",
         "kernels/range.cc",
         "kernels/rank.cc",
         "kernels/reduce.cc",
