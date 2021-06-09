@@ -224,4 +224,5 @@ cc_library_headers {
     export_generated_headers: [
         "libtflite_mutable_schema",
     ],
+    sdk_version: "current",
 }
