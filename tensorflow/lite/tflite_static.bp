@@ -171,6 +171,7 @@ cc_library_static {
         "mutable_op_resolver.cc",
         "nnapi/nnapi_implementation.cc",
         "nnapi/nnapi_util.cc",
+        "nnapi/sl/SupportLibrary.cc",
         "optional_debug_tools.cc",
         "profiling/atrace_profiler.cc",
         "profiling/platform_profiler.cc",
