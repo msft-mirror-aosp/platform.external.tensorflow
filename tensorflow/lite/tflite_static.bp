@@ -19,7 +19,6 @@ cc_library_static {
     vendor_available: true,
     sdk_version: "current",
     min_sdk_version: "30",
-    rtti: true,
     srcs: [
         "allocation.cc",
         "arena_planner.cc",
