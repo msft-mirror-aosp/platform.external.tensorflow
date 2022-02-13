@@ -54,7 +54,6 @@ cc_library_static {
 cc_library_static {
     name: "libtflite_framework",
     defaults: ["tflite_defaults"],
-    rtti: true,
     srcs: [
         "allocation.cc",
         "arena_planner.cc",
