@@ -35,6 +35,10 @@ java_library_static {
     ],
     static_libs: [
     ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adservices",
+    ],
 }
 
 cc_library_shared {
@@ -64,4 +68,8 @@ cc_library_shared {
         "-Wno-unused-parameter",
     ],
     stl: "libc++_static",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adservices",
+    ],
 }
