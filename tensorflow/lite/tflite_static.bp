@@ -19,6 +19,7 @@ cc_library_static {
     vendor_available: true,
     sdk_version: "current",
     min_sdk_version: "30",
+    rtti: true,
     srcs: [
         "allocation.cc",
         "arena_planner.cc",
@@ -170,7 +171,6 @@ cc_library_static {
         "mutable_op_resolver.cc",
         "nnapi/nnapi_implementation.cc",
         "nnapi/nnapi_util.cc",
-        "nnapi/sl/SupportLibrary.cc",
         "optional_debug_tools.cc",
         "profiling/atrace_profiler.cc",
         "profiling/platform_profiler.cc",
