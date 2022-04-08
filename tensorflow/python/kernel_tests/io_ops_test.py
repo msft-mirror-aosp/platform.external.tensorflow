@@ -42,7 +42,7 @@ class IoOpsTest(test.TestCase):
       with self.cached_session():
         read = io_ops.read_file(temp.name)
         self.assertEqual([], read.get_shape())
-        self.assertEqual(self.evaluate(read), contents)
+        self.assertEqual(read.eval(), contents)
       os.remove(temp.name)
 
   def testWriteFile(self):

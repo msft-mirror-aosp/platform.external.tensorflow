@@ -54,21 +54,21 @@ static Graph* Recv() {
   return g;
 }
 
-void BM_Send(::testing::benchmark::State& state) {
-  test::Benchmark("cpu", Send(), nullptr, nullptr, new DummyRendezvous, "",
-                  /*old_benchmark_api*/ false)
-      .Run(state);
-  state.SetItemsProcessed(static_cast<int64>(state.iterations()));
+static void BM_Send(int iters) {
+  testing::UseRealTime();
+  testing::ItemsProcessed(static_cast<int64>(iters));
+  test::Benchmark("cpu", Send(), nullptr, nullptr, new DummyRendezvous)
+      .Run(iters);
 }
-BENCHMARK(BM_Send)->UseRealTime();
+BENCHMARK(BM_Send);
 
-void BM_Recv(::testing::benchmark::State& state) {
-  test::Benchmark("cpu", Recv(), nullptr, nullptr, new DummyRendezvous, "",
-                  /*old_benchmark_api*/ false)
-      .Run(state);
-  state.SetItemsProcessed(static_cast<int64>(state.iterations()));
+static void BM_Recv(int iters) {
+  testing::UseRealTime();
+  testing::ItemsProcessed(static_cast<int64>(iters));
+  test::Benchmark("cpu", Recv(), nullptr, nullptr, new DummyRendezvous)
+      .Run(iters);
 }
-BENCHMARK(BM_Recv)->UseRealTime();
+BENCHMARK(BM_Recv);
 
 }  // namespace
 }  // namespace tensorflow

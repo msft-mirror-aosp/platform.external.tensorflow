@@ -23,7 +23,8 @@ bool CountAsAcceleratorTime(const string& device) {
   return device.find("stream:all") != device.npos;
 }
 bool CountAsCPUTime(const string& device) {
-  return RE2::FullMatch(device, ".*/(device:gpu|gpu|device:cpu|cpu):\\d+");
+  return RE2::FullMatch(device,
+                        ".*/(device:gpu|gpu|device:cpu|cpu|device:sycl):\\d+");
 }
 bool IsCanonicalDevice(const string& device) { return CountAsCPUTime(device); }
 
@@ -152,7 +153,7 @@ void ExecStep::AddMemoryStats(const string& dev,
   // TODO(xpan): Make this more accurate:
   // High level: Memory tracking is suspicious and requires large scale
   // clean up.
-  // Investigate the memory usage difference between CPU/GPU with OpViewTest.
+  // Investigte the memory usage difference between CPU/GPU with OpViewTest.
   //
   // 1. OpKernelConstruction::allocate_xxx is not traced. Below, we only
   //    discuss OpKernelContext-related allocations.
@@ -209,7 +210,11 @@ void TFGraphNode::AddStepStat(int64 step, const string& device,
     } else {
       node_.set_canonical_device(dev);
       // TODO(xpan): Support things other than gpu?
-      node_.set_host_device(StringReplace(dev, "gpu:\\d+", "cpu:0"));
+      if (dev.find("sycl") != dev.npos) {
+        node_.set_host_device(StringReplace(dev, "device:sycl:\\d+", "cpu:0"));
+      } else {
+        node_.set_host_device(StringReplace(dev, "gpu:\\d+", "cpu:0"));
+      }
       AddOpType(node_.canonical_device());
     }
   }
@@ -283,7 +288,8 @@ TensorShapeProto VecToShapeProto(const std::vector<int64>& shape_vec) {
 }
 
 bool IsPlacedOnAccelerator(const string& device) {
-  return device.find("gpu") != device.npos;
+  return device.find("gpu") != device.npos ||
+         device.find("sycl") != device.npos;
 }
 bool IsPlacedOnCPU(const string& device) {
   return device.find("cpu") != device.npos;

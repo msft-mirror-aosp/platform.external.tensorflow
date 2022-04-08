@@ -17,6 +17,10 @@ limitations under the License.
 
 namespace tensorflow {
 
+Safe_PyObjectPtr make_safe(PyObject* object) {
+  return Safe_PyObjectPtr(object);
+}
+
 Safe_TF_TensorPtr make_safe(TF_Tensor* tensor) {
   return Safe_TF_TensorPtr(tensor);
 }

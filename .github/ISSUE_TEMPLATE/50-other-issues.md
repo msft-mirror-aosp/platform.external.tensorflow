@@ -1,7 +1,6 @@
 ---
 name: Other Issues
 about: Use this template for any other non-support related issues
-labels: 'type:others'
 
 ---
 

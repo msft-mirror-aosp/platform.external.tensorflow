@@ -4,15 +4,11 @@
 load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 package(
-    default_visibility = ["//tensorflow/python/keras:__subpackages__"],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "all_py_srcs",
-    srcs = glob(["*.py"]),
-    visibility = ["//tensorflow/python/keras/google/private_tf_api_test:__pkg__"],
-)
+exports_files(["LICENSE"])
 
 py_library(
     name = "wrappers",
@@ -20,7 +16,7 @@ py_library(
         "__init__.py",
         "scikit_learn.py",
     ],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/python:util",
         "//tensorflow/python/keras:engine",
@@ -39,8 +35,6 @@ tf_py_test(
     deps = [
         ":wrappers",
         "//tensorflow/python:client_testlib",
-        "//tensorflow/python/keras:testing_utils",
-        "//tensorflow/python/keras/utils:np_utils",
         "//third_party/py/numpy",
     ],
 )

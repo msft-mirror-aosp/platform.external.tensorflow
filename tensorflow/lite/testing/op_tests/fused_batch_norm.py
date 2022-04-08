@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -31,17 +31,7 @@ def make_fused_batch_norm_tests(options):
       "dtype": [tf.float32],
       "input_shape": [[1, 1, 6, 2]],
       "epsilon": [0.001, 0.1],
-      "is_training": [False],
   }]
-
-  # Training support in MLIR converter.
-  if options.use_experimental_converter:
-    test_parameters = test_parameters + [{
-        "dtype": [tf.float32],
-        "input_shape": [[1, 1, 6, 2]],
-        "epsilon": [0.001, 0.1],
-        "is_training": [True],
-    }]
 
   def build_graph(parameters):
     """Build the testing graph for fused batch normalization."""
@@ -53,8 +43,7 @@ def make_fused_batch_norm_tests(options):
     mean = create_tensor_data(parameters["dtype"], scale_shape)
     variance = create_tensor_data(parameters["dtype"], scale_shape)
 
-    x = tf.compat.v1.placeholder(
-        dtype=parameters["dtype"], name="x", shape=parameters["input_shape"])
+    x = create_tensor_data(parameters["dtype"], parameters["input_shape"])
     [x_norm, _, _] = tf.compat.v1.nn.fused_batch_norm(
         x,
         scale,
@@ -63,22 +52,19 @@ def make_fused_batch_norm_tests(options):
         variance,
         parameters["epsilon"],
         data_format="NHWC",
-        is_training=parameters["is_training"])
+        is_training=False)
 
     input_tensor = tf.compat.v1.placeholder(
         dtype=parameters["dtype"],
         name="input",
         shape=parameters["input_shape"])
     out = tf.add(input_tensor, x_norm)
-    return [x, input_tensor], [out]
+    return [input_tensor], [out]
 
   def build_inputs(parameters, sess, inputs, outputs):
-    input_values = [
-        create_tensor_data(parameters["dtype"], parameters["input_shape"]),
-        create_tensor_data(parameters["dtype"], parameters["input_shape"])
-    ]
-
-    return input_values, sess.run(
-        outputs, feed_dict=dict(zip(inputs, input_values)))
+    input_value = create_tensor_data(parameters["dtype"],
+                                     parameters["input_shape"])
+    return [input_value], sess.run(
+        outputs, feed_dict=dict(zip(inputs, [input_value])))
 
   make_zip_of_tests(options, test_parameters, build_graph, build_inputs)

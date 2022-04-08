@@ -14,12 +14,9 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/eigen_support.h"
 
-#include <functional>
-#include <memory>
 #include <utility>
 
 #include "tensorflow/lite/arena_planner.h"
-#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/optimized/eigen_spatial_convolutions.h"
 #include "tensorflow/lite/kernels/op_macros.h"
 
@@ -30,11 +27,6 @@ namespace {
 // For legacy reasons, we use 4 threads by default unless the thread count is
 // explicitly specified by the context.
 const int kDefaultNumThreadpoolThreads = 4;
-
-bool IsValidNumThreads(int num_threads) { return num_threads >= -1; }
-int GetNumThreads(int num_threads) {
-  return num_threads > -1 ? num_threads : kDefaultNumThreadpoolThreads;
-}
 
 #ifndef EIGEN_DONT_ALIGN
 // Eigen may require buffers to be aligned to 16, 32 or 64 bytes depending on
@@ -110,7 +102,8 @@ class LazyEigenThreadPoolHolder {
 
   // Updates the thread count, invalidating the ThreadPoolDevice if necessary.
   void SetNumThreads(int num_threads) {
-    const int target_num_threads = GetNumThreads(num_threads);
+    const int target_num_threads =
+        num_threads != -1 ? num_threads : kDefaultNumThreadpoolThreads;
     if (target_num_threads_ != target_num_threads) {
       target_num_threads_ = target_num_threads;
       // As the device references the thread pool wrapper, destroy it first.
@@ -137,9 +130,7 @@ RefCountedEigenContext* GetEigenContext(TfLiteContext* context) {
 }
 
 TfLiteStatus Refresh(TfLiteContext* context) {
-  if (IsValidNumThreads(context->recommended_num_threads)) {
-    SetEigenNbThreads(GetNumThreads(context->recommended_num_threads));
-  }
+  SetEigenNbThreads(context->recommended_num_threads);
 
   auto* ptr = GetEigenContext(context);
   if (ptr != nullptr) {
@@ -154,7 +145,7 @@ TfLiteStatus Refresh(TfLiteContext* context) {
 void IncrementUsageCounter(TfLiteContext* context) {
   auto* ptr = GetEigenContext(context);
   if (ptr == nullptr) {
-    if (IsValidNumThreads(context->recommended_num_threads)) {
+    if (context->recommended_num_threads != -1) {
       SetEigenNbThreads(context->recommended_num_threads);
     }
     ptr = new RefCountedEigenContext;

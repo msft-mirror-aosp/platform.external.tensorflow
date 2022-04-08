@@ -106,7 +106,7 @@ class WorkerHeartbeatManager(object):
     self._session.run(self._ops,
                       {self._request_placeholder: message.SerializeToString()})
 
-  def ping(self, request=None, timeout_in_ms=60000):
+  def ping(self, request=None, timeout_in_ms=5000):
     """Ping all workers, returning the parsed status results."""
     if request is None:
       request = event_pb2.WorkerHeartbeatRequest()
@@ -145,13 +145,14 @@ class WorkerHeartbeatManager(object):
 
   # Default timeout is set to allow other shutdown triggered operations (log
   # flushing etc) to finish before terminating the worker.
-  def shutdown(self, wait_time_in_ms=60000, exit_code=0):
+  def shutdown(self, wait_time_in_ms=60000, exit_code=None):
     """Shutdown all workers after `shutdown_timeout_secs`."""
     logging.info('Shutting down %s.', self)
     req = event_pb2.WorkerHeartbeatRequest(
         watchdog_config=event_pb2.WatchdogConfig(timeout_ms=wait_time_in_ms),
         shutdown_mode=event_pb2.SHUTDOWN_AFTER_TIMEOUT,
-        exit_code=event_pb2.RequestedExitCode(exit_code=exit_code))
+        exit_code=event_pb2.RequestedExitCode(
+            exit_code=exit_code) if exit_code is not None else None)
     self.configure(req)
 
     # Wait for workers to shutdown.
@@ -197,7 +198,7 @@ class WatchdogManager(threading.Thread):
                session,
                devices=None,
                ping_interval=60,
-               shutdown_timeout=2 * 3600):
+               shutdown_timeout=3600):
     """Initialize a watchdog manager.
 
     Args:
@@ -358,7 +359,7 @@ class GracefulShutdownHook(session_run_hook.SessionRunHook):
           self._heartbeat_supported = False
       else:
         logging.warn(
-            'No workers support heartbeats. Failure handling will be disabled.')
+            'No workers support hearbeats. Failure handling will be disabled.')
 
   def saver(self):
     if self._saver:
@@ -418,7 +419,7 @@ class ResetComputation(object):
 
   def __call__(self, run_context, all_workers, lame_workers):
     del run_context, lame_workers
-    all_workers.shutdown(exit_code=42)
+    all_workers.shutdown()
 
     logging.info('Resetting coordinator.')
     raise CoordinatorResetError()
@@ -435,7 +436,7 @@ class ShutdownLameWorkers(object):
     pass
 
   def __call__(self, run_context, all_workers, lame_workers):
-    lame_workers.shutdown(exit_code=42)
+    lame_workers.shutdown()
 
 
 class ShutdownAllWorkers(object):
@@ -449,4 +450,4 @@ class ShutdownAllWorkers(object):
     pass
 
   def __call__(self, run_context, all_workers, lame_workers):
-    all_workers.shutdown(exit_code=42)
+    all_workers.shutdown()

@@ -299,11 +299,7 @@ Status ComputeIncompatibleResourceOperationPairs(
         result->push_back({incoming_op.first, n->id()});
       }
 
-      // Some graphs might have a lot of 'kRead' kinds, but they are always safe
-      // for incoming ops, so not storing them might save a lot of memory.
-      if (op_kind != XlaResourceOpKind::kRead) {
-        resource_op_set->Add({n->id(), *op_kind});
-      }
+      resource_op_set->Add({n->id(), *op_kind});
     }
 
     if (vlog) {

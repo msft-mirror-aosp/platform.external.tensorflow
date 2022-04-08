@@ -20,19 +20,23 @@ import tempfile
 
 import numpy as np
 from six.moves import range
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 
-from tensorflow.lite.experimental.examples.lstm import input_data
+from tensorflow import flags
+
+from tensorflow.examples.tutorials.mnist import input_data
 from tensorflow.lite.experimental.examples.lstm.rnn import bidirectional_dynamic_rnn
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
 
-FLAGS = tf.compat.v1.flags.FLAGS
+FLAGS = flags.FLAGS
 
 # Number of steps to train model.
 # Dial to 0 means no training at all, all the weights will be just using their
 # initial values. This can help make the test smaller.
 TRAIN_STEPS = 0
+
+CONFIG = tf.ConfigProto(device_count={"GPU": 0})
 
 
 class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
@@ -62,10 +66,8 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
 
   def buildRnnLayer(self):
     return tf.keras.layers.StackedRNNCells([
-        tf.compat.v1.lite.experimental.nn.TfLiteRNNCell(
-            self.num_units, name="rnn1"),
-        tf.compat.v1.lite.experimental.nn.TfLiteRNNCell(
-            self.num_units, name="rnn2")
+        tf.lite.experimental.nn.TfLiteRNNCell(self.num_units, name="rnn1"),
+        tf.lite.experimental.nn.TfLiteRNNCell(self.num_units, name="rnn2")
     ])
 
   def buildModel(self,
@@ -101,7 +103,7 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     if is_inference:
       batch_size = 1
     # input image placeholder
-    x = tf.compat.v1.placeholder(
+    x = tf.placeholder(
         "float", [batch_size, self.time_steps, self.n_input],
         name="INPUT_IMAGE")
 
@@ -128,7 +130,7 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
       # but inference phase, we change it to None.
       if is_inference:
         sequence_length = None
-      outputs, _, _ = tf.compat.v1.nn.static_bidirectional_rnn(
+      outputs, _, _ = tf.nn.static_bidirectional_rnn(
           fw_rnn_layer,
           bw_rnn_layer,
           rnn_inputs,
@@ -163,7 +165,7 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
         learning_rate=self.learning_rate).minimize(loss)
 
     # Initialize variables
-    init = tf.compat.v1.global_variables_initializer()
+    init = tf.global_variables_initializer()
     sess.run(init)
     for _ in range(TRAIN_STEPS):
       batch_x, batch_y = self.mnist.train.next_batch(
@@ -208,11 +210,11 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     saver.save(sess, model_dir)
 
     # Reset the graph.
-    tf.compat.v1.reset_default_graph()
+    tf.reset_default_graph()
     x, prediction, output_class = self.buildModel(
         fw_rnn_layer, bw_rnn_layer, is_dynamic_rnn, True, use_sequence_length)
 
-    new_sess = tf.compat.v1.Session()
+    new_sess = tf.compat.v1.Session(config=CONFIG)
     saver = tf.train.Saver()
     saver.restore(new_sess, model_dir)
     return x, prediction, output_class, new_sess
@@ -261,8 +263,8 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     Returns:
       The tflite inference result.
     """
-    converter = tf.compat.v1.lite.TFLiteConverter.from_session(
-        sess, [input_tensor], [output_tensor])
+    converter = tf.lite.TFLiteConverter.from_session(sess, [input_tensor],
+                                                     [output_tensor])
     tflite = converter.convert()
     converter.experimental_new_converter = use_mlir_converter
 
@@ -280,13 +282,13 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     return result
 
   def testStaticRnnMultiRnnCell(self):
-    sess = tf.compat.v1.Session()
+    sess = tf.compat.v1.Session(config=CONFIG)
 
     x, prediction, output_class = self.buildModel(
         self.buildRnnLayer(), self.buildRnnLayer(), False, is_inference=False)
     self.trainModel(x, prediction, output_class, sess)
 
-    saver = tf.compat.v1.train.Saver()
+    saver = tf.train.Saver()
     x, prediction, output_class, new_sess = self.saveAndRestoreModel(
         self.buildRnnLayer(), self.buildRnnLayer(), sess, saver, False)
 
@@ -297,15 +299,42 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     result = self.tfliteInvoke(new_sess, test_inputs, x, output_class, False)
     self.assertTrue(np.allclose(expected_output, result, rtol=1e-6, atol=1e-2))
 
+  def testStaticRnnMultiRnnCellWithSequenceLength(self):
+    sess = tf.compat.v1.Session(config=CONFIG)
+
+    x, prediction, output_class = self.buildModel(
+        self.buildRnnLayer(),
+        self.buildRnnLayer(),
+        False,
+        is_inference=False,
+        use_sequence_length=True)
+    self.trainModel(x, prediction, output_class, sess)
+
+    saver = tf.train.Saver()
+    x, prediction, output_class, new_sess = self.saveAndRestoreModel(
+        self.buildRnnLayer(),
+        self.buildRnnLayer(),
+        sess,
+        saver,
+        False,
+        use_sequence_length=True)
+
+    test_inputs, expected_output = self.getInferenceResult(
+        x, output_class, new_sess)
+
+    # Test Toco-converted model.
+    result = self.tfliteInvoke(new_sess, test_inputs, x, output_class, False)
+    self.assertTrue(np.allclose(expected_output, result, rtol=1e-6, atol=1e-2))
+
   @test_util.enable_control_flow_v2
   def testDynamicRnnMultiRnnCell(self):
-    sess = tf.compat.v1.Session()
+    sess = tf.compat.v1.Session(config=CONFIG)
 
     x, prediction, output_class = self.buildModel(
         self.buildRnnLayer(), self.buildRnnLayer(), True, is_inference=False)
     self.trainModel(x, prediction, output_class, sess)
 
-    saver = tf.compat.v1.train.Saver()
+    saver = tf.train.Saver()
     x, prediction, output_class, new_sess = self.saveAndRestoreModel(
         self.buildRnnLayer(),
         self.buildRnnLayer(),
@@ -320,7 +349,34 @@ class BidirectionalSequenceRnnTest(test_util.TensorFlowTestCase):
     result = self.tfliteInvoke(new_sess, test_inputs, x, output_class, False)
     self.assertTrue(np.allclose(expected_output, result, rtol=1e-6, atol=1e-2))
 
+  @test_util.enable_control_flow_v2
+  def testDynamicRnnMultiRnnCellWithSequenceLength(self):
+    sess = tf.compat.v1.Session(config=CONFIG)
+
+    x, prediction, output_class = self.buildModel(
+        self.buildRnnLayer(),
+        self.buildRnnLayer(),
+        True,
+        is_inference=False,
+        use_sequence_length=True)
+    self.trainModel(x, prediction, output_class, sess)
+
+    saver = tf.train.Saver()
+    x, prediction, output_class, new_sess = self.saveAndRestoreModel(
+        self.buildRnnLayer(),
+        self.buildRnnLayer(),
+        sess,
+        saver,
+        is_dynamic_rnn=True,
+        use_sequence_length=True)
+
+    test_inputs, expected_output = self.getInferenceResult(
+        x, output_class, new_sess)
+
+    # Test Toco-converted model.
+    result = self.tfliteInvoke(new_sess, test_inputs, x, output_class, False)
+    self.assertTrue(np.allclose(expected_output, result, rtol=1e-6, atol=1e-2))
+
 
 if __name__ == "__main__":
-  tf.disable_v2_behavior()
   test.main()

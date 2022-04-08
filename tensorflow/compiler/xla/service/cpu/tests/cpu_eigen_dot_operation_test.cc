@@ -20,7 +20,6 @@ limitations under the License.
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/compiler/xla/service/cpu/cpu_compiler.h"
-#include "tensorflow/compiler/xla/service/cpu/test_target_triple_helper.h"
 #include "tensorflow/compiler/xla/service/cpu/tests/cpu_codegen_test.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/tests/test_utils.h"
@@ -46,8 +45,7 @@ class CpuEigenDotOperationTest
   void CompileAndCheck(std::unique_ptr<HloComputation> entry_computation,
                        const string& filecheck_lines) {
     CpuAotCompilationOptions options{
-        /*triple=*/kTargetTripleForHost, /*cpu_name=*/kTargetCpuForHost,
-        /*features=*/"",
+        /*triple=*/"x86_64", /*cpu_name=*/"", /*features=*/"",
         /*entry_point_name=*/"entry",
         /*relocation_model=*/CpuAotCompilationOptions::RelocationModel::Static};
 

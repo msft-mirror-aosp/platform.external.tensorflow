@@ -23,15 +23,16 @@ limitations under the License.
 
 namespace tensorflow {
 
-double ParamFromEnvWithDefault(const char* var_name, double default_value) {
-  const char* val = std::getenv(var_name);
+double ParamFromEnvWithDefault(const std::string& var_name,
+                               double default_value) {
+  const char* val = std::getenv(var_name.c_str());
   double num;
   return (val && strings::safe_strtod(val, &num)) ? num : default_value;
 }
 
-std::vector<double> ParamFromEnvWithDefault(const char* var_name,
+std::vector<double> ParamFromEnvWithDefault(const std::string& var_name,
                                             std::vector<double> default_value) {
-  const char* val = std::getenv(var_name);
+  const char* val = std::getenv(var_name.c_str());
   if (!val) {
     return default_value;
   }
@@ -50,9 +51,9 @@ std::vector<double> ParamFromEnvWithDefault(const char* var_name,
   return result;
 }
 
-std::vector<int> ParamFromEnvWithDefault(const char* var_name,
+std::vector<int> ParamFromEnvWithDefault(const std::string& var_name,
                                          std::vector<int> default_value) {
-  const char* val = std::getenv(var_name);
+  const char* val = std::getenv(var_name.c_str());
   if (!val) {
     return default_value;
   }
@@ -71,8 +72,9 @@ std::vector<int> ParamFromEnvWithDefault(const char* var_name,
   return result;
 }
 
-bool ParamFromEnvBoolWithDefault(const char* var_name, bool default_value) {
-  const char* val = std::getenv(var_name);
+bool ParamFromEnvBoolWithDefault(const std::string& var_name,
+                                 bool default_value) {
+  const char* val = std::getenv(var_name.c_str());
   return (val) ? str_util::Lowercase(val) == "true" : default_value;
 }
 
@@ -146,20 +148,19 @@ std::vector<int> ChooseRequestsWithExponentialDistribution(
   static const double kPowerBase =
       ParamFromEnvWithDefault("TF_RUN_HANDLER_EXP_DIST_POWER_BASE", 2.0);
 
-  static const int kMinEvenThreadsFromEnv = static_cast<int>(
-      ParamFromEnvWithDefault("TF_RUN_HANDLER_EXP_DIST_MIN_EVEN_THREADS", 1));
-  static const int kMaxEvenThreadsFromEnv = static_cast<int>(
-      ParamFromEnvWithDefault("TF_RUN_HANDLER_EXP_DIST_MAX_EVEN_THREADS", 3));
-
   std::vector<int> request_idx_list;
   request_idx_list.resize(num_threads);
   // Each request gets at least this number of threads that steal from it first.
   int min_threads_per_request =
       num_threads * kCapacityFractionForEvenDistribution / num_active_requests;
   min_threads_per_request =
-      std::max(kMinEvenThreadsFromEnv, min_threads_per_request);
+      std::max(static_cast<int>(ParamFromEnvWithDefault(
+                   "TF_RUN_HANDLER_EXP_DIST_MIN_EVEN_THREADS", 1)),
+               min_threads_per_request);
   min_threads_per_request =
-      std::min(kMaxEvenThreadsFromEnv, min_threads_per_request);
+      std::min(static_cast<int>(ParamFromEnvWithDefault(
+                   "TF_RUN_HANDLER_EXP_DIST_MAX_EVEN_THREADS", 3)),
+               min_threads_per_request);
 
   int num_remaining_threads =
       std::max(0, num_threads - num_active_requests * min_threads_per_request);

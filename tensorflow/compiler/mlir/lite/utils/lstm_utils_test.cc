@@ -24,18 +24,17 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Casting.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Support/LLVM.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
+#include "mlir/Dialect/StandardOps/Ops.h"  // TF:llvm-project
+#include "mlir/IR/Attributes.h"  // TF:llvm-project
+#include "mlir/IR/Builders.h"  // TF:llvm-project
+#include "mlir/IR/Function.h"  // TF:llvm-project
+#include "mlir/IR/Location.h"  // TF:llvm-project
+#include "mlir/IR/MLIRContext.h"  // TF:llvm-project
+#include "mlir/IR/StandardTypes.h"  // TF:llvm-project
+#include "mlir/IR/Types.h"  // TF:llvm-project
+#include "mlir/IR/Value.h"  // TF:llvm-project
+#include "mlir/Support/LLVM.h"  // TF:llvm-project
+#include "mlir/Support/LogicalResult.h"  // TF:llvm-project
 #include "tensorflow/core/platform/test.h"
 
 namespace mlir {
@@ -81,7 +80,7 @@ FuncOp createLstmCompositeFunc(mlir::Builder* builder, bool ln, bool cifg) {
   mlir::StringAttr attr_values =
       builder->getStringAttr(llvm::join(attributes, ","));
 
-  func->setAttr(kTFImplements, attr_values);
+  func.setAttr(kTFImplements, attr_values);
   return func;
 }
 
@@ -93,10 +92,7 @@ class LstmUtilsTest : public ::testing::Test {
   LstmUtilsTest() {}
 
   void SetUp() override {
-    context_ = std::make_unique<mlir::MLIRContext>();
-    context_->loadDialect<mlir::StandardOpsDialect, mlir::TF::TensorFlowDialect,
-                          TensorFlowLiteDialect>();
-    builder_ = std::unique_ptr<mlir::Builder>(new Builder(context_.get()));
+    builder_ = std::unique_ptr<mlir::Builder>(new Builder(&context_));
     fused_lstm_func_ = createLstmCompositeFunc(builder_.get(), false, false);
     fused_lstm_func_cifg_ =
         createLstmCompositeFunc(builder_.get(), false, true);
@@ -109,11 +105,10 @@ class LstmUtilsTest : public ::testing::Test {
     fused_ln_lstm_func_.erase();
     builder_.reset();
   }
-
   FuncOp fused_lstm_func_;
   FuncOp fused_lstm_func_cifg_;
   FuncOp fused_ln_lstm_func_;
-  std::unique_ptr<mlir::MLIRContext> context_;
+  mlir::MLIRContext context_;
   std::unique_ptr<mlir::Builder> builder_;
 };
 
@@ -126,7 +121,7 @@ TEST_F(LstmUtilsTest, ConvertLSTMCellSimple) {
 
   // verify transpose
   EXPECT_EQ(
-      fused_lstm_func_->getAttrOfType<StringAttr>(kTFImplements).getValue(),
+      fused_lstm_func_.getAttrOfType<StringAttr>(kTFImplements).getValue(),
       convert.GetCompositeOpName());
   EXPECT_EQ(fused_lstm_func_.getNumArguments(), 5);
   EXPECT_EQ(fused_lstm_func_.getType().getNumResults(), 1);
@@ -199,9 +194,9 @@ TEST_F(LstmUtilsTest, ConvertLSTMCellSimpleToFusedLSTMCoupleInputForget) {
 
   llvm::SmallVector<std::string, 2> attributes{kLstmCellSimple,
                                                kCoupleInputForgetGates};
-  EXPECT_EQ(fused_lstm_func_cifg_->getAttrOfType<StringAttr>(kTFImplements)
-                .getValue(),
-            llvm::join(attributes, ","));
+  EXPECT_EQ(
+      fused_lstm_func_cifg_.getAttrOfType<StringAttr>(kTFImplements).getValue(),
+      llvm::join(attributes, ","));
 
   auto it = fused_lstm_func_cifg_.getBody().back().rbegin();
   EXPECT_EQ(it->getName().getStringRef(), mlir::ReturnOp::getOperationName());
@@ -224,7 +219,7 @@ TEST_F(LstmUtilsTest, ConvertLayerNormLSTMCellSimpleToFusedLSTM) {
   fused_ln_lstm_func_.dump();
 
   EXPECT_EQ(
-      fused_ln_lstm_func_->getAttrOfType<StringAttr>(kTFImplements).getValue(),
+      fused_ln_lstm_func_.getAttrOfType<StringAttr>(kTFImplements).getValue(),
       convert.GetCompositeOpName());
   EXPECT_EQ(fused_ln_lstm_func_.getNumArguments(), 5);
   EXPECT_EQ(fused_ln_lstm_func_.getType().getNumResults(), 1);

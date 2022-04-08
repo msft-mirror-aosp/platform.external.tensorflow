@@ -15,7 +15,7 @@
 # pylint: disable=invalid-name
 """Inception V3 model for Keras.
 
-Reference:
+Reference paper:
   - [Rethinking the Inception Architecture for Computer Vision](
       http://arxiv.org/abs/1512.00567) (CVPR 2016)
 """
@@ -23,13 +23,14 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+
 from tensorflow.python.keras import backend
+from tensorflow.python.keras import layers
 from tensorflow.python.keras.applications import imagenet_utils
 from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.layers import VersionAwareLayers
 from tensorflow.python.keras.utils import data_utils
 from tensorflow.python.keras.utils import layer_utils
-from tensorflow.python.lib.io import file_io
 from tensorflow.python.util.tf_export import keras_export
 
 
@@ -40,22 +41,18 @@ WEIGHTS_PATH_NO_TOP = (
     'https://storage.googleapis.com/tensorflow/keras-applications/'
     'inception_v3/inception_v3_weights_tf_dim_ordering_tf_kernels_notop.h5')
 
-layers = VersionAwareLayers()
-
 
 @keras_export('keras.applications.inception_v3.InceptionV3',
               'keras.applications.InceptionV3')
-def InceptionV3(
-    include_top=True,
-    weights='imagenet',
-    input_tensor=None,
-    input_shape=None,
-    pooling=None,
-    classes=1000,
-    classifier_activation='softmax'):
+def InceptionV3(include_top=True,
+                weights='imagenet',
+                input_tensor=None,
+                input_shape=None,
+                pooling=None,
+                classes=1000):
   """Instantiates the Inception v3 architecture.
 
-  Reference:
+  Reference paper:
   - [Rethinking the Inception Architecture for Computer Vision](
       http://arxiv.org/abs/1512.00567) (CVPR 2016)
 
@@ -63,11 +60,7 @@ def InceptionV3(
   Note that the data format convention used by the model is
   the one specified in the `tf.keras.backend.image_data_format()`.
 
-  Note: each Keras Application expects a specific kind of input preprocessing.
-  For InceptionV3, call `tf.keras.applications.inception_v3.preprocess_input`
-  on your inputs before passing them to the model.
-
-  Args:
+  Arguments:
     include_top: Boolean, whether to include the fully-connected
       layer at the top, as the last layer of the network. Default to `True`.
     weights: One of `None` (random initialization),
@@ -96,20 +89,15 @@ def InceptionV3(
     classes: optional number of classes to classify images
       into, only to be specified if `include_top` is True, and
       if no `weights` argument is specified. Default to 1000.
-    classifier_activation: A `str` or callable. The activation function to use
-      on the "top" layer. Ignored unless `include_top=True`. Set
-      `classifier_activation=None` to return the logits of the "top" layer.
 
   Returns:
-    A `keras.Model` instance.
+    A Keras `tf.keras.Model` instance.
 
   Raises:
     ValueError: in case of invalid argument for `weights`,
       or invalid input shape.
-    ValueError: if `classifier_activation` is not `softmax` or `None` when
-      using a pretrained top layer.
   """
-  if not (weights in {'imagenet', None} or file_io.file_exists_v2(weights)):
+  if not (weights in {'imagenet', None} or os.path.exists(weights)):
     raise ValueError('The `weights` argument should be either '
                      '`None` (random initialization), `imagenet` '
                      '(pre-training on ImageNet), '
@@ -321,9 +309,7 @@ def InceptionV3(
   if include_top:
     # Classification block
     x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
-    imagenet_utils.validate_activation(classifier_activation, weights)
-    x = layers.Dense(classes, activation=classifier_activation,
-                     name='predictions')(x)
+    x = layers.Dense(classes, activation='softmax', name='predictions')(x)
   else:
     if pooling == 'avg':
       x = layers.GlobalAveragePooling2D()(x)
@@ -369,7 +355,7 @@ def conv2d_bn(x,
               name=None):
   """Utility function to apply conv + BN.
 
-  Args:
+  Arguments:
     x: input tensor.
     filters: filters in `Conv2D`.
     num_row: height of the convolution kernel.
@@ -413,10 +399,3 @@ def preprocess_input(x, data_format=None):
 @keras_export('keras.applications.inception_v3.decode_predictions')
 def decode_predictions(preds, top=5):
   return imagenet_utils.decode_predictions(preds, top=top)
-
-
-preprocess_input.__doc__ = imagenet_utils.PREPROCESS_INPUT_DOC.format(
-    mode='',
-    ret=imagenet_utils.PREPROCESS_INPUT_RET_DOC_TF,
-    error=imagenet_utils.PREPROCESS_INPUT_ERROR_DOC)
-decode_predictions.__doc__ = imagenet_utils.decode_predictions.__doc__

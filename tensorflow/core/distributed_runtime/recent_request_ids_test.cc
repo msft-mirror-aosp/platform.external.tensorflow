@@ -95,10 +95,10 @@ TEST(RecentRequestIds, Ordered3) { TestOrdered(3); }
 TEST(RecentRequestIds, Ordered4) { TestOrdered(4); }
 TEST(RecentRequestIds, Ordered5) { TestOrdered(5); }
 
-static void BM_TrackUnique(::testing::benchmark::State& state) {
+void BM_TrackUnique(int iters) {
   RecentRequestIds recent_request_ids(100000);
   RecvTensorRequest request;
-  for (auto s : state) {
+  for (int i = 0; i < iters; ++i) {
     TF_CHECK_OK(recent_request_ids.TrackUnique(GetUniqueRequestId(),
                                                "BM_TrackUnique", request));
   }

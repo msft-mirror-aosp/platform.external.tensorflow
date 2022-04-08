@@ -34,7 +34,7 @@ LogicalBuffer::~LogicalBuffer() {}
 string LogicalBuffer::ToString() const {
   string color_string;
   if (has_color()) {
-    color_string = absl::StrCat(" @", color());
+    color_string = absl::StrCat(" @", color().value());
   }
   return absl::StrCat(instruction_->name(), "[", absl::StrJoin(index_, ","),
                       "](#", id(), color_string, ")");

@@ -206,12 +206,10 @@ XLA_TEST_F(SlicingTest, DoubleEmptyIndexSelect) {
   xla::XlaOp input, index;
   Literal l(ShapeUtil::MakeShape(F32, {0, 1, 2, 0}));
   Literal i(ShapeUtil::MakeShape(S32, {0}));
-  TF_ASSERT_OK_AND_ASSIGN(
-      auto input_data,
-      CreateParameterAndTransferLiteral(0, l, "input", &builder, &input));
-  TF_ASSERT_OK_AND_ASSIGN(
-      auto index_data,
-      CreateParameterAndTransferLiteral(1, i, "index", &builder, &index));
+  auto input_data =
+      CreateParameterAndTransferLiteral(0, l, "input", &builder, &input);
+  auto index_data =
+      CreateParameterAndTransferLiteral(1, i, "index", &builder, &index);
   TorchIndexSelect(input, index, 0);
   ComputeAndCompareLiteral(&builder, l, {input_data.get(), index_data.get()});
 }
@@ -221,9 +219,8 @@ XLA_TEST_F(SlicingTest, EmptyIndexSelectNonZero) {
 
   xla::XlaOp input, index;
   Literal l(ShapeUtil::MakeShape(F32, {0, 2}));
-  TF_ASSERT_OK_AND_ASSIGN(
-      auto input_data,
-      CreateParameterAndTransferLiteral(0, l, "input", &builder, &input));
+  auto input_data =
+      CreateParameterAndTransferLiteral(0, l, "input", &builder, &input);
   auto index_data =
       CreateR1Parameter<int>({0, 0, 0}, 1, "index", &builder, &index);
   TorchIndexSelect(input, index, 0);

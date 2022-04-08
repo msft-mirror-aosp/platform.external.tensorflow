@@ -1,11 +1,14 @@
 load(
+    "//tensorflow/lite/micro/testing:micro_test.bzl",
+    "tflite_micro_cc_test",
+)
+load(
     "//tensorflow/lite/micro:build_def.bzl",
-    "micro_copts",
+    "cc_library",
 )
 
 package(
     default_visibility = ["//visibility:public"],
-    features = ["-layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
 
@@ -14,10 +17,16 @@ cc_library(
     hdrs = [
         "memory_planner.h",
     ],
-    copts = micro_copts(),
+    build_for_embedded = True,
+    copts = [
+        "-Werror",
+        "-Wdouble-promotion",
+        "-Wsign-compare",
+    ],
     deps = [
         "//tensorflow/lite/c:common",
         "//tensorflow/lite/core/api",
+        "//tensorflow/lite/schema:schema_fbs",
     ],
 )
 
@@ -29,12 +38,17 @@ cc_library(
     hdrs = [
         "linear_memory_planner.h",
     ],
-    copts = micro_copts(),
+    copts = [
+        "-Werror",
+        "-Wdouble-promotion",
+        "-Wsign-compare",
+    ],
     deps = [
         ":memory_planner",
         "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core/api",
         "//tensorflow/lite/micro:micro_compatibility",
-        "//tensorflow/lite/micro:micro_error_reporter",
+        "//tensorflow/lite/schema:schema_fbs",
     ],
 )
 
@@ -46,15 +60,22 @@ cc_library(
     hdrs = [
         "greedy_memory_planner.h",
     ],
-    copts = micro_copts(),
+    build_for_embedded = True,
+    copts = [
+        "-Werror",
+        "-Wdouble-promotion",
+        "-Wsign-compare",
+    ],
     deps = [
         ":memory_planner",
         "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core/api",
         "//tensorflow/lite/micro:micro_compatibility",
+        "//tensorflow/lite/schema:schema_fbs",
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "linear_memory_planner_test",
     srcs = [
         "linear_memory_planner_test.cc",
@@ -65,7 +86,7 @@ cc_test(
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "greedy_memory_planner_test",
     srcs = [
         "greedy_memory_planner_test.cc",

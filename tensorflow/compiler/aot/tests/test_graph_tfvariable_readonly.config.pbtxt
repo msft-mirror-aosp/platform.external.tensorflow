@@ -10,11 +10,3 @@ variable {
   type: DT_FLOAT
   readonly: true
 }
-
-variable {
-  node_name: "y"
-  shape {
-  }
-  type: DT_FLOAT
-  readonly: true
-}

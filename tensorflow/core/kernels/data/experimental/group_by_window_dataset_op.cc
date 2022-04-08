@@ -33,14 +33,15 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
  public:
   explicit GroupByWindowDatasetOp(OpKernelConstruction* ctx)
       : UnaryDatasetOpKernel(ctx) {
-    OP_REQUIRES_OK(ctx, FunctionMetadata::Create(ctx, "key_func", /*params=*/{},
+    FunctionMetadata::Params params;
+    params.is_multi_device_function = true;
+    OP_REQUIRES_OK(ctx, FunctionMetadata::Create(ctx, "key_func", params,
                                                  &key_func_metadata_));
+    OP_REQUIRES_OK(ctx, FunctionMetadata::Create(ctx, "reduce_func", params,
+                                                 &reduce_func_metadata_));
     OP_REQUIRES_OK(ctx,
-                   FunctionMetadata::Create(ctx, "reduce_func", /*params=*/{},
-                                            &reduce_func_metadata_));
-    OP_REQUIRES_OK(
-        ctx, FunctionMetadata::Create(ctx, "window_size_func", /*params=*/{},
-                                      &window_size_func_metadata_));
+                   FunctionMetadata::Create(ctx, "window_size_func", params,
+                                            &window_size_func_metadata_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("output_types", &output_types_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("output_shapes", &output_shapes_));
   }
@@ -105,20 +106,6 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
 
     string DebugString() const override {
       return "GroupByWindowDatasetOp::Dataset";
-    }
-
-    int64 Cardinality() const override {
-      int64 n = input_->Cardinality();
-      if (n == kInfiniteCardinality) {
-        return n;
-      }
-      return kUnknownCardinality;
-    }
-
-    Status InputDatasets(
-        std::vector<const DatasetBase*>* inputs) const override {
-      inputs->push_back(input_);
-      return Status::OK();
     }
 
     Status CheckExternalState() const override {
@@ -195,7 +182,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
 
       Status Initialize(IteratorContext* ctx) override {
         TF_RETURN_IF_ERROR(
-            dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
+            dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_));
         TF_RETURN_IF_ERROR(dataset()->captured_key_func_->Instantiate(
             ctx, &instantiated_key_func_));
         TF_RETURN_IF_ERROR(dataset()->captured_reduce_func_->Instantiate(
@@ -239,7 +226,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
               // group.
               std::vector<Tensor> key_func_output;
               TF_RETURN_IF_ERROR(instantiated_key_func_->RunWithBorrowedArgs(
-                  ctx, next_input_element, &key_func_output, model_node()));
+                  ctx, next_input_element, &key_func_output));
 
               if (key_func_output.size() != 1 ||
                   key_func_output[0].dtype() != DT_INT64 ||
@@ -255,8 +242,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
                 // window size.
                 std::vector<Tensor> window_size_func_output;
                 TF_RETURN_IF_ERROR(instantiated_window_size_func_->Run(
-                    ctx, std::move(key_func_output), &window_size_func_output,
-                    model_node()));
+                    ctx, std::move(key_func_output), &window_size_func_output));
 
                 if (window_size_func_output.size() != 1 ||
                     window_size_func_output[0].dtype() != DT_INT64 ||
@@ -309,16 +295,9 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
         return model::MakeUnknownRatioNode(std::move(args));
       }
 
-      Status SaveInternal(SerializationContext* ctx,
-                          IteratorStateWriter* writer) override {
-        TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
-            dataset()->captured_key_func_->CheckExternalState()));
-        TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
-            dataset()->captured_reduce_func_->CheckExternalState()));
-        TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
-            dataset()->captured_window_size_func_->CheckExternalState()));
+      Status SaveInternal(IteratorStateWriter* writer) override {
         mutex_lock l(mu_);
-        TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
+        TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
 
         if (end_of_input_) {
           TF_RETURN_IF_ERROR(
@@ -359,7 +338,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
         }
 
         if (current_group_iterator_) {
-          TF_RETURN_IF_ERROR(SaveInput(ctx, writer, current_group_iterator_));
+          TF_RETURN_IF_ERROR(SaveInput(writer, current_group_iterator_));
 
           // Saving current_key_
           TF_RETURN_IF_ERROR(
@@ -368,8 +347,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
           TF_RETURN_IF_ERROR(writer->WriteScalar(
               full_name("current_iterator_not_initialized"), ""));
         }
-        TF_RETURN_IF_ERROR(writer->WriteScalar(full_name("group_counter"),
-                                               group_counter_ - 1));
+
         return Status::OK();
       }
 
@@ -380,7 +358,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
 
         if (reader->Contains(full_name("end_of_input"))) end_of_input_ = true;
 
-        // Restoring groups_
+        // Restoring groups
         if (reader->Contains(full_name("groups_size"))) {
           int64 size;
           TF_RETURN_IF_ERROR(
@@ -397,7 +375,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
           }
         }
 
-        // Restoring window_sizes_
+        // Restoring Windows
         if (reader->Contains(full_name("window_sizes_size"))) {
           int64 size;
           TF_RETURN_IF_ERROR(
@@ -412,10 +390,6 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
                 &window_sizes_[key]));
           }
         }
-
-        // Group counter needs to be restored before current group iterator.
-        TF_RETURN_IF_ERROR(
-            reader->ReadScalar(full_name("group_counter"), &group_counter_));
 
         if (reader->Contains(full_name("current_iterator_not_initialized"))) {
           current_group_iterator_.reset();
@@ -436,7 +410,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
      private:
       Status SaveGroup(IteratorStateWriter* writer, const string& name,
                        const std::vector<std::vector<Tensor>>& group)
-          TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+          EXCLUSIVE_LOCKS_REQUIRED(mu_) {
         TF_RETURN_IF_ERROR(
             writer->WriteScalar(strings::StrCat(name, "_size"), group.size()));
         for (int i = 0; i < group.size(); i++) {
@@ -452,7 +426,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
 
       Status RestoreGroup(IteratorStateReader* reader, const string& name,
                           std::vector<std::vector<Tensor>>* group)
-          TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+          EXCLUSIVE_LOCKS_REQUIRED(mu_) {
         int64 group_size;
         TF_RETURN_IF_ERROR(
             reader->ReadScalar(strings::StrCat(name, "_size"), &group_size));
@@ -471,7 +445,7 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
       }
 
       Status StartFlushingGroup(IteratorContext* ctx, int64 key)
-          TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+          EXCLUSIVE_LOCKS_REQUIRED(mu_) {
         DatasetBase* group_dataset;
         TF_RETURN_IF_ERROR(NewWindowDataset(
             groups_[key], dataset()->input_->output_dtypes(),
@@ -487,8 +461,8 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
         std::vector<Tensor> args(
             {std::move(key_arg), std::move(group_dataset_arg)});
         std::vector<Tensor> return_values;
-        TF_RETURN_IF_ERROR(instantiated_reduce_func_->Run(
-            ctx, std::move(args), &return_values, model_node()));
+        TF_RETURN_IF_ERROR(instantiated_reduce_func_->Run(ctx, std::move(args),
+                                                          &return_values));
 
         if (!(return_values.size() == 1 &&
               return_values[0].dtype() == DT_VARIANT &&
@@ -506,20 +480,18 @@ class GroupByWindowDatasetOp : public UnaryDatasetOpKernel {
 
         // Create an iterator for the dataset that was returned by `f`.
         return returned_dataset->MakeIterator(
-            ctx, this, strings::StrCat(prefix(), "[", group_counter_++, "]"),
+            ctx, strings::StrCat(prefix(), "::Reduce"),
             &current_group_iterator_);
       }
 
       mutex mu_;
-      int64 group_counter_ TF_GUARDED_BY(mu_) = 0;
-      std::unique_ptr<IteratorBase> input_impl_ TF_GUARDED_BY(mu_);
+      std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
       // TODO(mrry): Optimize for dense key space if appropriate.
-      bool end_of_input_ TF_GUARDED_BY(mu_) = false;
-      int64 current_key_ TF_GUARDED_BY(mu_);
-      std::map<int64, std::vector<std::vector<Tensor>>> groups_
-          TF_GUARDED_BY(mu_);
-      std::unique_ptr<IteratorBase> current_group_iterator_ TF_GUARDED_BY(mu_);
-      std::map<int64, int64> window_sizes_ TF_GUARDED_BY(mu_);
+      bool end_of_input_ GUARDED_BY(mu_) = false;
+      int64 current_key_ GUARDED_BY(mu_);
+      std::map<int64, std::vector<std::vector<Tensor>>> groups_ GUARDED_BY(mu_);
+      std::unique_ptr<IteratorBase> current_group_iterator_ GUARDED_BY(mu_);
+      std::map<int64, int64> window_sizes_ GUARDED_BY(mu_);
       std::unique_ptr<InstantiatedCapturedFunction> instantiated_key_func_;
       std::unique_ptr<InstantiatedCapturedFunction> instantiated_reduce_func_;
       std::unique_ptr<InstantiatedCapturedFunction>

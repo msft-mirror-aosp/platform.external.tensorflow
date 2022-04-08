@@ -21,6 +21,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 
+#include "google/protobuf/text_format.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
@@ -31,7 +32,6 @@ limitations under the License.
 #include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/protobuf.h"
 #include "tensorflow/core/platform/regexp.h"
 
 namespace xla {
@@ -87,10 +87,9 @@ StatusOr<std::unique_ptr<HloModule>> LoadModuleFromData(
         return InvalidArgument("Failed to parse input as HLO protobuf binary");
       }
     } else if (format == "pbtxt") {
-      if (!tensorflow::protobuf::TextFormat::ParseFromString(data, &proto) &&
-          !tensorflow::protobuf::TextFormat::ParseFromString(
-              data, proto.mutable_hlo()) &&
-          !tensorflow::protobuf::TextFormat::ParseFromString(
+      if (!google::protobuf::TextFormat::ParseFromString(data, &proto) &&
+          !google::protobuf::TextFormat::ParseFromString(data, proto.mutable_hlo()) &&
+          !google::protobuf::TextFormat::ParseFromString(
               data, proto.mutable_hlo()->mutable_hlo_module())) {
         return InvalidArgument("Failed to parse input as HLO protobuf text");
       }

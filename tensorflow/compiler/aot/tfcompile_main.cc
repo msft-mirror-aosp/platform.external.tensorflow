@@ -65,10 +65,7 @@ int main(int argc, char** argv) {
   flags.out_metadata_object = "out_helper.o";
   flags.out_header = "out.h";
   flags.entry_point = "entry";
-  flags.debug_info_path_begin_marker = "";
 
-  // Note that tfcompile.bzl's tf_library macro sets fast math flags as that is
-  // generally the preferred case.
   std::vector<tensorflow::Flag> flag_list;
   AppendMainFlags(&flag_list, &flags);
   xla::AppendDebugOptionsFlags(&flag_list);
@@ -84,10 +81,12 @@ int main(int argc, char** argv) {
 
   tensorflow::port::InitMain(usage.c_str(), &argc, &argv);
   QCHECK(argc == 1) << "\nERROR: This command does not take any arguments "
-                       "other than flags. See --help.\n\n";
+                       "other than flags\n\n"
+                    << usage;
   tensorflow::Status status = tensorflow::tfcompile::Main(flags);
   if (status.code() == tensorflow::error::INVALID_ARGUMENT) {
-    std::cerr << "INVALID ARGUMENTS: " << status.error_message() << "\n\n";
+    std::cerr << "INVALID ARGUMENTS: " << status.error_message() << "\n\n"
+              << usage;
     return 1;
   } else {
     TF_QCHECK_OK(status);

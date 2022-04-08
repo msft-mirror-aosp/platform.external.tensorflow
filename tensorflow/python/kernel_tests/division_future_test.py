@@ -47,7 +47,7 @@ class DivisionTestCase(test.TestCase):
       tensors.append((x, y))
       def f(x, y):
         self.assertEqual(x.dtype, y.dtype)
-        self.assertAllClose(x, y)
+        self.assertEqual(x, y)
       checks.append(f)
 
     with self.cached_session() as sess:

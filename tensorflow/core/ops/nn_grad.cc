@@ -31,7 +31,7 @@ Status SoftmaxGrad(const AttrSlice& attrs, FunctionDef* g) {
       // Ret val defs
       {"grad_x: T"},
       // Attr defs
-      {{"T: {float, double, bfloat16}"}},
+      {{"T: {float, double}"}},
       // Nodes
       // Based on _SoftmaxGrad in nn_grad.py.
       {

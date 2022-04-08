@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/stream_executor/stream.h"
 
+#include "tensorflow/stream_executor/platform/port.h"
+
 #include "absl/strings/str_cat.h"
 #include "third_party/eigen3/Eigen/Core"
 #include "tensorflow/stream_executor/blas.h"
@@ -22,7 +24,6 @@ limitations under the License.
 #include "tensorflow/stream_executor/lib/stacktrace.h"
 #include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/platform/logging.h"
-#include "tensorflow/stream_executor/platform/port.h"
 #include "tensorflow/stream_executor/rng.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
 #include "tensorflow/stream_executor/stream_executor_pimpl.h"
@@ -34,57 +35,55 @@ namespace {
 // will be VLOG'ed. We need overloads, instead of
 // e.g. BatchDescriptorToVlogString(), as the code that calls these
 // functions does not know what the type of the parameter is.
-std::string ToVlogString(const dnn::BatchDescriptor &descriptor) {
+string ToVlogString(const dnn::BatchDescriptor &descriptor) {
   return descriptor.ToShortString();
 }
 
-std::string ToVlogString(const dnn::FilterDescriptor &descriptor) {
+string ToVlogString(const dnn::FilterDescriptor &descriptor) {
   return descriptor.ToShortString();
 }
 
-std::string ToVlogString(const dnn::ConvolutionDescriptor &descriptor) {
+string ToVlogString(const dnn::ConvolutionDescriptor &descriptor) {
   return descriptor.ToShortString();
 }
 
-std::string ToVlogString(const dnn::PoolingDescriptor &descriptor) {
+string ToVlogString(const dnn::PoolingDescriptor &descriptor) {
   return descriptor.ToShortString();
 }
 
-std::string ToVlogString(const dnn::NormalizeDescriptor &descriptor) {
+string ToVlogString(const dnn::NormalizeDescriptor &descriptor) {
   return descriptor.ToShortString();
 }
 
-std::string ToVlogString(dnn::ActivationMode mode) {
+string ToVlogString(dnn::ActivationMode mode) {
   return dnn::ActivationModeString(mode);
 }
 
-std::string ToVlogString(const dnn::AlgorithmConfig &algo_config) {
+string ToVlogString(const dnn::AlgorithmConfig &algo_config) {
   return algo_config.ToString();
 }
 
-std::string ToVlogString(dnn::ElementwiseOperation op) {
+string ToVlogString(dnn::ElementwiseOperation op) {
   return dnn::ElementwiseOperationString(op);
 }
 
-std::string ToVlogString(dnn::QuantizedActivationMode mode) {
+string ToVlogString(dnn::QuantizedActivationMode mode) {
   return dnn::QuantizedActivationModeString(mode);
 }
 
-std::string ToVlogString(blas::Transpose t) { return blas::TransposeString(t); }
+string ToVlogString(blas::Transpose t) { return blas::TransposeString(t); }
 
-std::string ToVlogString(blas::UpperLower ul) {
-  return blas::UpperLowerString(ul);
-}
+string ToVlogString(blas::UpperLower ul) { return blas::UpperLowerString(ul); }
 
-std::string ToVlogString(blas::Diagonal d) { return blas::DiagonalString(d); }
+string ToVlogString(blas::Diagonal d) { return blas::DiagonalString(d); }
 
-std::string ToVlogString(blas::Side s) { return blas::SideString(s); }
+string ToVlogString(blas::Side s) { return blas::SideString(s); }
 
-std::string ToVlogString(blas::ComputationType ty) {
+string ToVlogString(blas::ComputationType ty) {
   return blas::ComputationTypeString(ty);
 }
 
-std::string ToVlogString(const void *ptr) {
+string ToVlogString(const void *ptr) {
   if (ptr == nullptr) {
     return "null";
   }
@@ -96,7 +95,7 @@ std::string ToVlogString(const void *ptr) {
 }
 
 template <class T>
-std::string ToVlogString(const std::complex<T> &c) {
+string ToVlogString(const std::complex<T> &c) {
   // StrCat does not convert std::complex to text.
   std::ostringstream out;
   out << c;
@@ -104,36 +103,36 @@ std::string ToVlogString(const std::complex<T> &c) {
 }
 
 template <class T>
-std::string ToVlogString(const std::function<T> &f) {
+string ToVlogString(const std::function<T> &f) {
   return f == nullptr ? "null" : "<non-null function>";
 }
 
-std::string ToVlogString(const DeviceMemoryBase &memory) {
+string ToVlogString(const DeviceMemoryBase &memory) {
   return ToVlogString(memory.opaque());
 }
 
-std::string ToVlogString(const DeviceMemoryBase *memory) {
+string ToVlogString(const DeviceMemoryBase *memory) {
   return memory == nullptr ? "null" : ToVlogString(*memory);
 }
 
-std::string ToVlogString(const Eigen::half &h) {
+string ToVlogString(const Eigen::half &h) {
   return absl::StrCat(static_cast<float>(h));
 }
 
-std::string ToVlogString(int i) { return absl::StrCat(i); }
+string ToVlogString(int i) { return absl::StrCat(i); }
 
-std::string ToVlogString(uint32 i) { return absl::StrCat(i); }
+string ToVlogString(uint32 i) { return absl::StrCat(i); }
 
-std::string ToVlogString(uint64 i) { return absl::StrCat(i); }
+string ToVlogString(uint64 i) { return absl::StrCat(i); }
 
-std::string ToVlogString(int64 i) { return absl::StrCat(i); }
+string ToVlogString(int64 i) { return absl::StrCat(i); }
 
-std::string ToVlogString(float f) { return absl::StrCat(f); }
+string ToVlogString(float f) { return absl::StrCat(f); }
 
-std::string ToVlogString(double d) { return absl::StrCat(d); }
+string ToVlogString(double d) { return absl::StrCat(d); }
 
 template <typename T>
-std::string ToVlogString(const HostOrDeviceScalar<T> &memory_or_constant) {
+string ToVlogString(const HostOrDeviceScalar<T> &memory_or_constant) {
   if (memory_or_constant.is_pointer()) {
     return ToVlogString(memory_or_constant.pointer());
   }
@@ -141,8 +140,8 @@ std::string ToVlogString(const HostOrDeviceScalar<T> &memory_or_constant) {
 }
 
 template <class T>
-std::string ToVlogString(port::ArraySlice<T> elements) {
-  std::string str = absl::StrCat(
+string ToVlogString(port::ArraySlice<T> elements) {
+  string str = absl::StrCat(
       ToVlogString(reinterpret_cast<const void *>(elements.data())), "[",
       elements.size(), "]{");
   const char *separator = "";
@@ -167,11 +166,11 @@ std::string ToVlogString(port::ArraySlice<T> elements) {
 }
 
 template <class T>
-std::string ToVlogString(port::MutableArraySlice<T> elements) {
+string ToVlogString(port::MutableArraySlice<T> elements) {
   return ToVlogString(port::ArraySlice<T>(elements));
 }
 
-std::string ToVlogString(dnn::DepthToSpaceLayout depth_to_space_layout) {
+string ToVlogString(dnn::DepthToSpaceLayout depth_to_space_layout) {
   switch (depth_to_space_layout) {
     case dnn::DepthToSpaceLayout::DepthHeightWidth:
       return "DepthToSpaceLayout::DepthHeightWidth";
@@ -179,7 +178,7 @@ std::string ToVlogString(dnn::DepthToSpaceLayout depth_to_space_layout) {
   return "unknown DepthToSpaceLayout";
 }
 
-std::string ToVlogString(dnn::DataType data_type) {
+string ToVlogString(dnn::DataType data_type) {
   switch (data_type) {
     case dnn::DataType::kFloat:
       return "dnn::DataType::kFloat";
@@ -206,14 +205,14 @@ std::string ToVlogString(dnn::DataType data_type) {
 // See VLOG_CALL for a short-hand for this. This way of doing it saves
 // a tremendous amount of boilerplate code given how many functions
 // there are on Stream and how many parameters they each have.
-std::string CallStr(const char *function_name, Stream *stream,
-                    std::vector<std::pair<const char *, std::string>> params) {
+string CallStr(const char *function_name, Stream *stream,
+               std::vector<std::pair<const char *, string>> params) {
   // Do not call this function unless VLOG is on since just
   // constructing all the strings in params is expensive.
   CHECK(VLOG_IS_ON(1));
 
-  std::string str = absl::StrCat(stream->DebugStreamPointers(),
-                                 " Called Stream::", function_name, "(");
+  string str = absl::StrCat(stream->DebugStreamPointers(),
+                            " Called Stream::", function_name, "(");
   const char *separator = "";
   for (const auto &param : params) {
     absl::StrAppend(&str, separator, param.first, "=", param.second);
@@ -251,7 +250,7 @@ Stream::Stream(StreamExecutor *parent)
     : parent_(parent),
       implementation_(parent->implementation()->GetStreamImplementation()),
       allocated_(false),
-      status_(port::InternalError("Uninitialized stream")),
+      ok_(false),
       temporary_memory_manager_(this) {
   VLOG_CALL(PARAM(parent));
 }
@@ -261,7 +260,7 @@ Stream::Stream(StreamExecutor *parent,
     : parent_(parent),
       implementation_(implementation),
       allocated_(false),
-      status_(port::InternalError("Uninitialized stream")),
+      ok_(false),
       temporary_memory_manager_(this) {
   VLOG_CALL(PARAM(parent), PARAM(implementation));
 }
@@ -285,12 +284,7 @@ Stream::~Stream() {
 
 port::Status Stream::RefreshStatus() {
   port::Status status = parent_->GetStatus(this);
-  // We should not put the stream in an error state, just because the GetStatus
-  // method is unimplemented.
-  if (status != port::Status(port::error::UNIMPLEMENTED,
-                             "GetStatus is not supported on this executor.")) {
-    CheckStatus(status);
-  }
+  CheckStatus(status);
   return status;
 }
 
@@ -300,12 +294,12 @@ Stream &Stream::Init() {
   absl::MutexLock lock(&mu_);
   CHECK_EQ(false, allocated_)
       << "stream appears to already have been initialized";
-  CHECK(!status_.ok()) << "stream should be in !ok() state pre-initialization";
+  CHECK(!ok_) << "stream should be in !ok() state pre-initialization";
 
   if (parent_->AllocateStream(this)) {
     // Successful initialization!
     allocated_ = true;
-    status_ = port::Status::OK();
+    ok_ = true;
   } else {
     LOG(ERROR) << "failed to allocate stream during initialization";
   }
@@ -316,7 +310,11 @@ Stream &Stream::Init() {
 Stream &Stream::InitTimer(Timer *timer) {
   VLOG_CALL(PARAM(timer));
 
+  if (ok()) {
     CheckError(parent_->AllocateTimer(timer));
+  } else {
+    LOG(INFO) << "did not allocate timer: " << timer;
+  }
   return *this;
 }
 
@@ -351,18 +349,24 @@ Stream &Stream::ThenBatchNormalizationForward(
     DeviceMemory<float> *batch_mean, DeviceMemory<float> *batch_var,
     DeviceMemory<float> *saved_mean, DeviceMemory<float> *saved_inv_var,
     bool is_training,
+    std::function<const DeviceMemory<float> &()> var_to_inv_var,
+    std::function<void()> inv_var_to_var,
     ScratchAllocator *reserve_space_allocator,
     ScratchAllocator *workspace_allocator) {
   VLOG_CALL(PARAM(x), PARAM(scale), PARAM(offset), PARAM(x_desc),
             PARAM(scale_offset_desc), PARAM(epsilon), PARAM(y));
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoBatchNormalizationForward(
-        this, x, scale, offset, estimated_mean, estimated_variance, side_input,
-        x_desc, scale_offset_desc, epsilon, exponential_average_factor,
-        activation_mode, y, batch_mean, batch_var, saved_mean, saved_inv_var,
-        is_training, reserve_space_allocator, workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoBatchNormalizationForward(
+          this, x, scale, offset, estimated_mean, estimated_variance,
+          side_input, x_desc, scale_offset_desc, epsilon,
+          exponential_average_factor, activation_mode, y, batch_mean, batch_var,
+          saved_mean, saved_inv_var, is_training, reserve_space_allocator,
+          workspace_allocator, std::move(var_to_inv_var),
+          std::move(inv_var_to_var)));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -379,13 +383,15 @@ Stream &Stream::ThenBatchNormalizationBackward(
   VLOG_CALL(PARAM(y_backprop), PARAM(x), PARAM(scale), PARAM(x_desc),
             PARAM(scale_offset_desc), PARAM(epsilon), PARAM(x_backprop),
             PARAM(scale_backprop), PARAM(offset_backprop));
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoBatchNormalizationBackward(
-        this, y_backprop, x, scale, mean, inv_var, x_desc, scale_offset_desc,
-        epsilon, x_backprop, scale_backprop, offset_backprop,
-        reserve_space_data, workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoBatchNormalizationBackward(
+          this, y_backprop, x, scale, mean, inv_var, x_desc, scale_offset_desc,
+          epsilon, x_backprop, scale_backprop, offset_backprop,
+          reserve_space_data, workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -402,18 +408,24 @@ Stream &Stream::ThenBatchNormalizationForward(
     DeviceMemory<float> *batch_mean, DeviceMemory<float> *batch_var,
     DeviceMemory<float> *saved_mean, DeviceMemory<float> *saved_inv_var,
     bool is_training,
+    std::function<const DeviceMemory<float> &()> var_to_inv_var,
+    std::function<void()> inv_var_to_var,
     ScratchAllocator *reserve_space_allocator,
     ScratchAllocator *workspace_allocator) {
   VLOG_CALL(PARAM(x), PARAM(scale), PARAM(offset), PARAM(x_desc),
             PARAM(scale_offset_desc), PARAM(epsilon), PARAM(y));
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoBatchNormalizationForward(
-        this, x, scale, offset, estimated_mean, estimated_variance, side_input,
-        x_desc, scale_offset_desc, epsilon, exponential_average_factor,
-        activation_mode, y, batch_mean, batch_var, saved_mean, saved_inv_var,
-        is_training, reserve_space_allocator, workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoBatchNormalizationForward(
+          this, x, scale, offset, estimated_mean, estimated_variance,
+          side_input, x_desc, scale_offset_desc, epsilon,
+          exponential_average_factor, activation_mode, y, batch_mean, batch_var,
+          saved_mean, saved_inv_var, is_training, reserve_space_allocator,
+          workspace_allocator, std::move(var_to_inv_var),
+          std::move(inv_var_to_var)));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -431,19 +443,21 @@ Stream &Stream::ThenBatchNormalizationBackward(
   VLOG_CALL(PARAM(y_backprop), PARAM(x), PARAM(scale), PARAM(x_desc),
             PARAM(scale_offset_desc), PARAM(epsilon), PARAM(x_backprop),
             PARAM(scale_backprop), PARAM(offset_backprop));
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoBatchNormalizationBackward(
-        this, y_backprop, x, scale, mean, inv_var, x_desc, scale_offset_desc,
-        epsilon, x_backprop, scale_backprop, offset_backprop,
-        reserve_space_data, workspace_allocator));
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoBatchNormalizationBackward(
+          this, y_backprop, x, scale, mean, inv_var, x_desc, scale_offset_desc,
+          epsilon, x_backprop, scale_backprop, offset_backprop,
+          reserve_space_data, workspace_allocator));
 
-  } else {
-    SetErrorAndLogNoDnnSupport();
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
 
-port::Status Stream::FusedConvolveWithAlgorithm(
+Stream &Stream::ThenFusedConvolveWithAlgorithm(
     const dnn::BatchDescriptor &conv_input_descriptor,
     const DeviceMemory<double> &conv_input_data, double conv_input_scale,
     const dnn::FilterDescriptor &filter_descriptor,
@@ -463,18 +477,25 @@ port::Status Stream::FusedConvolveWithAlgorithm(
             PARAM(activation_mode), PARAM(output_descriptor), PARAM(output),
             PARAM(algorithm_config));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    return dnn->DoFusedConvolve(
-        this, conv_input_descriptor, conv_input_data, conv_input_scale,
-        filter_descriptor, filter_data, convolution_descriptor, side_input_data,
-        side_input_scale, bias_descriptor, biases, activation_mode,
-        output_descriptor, output, scratch_allocator, algorithm_config,
-        output_profile_result);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoFusedConvolve(
+          this, conv_input_descriptor, conv_input_data, conv_input_scale,
+          filter_descriptor, filter_data, convolution_descriptor,
+          side_input_data, side_input_scale, bias_descriptor, biases,
+          activation_mode, output_descriptor, output, scratch_allocator,
+          algorithm_config, output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
-  return port::UnimplementedError("DNN library is not found.");
+  return *this;
 }
 
-port::Status Stream::FusedConvolveWithAlgorithm(
+Stream &Stream::ThenFusedConvolveWithAlgorithm(
     const dnn::BatchDescriptor &conv_input_descriptor,
     const DeviceMemory<float> &conv_input_data, float conv_input_scale,
     const dnn::FilterDescriptor &filter_descriptor,
@@ -494,18 +515,25 @@ port::Status Stream::FusedConvolveWithAlgorithm(
             PARAM(activation_mode), PARAM(output_descriptor), PARAM(output),
             PARAM(algorithm_config));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    return dnn->DoFusedConvolve(
-        this, conv_input_descriptor, conv_input_data, conv_input_scale,
-        filter_descriptor, filter_data, convolution_descriptor, side_input_data,
-        side_input_scale, bias_descriptor, biases, activation_mode,
-        output_descriptor, output, scratch_allocator, algorithm_config,
-        output_profile_result);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoFusedConvolve(
+          this, conv_input_descriptor, conv_input_data, conv_input_scale,
+          filter_descriptor, filter_data, convolution_descriptor,
+          side_input_data, side_input_scale, bias_descriptor, biases,
+          activation_mode, output_descriptor, output, scratch_allocator,
+          algorithm_config, output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
-  return port::UnimplementedError("DNN library is not found.");
+  return *this;
 }
 
-port::Status Stream::FusedConvolveWithAlgorithm(
+Stream &Stream::ThenFusedConvolveWithAlgorithm(
     const dnn::BatchDescriptor &conv_input_descriptor,
     const DeviceMemory<Eigen::half> &conv_input_data, float conv_input_scale,
     const dnn::FilterDescriptor &filter_descriptor,
@@ -526,18 +554,25 @@ port::Status Stream::FusedConvolveWithAlgorithm(
             PARAM(bias_descriptor), PARAM(biases), PARAM(activation_mode),
             PARAM(output_descriptor), PARAM(output), PARAM(algorithm_config));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    return dnn->DoFusedConvolve(
-        this, conv_input_descriptor, conv_input_data, conv_input_scale,
-        filter_descriptor, filter_data, convolution_descriptor, side_input_data,
-        side_input_scale, bias_descriptor, biases, activation_mode,
-        output_descriptor, output, scratch_allocator, algorithm_config,
-        output_profile_result);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoFusedConvolve(
+          this, conv_input_descriptor, conv_input_data, conv_input_scale,
+          filter_descriptor, filter_data, convolution_descriptor,
+          side_input_data, side_input_scale, bias_descriptor, biases,
+          activation_mode, output_descriptor, output, scratch_allocator,
+          algorithm_config, output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
-  return port::UnimplementedError("DNN library is not found.");
+  return *this;
 }
 
-port::Status Stream::FusedConvolveWithAlgorithm(
+Stream &Stream::ThenFusedConvolveWithAlgorithm(
     const dnn::BatchDescriptor &conv_input_descriptor,
     const DeviceMemory<int8> &conv_input_data, float conv_input_scale,
     const dnn::FilterDescriptor &filter_descriptor,
@@ -557,18 +592,25 @@ port::Status Stream::FusedConvolveWithAlgorithm(
             PARAM(bias_descriptor), PARAM(biases), PARAM(activation_mode),
             PARAM(output_descriptor), PARAM(output), PARAM(algorithm_config));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    return dnn->DoFusedConvolve(
-        this, conv_input_descriptor, conv_input_data, conv_input_scale,
-        filter_descriptor, filter_data, convolution_descriptor, side_input_data,
-        side_input_scale, bias_descriptor, biases, activation_mode,
-        output_descriptor, output, scratch_allocator, algorithm_config,
-        output_profile_result);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoFusedConvolve(
+          this, conv_input_descriptor, conv_input_data, conv_input_scale,
+          filter_descriptor, filter_data, convolution_descriptor,
+          side_input_data, side_input_scale, bias_descriptor, biases,
+          activation_mode, output_descriptor, output, scratch_allocator,
+          algorithm_config, output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
-  return port::UnimplementedError("DNN library is not found.");
+  return *this;
 }
 
-port::Status Stream::FusedConvolveWithAlgorithm(
+Stream &Stream::ThenFusedConvolveWithAlgorithm(
     const dnn::BatchDescriptor &conv_input_descriptor,
     const DeviceMemory<int8> &conv_input_data, float conv_input_scale,
     const dnn::FilterDescriptor &filter_descriptor,
@@ -588,15 +630,232 @@ port::Status Stream::FusedConvolveWithAlgorithm(
             PARAM(bias_descriptor), PARAM(biases), PARAM(activation_mode),
             PARAM(output_descriptor), PARAM(output), PARAM(algorithm_config));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    return dnn->DoFusedConvolve(
-        this, conv_input_descriptor, conv_input_data, conv_input_scale,
-        filter_descriptor, filter_data, convolution_descriptor, side_input_data,
-        side_input_scale, bias_descriptor, biases, activation_mode,
-        output_descriptor, output, scratch_allocator, algorithm_config,
-        output_profile_result);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoFusedConvolve(
+          this, conv_input_descriptor, conv_input_data, conv_input_scale,
+          filter_descriptor, filter_data, convolution_descriptor,
+          side_input_data, side_input_scale, bias_descriptor, biases,
+          activation_mode, output_descriptor, output, scratch_allocator,
+          algorithm_config, output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
-  return port::UnimplementedError("DNN library is not found.");
+  return *this;
+}
+
+Stream &Stream::ThenConvolveWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<double> &input_data,
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<double> &filter_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &output_descriptor, DeviceMemory<double> *output,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(convolution_descriptor), PARAM(output_descriptor),
+            PARAM(output), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::FORWARD, this, input_descriptor,
+                 input_data, filter_descriptor, filter_data, output_descriptor,
+                 *output, convolution_descriptor, algorithm_config,
+                 scratch_allocator, &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolve(
+            this, input_descriptor, input_data, filter_descriptor, filter_data,
+            convolution_descriptor, output_descriptor, output, algorithm_desc,
+            &scratch_memory, output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<float> &input_data,
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<float> &filter_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &output_descriptor, DeviceMemory<float> *output,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(convolution_descriptor), PARAM(output_descriptor),
+            PARAM(output), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::FORWARD, this, input_descriptor,
+                 input_data, filter_descriptor, filter_data, output_descriptor,
+                 *output, convolution_descriptor, algorithm_config,
+                 scratch_allocator, &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolve(
+            this, input_descriptor, input_data, filter_descriptor, filter_data,
+            convolution_descriptor, output_descriptor, output, algorithm_desc,
+            &scratch_memory, output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<Eigen::half> &input_data,
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<Eigen::half> &filter_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<Eigen::half> *output, ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(convolution_descriptor), PARAM(output_descriptor),
+            PARAM(output), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::FORWARD, this, input_descriptor,
+                 input_data, filter_descriptor, filter_data, output_descriptor,
+                 *output, convolution_descriptor, algorithm_config,
+                 scratch_allocator, &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolve(
+            this, input_descriptor, input_data, filter_descriptor, filter_data,
+            convolution_descriptor, output_descriptor, output, algorithm_desc,
+            &scratch_memory, output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<int8> &input_data,
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<int8> &filter_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &output_descriptor, DeviceMemory<float> *output,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(convolution_descriptor), PARAM(output_descriptor),
+            PARAM(output), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::FORWARD, this, input_descriptor,
+                 input_data, filter_descriptor, filter_data, output_descriptor,
+                 *output, convolution_descriptor, algorithm_config,
+                 scratch_allocator, &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolve(
+            this, input_descriptor, input_data, filter_descriptor, filter_data,
+            convolution_descriptor, output_descriptor, output, algorithm_desc,
+            &scratch_memory, output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<int8> &input_data,
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<int8> &filter_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &output_descriptor, DeviceMemory<int8> *output,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(convolution_descriptor), PARAM(output_descriptor),
+            PARAM(output), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::FORWARD, this, input_descriptor,
+                 input_data, filter_descriptor, filter_data, output_descriptor,
+                 *output, convolution_descriptor, algorithm_config,
+                 scratch_allocator, &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolve(
+            this, input_descriptor, input_data, filter_descriptor, filter_data,
+            convolution_descriptor, output_descriptor, output, algorithm_desc,
+            &scratch_memory, output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
 }
 
 Stream &Stream::ThenConvolve(
@@ -607,15 +866,11 @@ Stream &Stream::ThenConvolve(
     const dnn::ConvolutionDescriptor &convolution_descriptor,
     const dnn::BatchDescriptor &output_descriptor,
     DeviceMemory<float> *output) {
-  if (ok()) {
-    CheckError(ConvolveWithAlgorithm(
-                   input_descriptor, input_data, filter_descriptor, filter_data,
-                   convolution_descriptor, output_descriptor, output,
-                   /*scratch_allocator=*/nullptr, dnn::AlgorithmConfig(),
-                   /*output_profile_result=*/nullptr)
-                   .ok());
-  }
-  return *this;
+  return ThenConvolveWithAlgorithm(
+      input_descriptor, input_data, filter_descriptor, filter_data,
+      convolution_descriptor, output_descriptor, output,
+      /*scratch_allocator=*/nullptr, dnn::AlgorithmConfig(),
+      /*output_profile_result=*/nullptr);
 }
 
 Stream &Stream::ThenConvolveQuantized(
@@ -632,15 +887,18 @@ Stream &Stream::ThenConvolveQuantized(
             PARAM(coefficient_scales), PARAM(convolution_descriptor),
             PARAM(output_descriptor), PARAM(output));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoConvolveQuantized(
-        this, input_descriptor, input_data, filter_descriptor,
-        filter_coefficients, coefficient_scales, convolution_descriptor,
-        output_descriptor, output));
-  } else {
-    SetError();
-    LOG(WARNING) << "attempting to perform DNN operation using StreamExecutor "
-                    "without DNN support";
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoConvolveQuantized(
+          this, input_descriptor, input_data, filter_descriptor,
+          filter_coefficients, coefficient_scales, convolution_descriptor,
+          output_descriptor, output));
+    } else {
+      SetError();
+      LOG(WARNING)
+          << "attempting to perform DNN operation using StreamExecutor "
+             "without DNN support";
+    }
   }
   return *this;
 }
@@ -659,15 +917,18 @@ Stream &Stream::ThenConvolveQuantized(
             PARAM(coefficient_scales), PARAM(convolution_descriptor),
             PARAM(output_descriptor), PARAM(output));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoConvolveQuantized(
-        this, input_descriptor, input_data, filter_descriptor,
-        filter_coefficients, coefficient_scales, convolution_descriptor,
-        output_descriptor, output));
-  } else {
-    SetError();
-    LOG(WARNING) << "attempting to perform DNN operation using StreamExecutor "
-                    "without DNN support";
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoConvolveQuantized(
+          this, input_descriptor, input_data, filter_descriptor,
+          filter_coefficients, coefficient_scales, convolution_descriptor,
+          output_descriptor, output));
+    } else {
+      SetError();
+      LOG(WARNING)
+          << "attempting to perform DNN operation using StreamExecutor "
+             "without DNN support";
+    }
   }
   return *this;
 }
@@ -686,13 +947,285 @@ Stream &Stream::ThenSeparableConvolve(
       PARAM(depth_multiplier), PARAM(first_weights), PARAM(second_weights),
       PARAM(convolution_descriptor), PARAM(output_descriptor), PARAM(output));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoSeparableConvolve(
-        this, batch_descriptor, input_data, filter_descriptor, depth_multiplier,
-        first_weights, second_weights, convolution_descriptor,
-        output_descriptor, output));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoSeparableConvolve(
+          this, batch_descriptor, input_data, filter_descriptor,
+          depth_multiplier, first_weights, second_weights,
+          convolution_descriptor, output_descriptor, output));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardDataWithAlgorithm(
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<double> &filter_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<double> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &input_descriptor,
+    DeviceMemory<double> *backward_input_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(input_descriptor),
+            PARAM(backward_input_data));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_DATA, this, input_descriptor,
+                 *backward_input_data, filter_descriptor, filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardData(
+            this, filter_descriptor, filter_data, output_descriptor,
+            backward_output_data, convolution_descriptor, input_descriptor,
+            backward_input_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardDataWithAlgorithm(
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<float> &filter_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<float> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &input_descriptor,
+    DeviceMemory<float> *backward_input_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(input_descriptor),
+            PARAM(backward_input_data));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_DATA, this, input_descriptor,
+                 *backward_input_data, filter_descriptor, filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardData(
+            this, filter_descriptor, filter_data, output_descriptor,
+            backward_output_data, convolution_descriptor, input_descriptor,
+            backward_input_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardDataWithAlgorithm(
+    const dnn::FilterDescriptor &filter_descriptor,
+    const DeviceMemory<Eigen::half> &filter_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<Eigen::half> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::BatchDescriptor &input_descriptor,
+    DeviceMemory<Eigen::half> *backward_input_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(filter_descriptor), PARAM(filter_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(input_descriptor),
+            PARAM(backward_input_data), PARAM(algorithm_config));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_DATA, this, input_descriptor,
+                 *backward_input_data, filter_descriptor, filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardData(
+            this, filter_descriptor, filter_data, output_descriptor,
+            backward_output_data, convolution_descriptor, input_descriptor,
+            backward_input_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardFilterWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<double> &input_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<double> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::FilterDescriptor &filter_descriptor,
+    DeviceMemory<double> *backward_filter_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(filter_descriptor),
+            PARAM(backward_filter_data));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_FILTER, this, input_descriptor,
+                 input_data, filter_descriptor, *backward_filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardFilter(
+            this, input_descriptor, input_data, output_descriptor,
+            backward_output_data, convolution_descriptor, filter_descriptor,
+            backward_filter_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardFilterWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<float> &input_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<float> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::FilterDescriptor &filter_descriptor,
+    DeviceMemory<float> *backward_filter_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(filter_descriptor),
+            PARAM(backward_filter_data));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_FILTER, this, input_descriptor,
+                 input_data, filter_descriptor, *backward_filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardFilter(
+            this, input_descriptor, input_data, output_descriptor,
+            backward_output_data, convolution_descriptor, filter_descriptor,
+            backward_filter_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
+  }
+  return *this;
+}
+
+Stream &Stream::ThenConvolveBackwardFilterWithAlgorithm(
+    const dnn::BatchDescriptor &input_descriptor,
+    const DeviceMemory<Eigen::half> &input_data,
+    const dnn::BatchDescriptor &output_descriptor,
+    DeviceMemory<Eigen::half> backward_output_data,
+    const dnn::ConvolutionDescriptor &convolution_descriptor,
+    const dnn::FilterDescriptor &filter_descriptor,
+    DeviceMemory<Eigen::half> *backward_filter_data,
+    ScratchAllocator *scratch_allocator,
+    const dnn::AlgorithmConfig &algorithm_config,
+    dnn::ProfileResult *output_profile_result) {
+  VLOG_CALL(PARAM(input_descriptor), PARAM(input_data),
+            PARAM(output_descriptor), PARAM(backward_output_data),
+            PARAM(convolution_descriptor), PARAM(filter_descriptor),
+            PARAM(backward_filter_data));
+
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      dnn::AlgorithmDesc algorithm_desc;
+      auto status =
+          dnn->PrepareForConvolution(
+                 dnn::ConvolutionKind::BACKWARD_FILTER, this, input_descriptor,
+                 input_data, filter_descriptor, *backward_filter_data,
+                 output_descriptor, backward_output_data,
+                 convolution_descriptor, algorithm_config, scratch_allocator,
+                 &algorithm_desc, &scratch_memory)
+              .ok();
+      if (status) {
+        status = dnn->DoConvolveBackwardFilter(
+            this, input_descriptor, input_data, output_descriptor,
+            backward_output_data, convolution_descriptor, filter_descriptor,
+            backward_filter_data, algorithm_desc, &scratch_memory,
+            output_profile_result);
+      }
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -706,12 +1239,14 @@ Stream &Stream::ThenConvolveBackwardBiasImpl(
   VLOG_CALL(PARAM(input_descriptor), PARAM(input_data), PARAM(bias_descriptor),
             PARAM(backward_bias_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoConvolveBackwardBias(this, input_descriptor, input_data,
-                                           bias_descriptor,
-                                           backward_bias_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoConvolveBackwardBias(this, input_descriptor, input_data,
+                                             bias_descriptor,
+                                             backward_bias_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -751,11 +1286,13 @@ Stream &Stream::ThenMatMul(const DeviceMemory<float> &input_data,
   VLOG_CALL(PARAM(input_data), PARAM(weights), PARAM(input_dimensions),
             PARAM(output_dimensions), PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoMatMul(this, input_data, weights, input_dimensions,
-                             output_dimensions, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoMatMul(this, input_data, weights, input_dimensions,
+                               output_dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -770,12 +1307,14 @@ Stream &Stream::ThenMatMulQuantized(
             PARAM(input_dimensions), PARAM(output_dimensions),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoMatMulQuantized(this, input_data, weights, weight_scales,
-                                      input_dimensions, output_dimensions,
-                                      output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoMatMulQuantized(this, input_data, weights,
+                                        weight_scales, input_dimensions,
+                                        output_dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -790,12 +1329,14 @@ Stream &Stream::ThenMatMulQuantized(
             PARAM(input_dimensions), PARAM(output_dimensions),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoMatMulQuantized(this, input_data, weights, weight_scales,
-                                      input_dimensions, output_dimensions,
-                                      output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoMatMulQuantized(this, input_data, weights,
+                                        weight_scales, input_dimensions,
+                                        output_dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -807,11 +1348,13 @@ Stream &Stream::ThenBiasAdd(const DeviceMemory<float> &input_data,
   VLOG_CALL(PARAM(input_data), PARAM(biases), PARAM(dimensions),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(
-        dnn->DoBiasAdd(this, input_data, biases, dimensions, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(
+          dnn->DoBiasAdd(this, input_data, biases, dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -826,14 +1369,17 @@ Stream &Stream::ThenPoolForward(
             PARAM(input_data), PARAM(output_dimensions), PARAM(output_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
-                                  input_data, output_dimensions, output_data,
-                                  workspace_allocator));
-  } else {
-    SetError();
-    LOG(WARNING) << "attempting to perform DNN operation using StreamExecutor "
-                    "without DNN support";
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
+                                    input_data, output_dimensions, output_data,
+                                    workspace_allocator));
+    } else {
+      SetError();
+      LOG(WARNING)
+          << "attempting to perform DNN operation using StreamExecutor "
+             "without DNN support";
+    }
   }
   return *this;
 }
@@ -848,12 +1394,14 @@ Stream &Stream::ThenPoolForward(
             PARAM(input_data), PARAM(output_dimensions), PARAM(output_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
-                                  input_data, output_dimensions, output_data,
-                                  workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
+                                    input_data, output_dimensions, output_data,
+                                    workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -869,12 +1417,14 @@ Stream &Stream::ThenPoolForward(
             PARAM(input_data), PARAM(output_dimensions), PARAM(output_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
-                                  input_data, output_dimensions, output_data,
-                                  workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
+                                    input_data, output_dimensions, output_data,
+                                    workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -889,12 +1439,14 @@ Stream &Stream::ThenPoolForward(
             PARAM(input_data), PARAM(output_dimensions), PARAM(output_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
-                                  input_data, output_dimensions, output_data,
-                                  workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolForward(this, pooling_dimensions, input_dimensions,
+                                    input_data, output_dimensions, output_data,
+                                    workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -913,15 +1465,18 @@ Stream &Stream::ThenPoolBackward(
             PARAM(input_diff_data), PARAM(output_diff_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
-                                   input_data, output_dimensions, output_data,
-                                   input_diff_data, output_diff_data,
-                                   workspace_allocator));
-  } else {
-    SetError();
-    LOG(WARNING) << "attempting to perform DNN operation using StreamExecutor "
-                    "without DNN support";
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
+                                     input_data, output_dimensions, output_data,
+                                     input_diff_data, output_diff_data,
+                                     workspace_allocator));
+    } else {
+      SetError();
+      LOG(WARNING)
+          << "attempting to perform DNN operation using StreamExecutor "
+             "without DNN support";
+    }
   }
   return *this;
 }
@@ -940,13 +1495,15 @@ Stream &Stream::ThenPoolBackward(
             PARAM(input_diff_data), PARAM(output_diff_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
-                                   input_data, output_dimensions, output_data,
-                                   input_diff_data, output_diff_data,
-                                   workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
+                                     input_data, output_dimensions, output_data,
+                                     input_diff_data, output_diff_data,
+                                     workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -965,13 +1522,15 @@ Stream &Stream::ThenPoolBackward(
             PARAM(input_diff_data), PARAM(output_diff_data),
             PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
-                                   input_data, output_dimensions, output_data,
-                                   input_diff_data, output_diff_data,
-                                   workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoPoolBackward(this, pooling_dimensions, input_dimensions,
+                                     input_data, output_dimensions, output_data,
+                                     input_diff_data, output_diff_data,
+                                     workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -983,11 +1542,13 @@ Stream &Stream::ThenNormalizeWithDimensions(
   VLOG_CALL(PARAM(normalize_descriptor), PARAM(dimensions), PARAM(input_data),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoNormalizeWithDimensions(
-        this, normalize_descriptor, dimensions, input_data, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoNormalizeWithDimensions(
+          this, normalize_descriptor, dimensions, input_data, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1003,13 +1564,15 @@ Stream &Stream::ThenNormalizeBackwardWithDimensions(
             PARAM(normalized_data), PARAM(normalized_variable_gradient),
             PARAM(raw_variable_gradient), PARAM(workspace_allocator));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoNormalizeBackwardWithDimensions(
-        this, normalize_descriptor, dimensions, raw_data, normalized_data,
-        normalized_variable_gradient, raw_variable_gradient,
-        workspace_allocator));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoNormalizeBackwardWithDimensions(
+          this, normalize_descriptor, dimensions, raw_data, normalized_data,
+          normalized_variable_gradient, raw_variable_gradient,
+          workspace_allocator));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1030,11 +1593,13 @@ Stream &Stream::ThenActivateWithOptions(dnn::ActivationMode activation_mode,
   VLOG_CALL(PARAM(activation_mode), PARAM(dimensions), PARAM(input_data),
             PARAM(output_data), PARAM(options));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoActivate(this, activation_mode, dimensions, input_data,
-                               output_data, options));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoActivate(this, activation_mode, dimensions, input_data,
+                                 output_data, options));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1058,11 +1623,13 @@ Stream &Stream::ThenDepthConcatenate(
     }
   }
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoDepthConcatenate(this, input_dimensions, input_data,
-                                       output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoDepthConcatenate(this, input_dimensions, input_data,
+                                         output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1103,11 +1670,13 @@ Stream &Stream::ThenSpaceConcatenate(
       return *this;
     }
   }
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoSpaceConcatenate(this, input_dimensions, input_data,
-                                       output_data, concat_direction));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoSpaceConcatenate(this, input_dimensions, input_data,
+                                         output_data, concat_direction));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1119,11 +1688,13 @@ Stream &Stream::ThenReshape(const dnn::BatchDescriptor &input_dimensions,
   VLOG_CALL(PARAM(input_dimensions), PARAM(input_data),
             PARAM(output_dimensions), PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoReshape(this, input_dimensions, input_data,
-                              output_dimensions, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoReshape(this, input_dimensions, input_data,
+                                output_dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1137,12 +1708,14 @@ Stream &Stream::ThenDepthToSpace(
             PARAM(depth_to_space_layout), PARAM(sqrt_depth_reduction),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoDepthToSpace(this, input_dimensions, input_data,
-                                   depth_to_space_layout, sqrt_depth_reduction,
-                                   output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoDepthToSpace(this, input_dimensions, input_data,
+                                     depth_to_space_layout,
+                                     sqrt_depth_reduction, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1156,12 +1729,14 @@ Stream &Stream::ThenSpaceToDepth(
             PARAM(space_to_depth_layout), PARAM(sqrt_depth_increase),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoSpaceToDepth(this, input_dimensions, input_data,
-                                   space_to_depth_layout, sqrt_depth_increase,
-                                   output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoSpaceToDepth(this, input_dimensions, input_data,
+                                     space_to_depth_layout, sqrt_depth_increase,
+                                     output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1175,12 +1750,14 @@ Stream &Stream::ThenElementwiseOperate(
   VLOG_CALL(PARAM(operation), PARAM(input_dimensions), PARAM(input_data),
             PARAM(output_dimensions), PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoElementwiseOperate(this, operation, input_dimensions,
-                                         input_data, output_dimensions,
-                                         output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoElementwiseOperate(this, operation, input_dimensions,
+                                           input_data, output_dimensions,
+                                           output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1196,12 +1773,14 @@ Stream &Stream::ThenElementwiseOperateScaledQuantized(
             PARAM(input_dimensions), PARAM(input_data),
             PARAM(output_dimensions), PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoElementwiseOperateScaledQuantized(
-        this, operation, input_multiplicands, output_divisor, input_dimensions,
-        input_data, output_dimensions, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoElementwiseOperateScaledQuantized(
+          this, operation, input_multiplicands, output_divisor,
+          input_dimensions, input_data, output_dimensions, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1214,11 +1793,13 @@ Stream &Stream::ThenXYPad(const dnn::BatchDescriptor &dimensions,
             PARAM(right_pad), PARAM(top_pad), PARAM(bottom_pad),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoXYPad(this, dimensions, input_data, left_pad, right_pad,
-                            top_pad, bottom_pad, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoXYPad(this, dimensions, input_data, left_pad, right_pad,
+                              top_pad, bottom_pad, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1232,11 +1813,14 @@ Stream &Stream::ThenXYSlice(const dnn::BatchDescriptor &dimensions,
             PARAM(right_trim), PARAM(top_trim), PARAM(bottom_trim),
             PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoXYSlice(this, dimensions, input_data, left_trim,
-                              right_trim, top_trim, bottom_trim, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoXYSlice(this, dimensions, input_data, left_trim,
+                                right_trim, top_trim, bottom_trim,
+                                output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1248,11 +1832,13 @@ Stream &Stream::ThenXYBroadcast(const dnn::BatchDescriptor &dimensions,
   VLOG_CALL(PARAM(dimensions), PARAM(input_data), PARAM(replicate_x),
             PARAM(replicate_y), PARAM(output_data));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoXYBroadcast(this, dimensions, input_data, replicate_x,
-                                  replicate_y, output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoXYBroadcast(this, dimensions, input_data, replicate_x,
+                                    replicate_y, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1263,11 +1849,13 @@ Stream &Stream::ThenMemcpyD2HQuantized(
   VLOG_CALL(PARAM(gpu_unquantized_src), PARAM(mode), PARAM(host_dst),
             PARAM(size));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoMemcpyD2HQuantized(this, gpu_unquantized_src, mode,
-                                         host_dst, size));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoMemcpyD2HQuantized(this, gpu_unquantized_src, mode,
+                                           host_dst, size));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -1278,25 +1866,23 @@ Stream &Stream::ThenMemcpyH2DQuantized(
   VLOG_CALL(PARAM(host_src), PARAM(size), PARAM(mode),
             PARAM(gpu_unquantized_dst));
 
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoMemcpyH2DQuantized(this, host_src, size, mode,
-                                         gpu_unquantized_dst));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoMemcpyH2DQuantized(this, host_src, size, mode,
+                                           gpu_unquantized_dst));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
 
 Stream *Stream::GetOrCreateSubStream() {
-  // Do not destroy bad streams when holding mu_ because ~Stream() may
-  // BlockHostUntilDone and it's host callbacks might attempt to acquire mu_.
-  std::vector<std::unique_ptr<Stream>> bad_streams;
-
   absl::MutexLock lock(&mu_);
 
   // Look for the first reusable sub_stream that is ok, dropping !ok sub_streams
   // we encounter along the way.
-  for (size_t index = 0; index < sub_streams_.size();) {
+  for (int64 index = 0; index < sub_streams_.size();) {
     std::pair<std::unique_ptr<Stream>, bool> &pair = sub_streams_[index];
     if (pair.second) {
       // The sub_stream is reusable.
@@ -1315,7 +1901,6 @@ Stream *Stream::GetOrCreateSubStream() {
       if (index != last) {
         std::swap(pair, sub_streams_[last]);
       }
-      bad_streams.push_back(std::move(sub_streams_.back().first));
       sub_streams_.pop_back();
       VLOG(1) << DebugStreamPointers() << " dropped !ok sub_stream "
               << sub_stream->DebugStreamPointers();
@@ -1330,7 +1915,7 @@ Stream *Stream::GetOrCreateSubStream() {
                             false);
   Stream *sub_stream = sub_streams_.back().first.get();
   sub_stream->Init();
-  if (!sub_stream->ok()) {
+  if (!sub_stream->ok_) {
     LOG(ERROR) << "sub-stream failed to be initialized";
   }
   VLOG(1) << DebugStreamPointers() << " created new sub_stream "
@@ -1340,14 +1925,10 @@ Stream *Stream::GetOrCreateSubStream() {
 }
 
 void Stream::ReturnSubStream(Stream *sub_stream) {
-  // Do not destroy bad streams when holding mu_ because ~Stream() may
-  // BlockHostUntilDone and it's host callbacks might attempt to acquire mu_.
-  std::unique_ptr<Stream> bad_stream;
-
   absl::MutexLock lock(&mu_);
 
   // Look for the sub-stream.
-  for (int64 index = 0, end = sub_streams_.size(); index < end; ++index) {
+  for (int64 index = 0; index < sub_streams_.size(); ++index) {
     std::pair<std::unique_ptr<Stream>, bool> &pair = sub_streams_[index];
     if (pair.first.get() != sub_stream) {
       continue;
@@ -1368,7 +1949,6 @@ void Stream::ReturnSubStream(Stream *sub_stream) {
       if (index != last) {
         std::swap(pair, sub_streams_[last]);
       }
-      std::swap(bad_stream, sub_streams_.back().first);
       sub_streams_.pop_back();
     }
     return;
@@ -1382,14 +1962,24 @@ void Stream::ReturnSubStream(Stream *sub_stream) {
 Stream &Stream::ThenStartTimer(Timer *t) {
   VLOG_CALL(PARAM(t));
 
-  CheckError(parent_->StartTimer(this, t));
+  if (ok()) {
+    CheckError(parent_->StartTimer(this, t));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not enqueue 'start timer': " << t;
+  }
   return *this;
 }
 
 Stream &Stream::ThenStopTimer(Timer *t) {
   VLOG_CALL(PARAM(t));
 
-  CheckError(parent_->StopTimer(this, t));
+  if (ok()) {
+    CheckError(parent_->StopTimer(this, t));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not enqueue 'stop timer': " << t;
+  }
   return *this;
 }
 
@@ -1479,8 +2069,7 @@ Stream &Stream::ThenBlasAsum(uint64 elem_count, const DeviceMemory<double> &x,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasAsum, elem_count, x, incx,
               result);
 }
@@ -1491,8 +2080,7 @@ Stream &Stream::ThenBlasAsum(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<float> *>
-      impl;
+               DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasAsum, elem_count, x, incx,
               result);
 }
@@ -1503,8 +2091,7 @@ Stream &Stream::ThenBlasAsum(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasAsum, elem_count, x, incx,
               result);
 }
@@ -1516,8 +2103,7 @@ Stream &Stream::ThenBlasAxpy(uint64 elem_count, float alpha,
             PARAM(incy));
 
   ThenBlasImpl<uint64, float, const DeviceMemory<float> &, int,
-               DeviceMemory<float> *, int>
-      impl;
+               DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasAxpy, elem_count, alpha, x, incx,
               y, incy);
 }
@@ -1529,8 +2115,7 @@ Stream &Stream::ThenBlasAxpy(uint64 elem_count, double alpha,
             PARAM(incy));
 
   ThenBlasImpl<uint64, double, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasAxpy, elem_count, alpha, x, incx,
               y, incy);
 }
@@ -1544,8 +2129,7 @@ Stream &Stream::ThenBlasAxpy(uint64 elem_count, std::complex<float> alpha,
 
   ThenBlasImpl<uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasAxpy, elem_count, alpha, x, incx,
               y, incy);
 }
@@ -1559,8 +2143,7 @@ Stream &Stream::ThenBlasAxpy(uint64 elem_count, std::complex<double> alpha,
 
   ThenBlasImpl<uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasAxpy, elem_count, alpha, x, incx,
               y, incy);
 }
@@ -1570,8 +2153,7 @@ Stream &Stream::ThenBlasCopy(uint64 elem_count, const DeviceMemory<float> &x,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, const DeviceMemory<float> &, int, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasCopy, elem_count, x, incx, y,
               incy);
 }
@@ -1581,8 +2163,7 @@ Stream &Stream::ThenBlasCopy(uint64 elem_count, const DeviceMemory<double> &x,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasCopy, elem_count, x, incx, y,
               incy);
 }
@@ -1594,8 +2175,7 @@ Stream &Stream::ThenBlasCopy(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasCopy, elem_count, x, incx, y,
               incy);
 }
@@ -1607,8 +2187,7 @@ Stream &Stream::ThenBlasCopy(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasCopy, elem_count, x, incx, y,
               incy);
 }
@@ -1620,8 +2199,7 @@ Stream &Stream::ThenBlasDot(uint64 elem_count, const DeviceMemory<float> &x,
             PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<float> &, int,
-               const DeviceMemory<float> &, int, DeviceMemory<float> *>
-      impl;
+               const DeviceMemory<float> &, int, DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDot, elem_count, x, incx, y, incy,
               result);
 }
@@ -1633,8 +2211,7 @@ Stream &Stream::ThenBlasDot(uint64 elem_count, const DeviceMemory<double> &x,
             PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<double> &, int,
-               const DeviceMemory<double> &, int, DeviceMemory<double> *>
-      impl;
+               const DeviceMemory<double> &, int, DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDot, elem_count, x, incx, y, incy,
               result);
 }
@@ -1650,8 +2227,7 @@ Stream &Stream::ThenBlasDotc(uint64 elem_count,
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *>
-      impl;
+               DeviceMemory<std::complex<float>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDotc, elem_count, x, incx, y,
               incy, result);
 }
@@ -1667,8 +2243,7 @@ Stream &Stream::ThenBlasDotc(uint64 elem_count,
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *>
-      impl;
+               DeviceMemory<std::complex<double>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDotc, elem_count, x, incx, y,
               incy, result);
 }
@@ -1684,8 +2259,7 @@ Stream &Stream::ThenBlasDotu(uint64 elem_count,
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *>
-      impl;
+               DeviceMemory<std::complex<float>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDotu, elem_count, x, incx, y,
               incy, result);
 }
@@ -1701,8 +2275,7 @@ Stream &Stream::ThenBlasDotu(uint64 elem_count,
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *>
-      impl;
+               DeviceMemory<std::complex<double>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasDotu, elem_count, x, incx, y,
               incy, result);
 }
@@ -1722,8 +2295,7 @@ Stream &Stream::ThenBlasNrm2(uint64 elem_count, const DeviceMemory<double> &x,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasNrm2, elem_count, x, incx,
               result);
 }
@@ -1734,8 +2306,7 @@ Stream &Stream::ThenBlasNrm2(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<float> *>
-      impl;
+               DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasNrm2, elem_count, x, incx,
               result);
 }
@@ -1746,8 +2317,7 @@ Stream &Stream::ThenBlasNrm2(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasNrm2, elem_count, x, incx,
               result);
 }
@@ -1759,8 +2329,7 @@ Stream &Stream::ThenBlasRot(uint64 elem_count, DeviceMemory<float> *x, int incx,
             PARAM(c), PARAM(s));
 
   ThenBlasImpl<uint64, DeviceMemory<float> *, int, DeviceMemory<float> *, int,
-               float, float>
-      impl;
+               float, float> impl;
   return impl(this, &blas::BlasSupport::DoBlasRot, elem_count, x, incx, y, incy,
               c, s);
 }
@@ -1772,8 +2341,7 @@ Stream &Stream::ThenBlasRot(uint64 elem_count, DeviceMemory<double> *x,
             PARAM(c), PARAM(s));
 
   ThenBlasImpl<uint64, DeviceMemory<double> *, int, DeviceMemory<double> *, int,
-               double, double>
-      impl;
+               double, double> impl;
   return impl(this, &blas::BlasSupport::DoBlasRot, elem_count, x, incx, y, incy,
               c, s);
 }
@@ -1786,8 +2354,7 @@ Stream &Stream::ThenBlasRot(uint64 elem_count,
             PARAM(c), PARAM(s));
 
   ThenBlasImpl<uint64, DeviceMemory<std::complex<float>> *, int,
-               DeviceMemory<std::complex<float>> *, int, float, float>
-      impl;
+               DeviceMemory<std::complex<float>> *, int, float, float> impl;
   return impl(this, &blas::BlasSupport::DoBlasRot, elem_count, x, incx, y, incy,
               c, s);
 }
@@ -1800,8 +2367,7 @@ Stream &Stream::ThenBlasRot(uint64 elem_count,
             PARAM(c), PARAM(s));
 
   ThenBlasImpl<uint64, DeviceMemory<std::complex<double>> *, int,
-               DeviceMemory<std::complex<double>> *, int, double, double>
-      impl;
+               DeviceMemory<std::complex<double>> *, int, double, double> impl;
   return impl(this, &blas::BlasSupport::DoBlasRot, elem_count, x, incx, y, incy,
               c, s);
 }
@@ -1811,8 +2377,7 @@ Stream &Stream::ThenBlasRotg(DeviceMemory<float> *a, DeviceMemory<float> *b,
   VLOG_CALL(PARAM(a), PARAM(b), PARAM(c), PARAM(s));
 
   ThenBlasImpl<DeviceMemory<float> *, DeviceMemory<float> *,
-               DeviceMemory<float> *, DeviceMemory<float> *>
-      impl;
+               DeviceMemory<float> *, DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotg, a, b, c, s);
 }
 
@@ -1821,8 +2386,7 @@ Stream &Stream::ThenBlasRotg(DeviceMemory<double> *a, DeviceMemory<double> *b,
   VLOG_CALL(PARAM(a), PARAM(b), PARAM(c), PARAM(s));
 
   ThenBlasImpl<DeviceMemory<double> *, DeviceMemory<double> *,
-               DeviceMemory<double> *, DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *, DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotg, a, b, c, s);
 }
 
@@ -1834,8 +2398,7 @@ Stream &Stream::ThenBlasRotg(DeviceMemory<std::complex<float>> *a,
 
   ThenBlasImpl<DeviceMemory<std::complex<float>> *,
                DeviceMemory<std::complex<float>> *, DeviceMemory<float> *,
-               DeviceMemory<std::complex<float>> *>
-      impl;
+               DeviceMemory<std::complex<float>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotg, a, b, c, s);
 }
 
@@ -1847,8 +2410,7 @@ Stream &Stream::ThenBlasRotg(DeviceMemory<std::complex<double>> *a,
 
   ThenBlasImpl<DeviceMemory<std::complex<double>> *,
                DeviceMemory<std::complex<double>> *, DeviceMemory<double> *,
-               DeviceMemory<std::complex<double>> *>
-      impl;
+               DeviceMemory<std::complex<double>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotg, a, b, c, s);
 }
 
@@ -1859,8 +2421,7 @@ Stream &Stream::ThenBlasRotm(uint64 elem_count, DeviceMemory<float> *x,
             PARAM(param));
 
   ThenBlasImpl<uint64, DeviceMemory<float> *, int, DeviceMemory<float> *, int,
-               const DeviceMemory<float> &>
-      impl;
+               const DeviceMemory<float> &> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotm, elem_count, x, incx, y,
               incy, param);
 }
@@ -1872,8 +2433,7 @@ Stream &Stream::ThenBlasRotm(uint64 elem_count, DeviceMemory<double> *x,
             PARAM(param));
 
   ThenBlasImpl<uint64, DeviceMemory<double> *, int, DeviceMemory<double> *, int,
-               const DeviceMemory<double> &>
-      impl;
+               const DeviceMemory<double> &> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotm, elem_count, x, incx, y,
               incy, param);
 }
@@ -1886,8 +2446,7 @@ Stream &Stream::ThenBlasRotmg(DeviceMemory<float> *d1, DeviceMemory<float> *d2,
 
   ThenBlasImpl<DeviceMemory<float> *, DeviceMemory<float> *,
                DeviceMemory<float> *, const DeviceMemory<float> &,
-               DeviceMemory<float> *>
-      impl;
+               DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotmg, d1, d2, x1, y1, param);
 }
 
@@ -1900,8 +2459,7 @@ Stream &Stream::ThenBlasRotmg(DeviceMemory<double> *d1,
 
   ThenBlasImpl<DeviceMemory<double> *, DeviceMemory<double> *,
                DeviceMemory<double> *, const DeviceMemory<double> &,
-               DeviceMemory<double> *>
-      impl;
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasRotmg, d1, d2, x1, y1, param);
 }
 
@@ -1942,8 +2500,7 @@ Stream &Stream::ThenBlasScal(uint64 elem_count, std::complex<float> alpha,
   VLOG_CALL(PARAM(elem_count), PARAM(alpha), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<uint64, std::complex<float>, DeviceMemory<std::complex<float>> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasScal, elem_count, alpha, x, incx);
 }
 
@@ -1952,8 +2509,7 @@ Stream &Stream::ThenBlasScal(uint64 elem_count, std::complex<double> alpha,
   VLOG_CALL(PARAM(elem_count), PARAM(alpha), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<uint64, std::complex<double>,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasScal, elem_count, alpha, x, incx);
 }
 
@@ -1983,8 +2539,7 @@ Stream &Stream::ThenBlasSwap(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, DeviceMemory<std::complex<float>> *, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSwap, elem_count, x, incx, y,
               incy);
 }
@@ -1995,8 +2550,7 @@ Stream &Stream::ThenBlasSwap(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(y), PARAM(incy));
 
   ThenBlasImpl<uint64, DeviceMemory<std::complex<double>> *, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSwap, elem_count, x, incx, y,
               incy);
 }
@@ -2027,8 +2581,7 @@ Stream &Stream::ThenBlasIamax(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<int> *>
-      impl;
+               DeviceMemory<int> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasIamax, elem_count, x, incx,
               result);
 }
@@ -2039,8 +2592,7 @@ Stream &Stream::ThenBlasIamax(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<int> *>
-      impl;
+               DeviceMemory<int> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasIamax, elem_count, x, incx,
               result);
 }
@@ -2071,8 +2623,7 @@ Stream &Stream::ThenBlasIamin(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<int> *>
-      impl;
+               DeviceMemory<int> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasIamin, elem_count, x, incx,
               result);
 }
@@ -2083,8 +2634,7 @@ Stream &Stream::ThenBlasIamin(uint64 elem_count,
   VLOG_CALL(PARAM(elem_count), PARAM(x), PARAM(incx), PARAM(result));
 
   ThenBlasImpl<uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<int> *>
-      impl;
+               DeviceMemory<int> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasIamin, elem_count, x, incx,
               result);
 }
@@ -2100,8 +2650,7 @@ Stream &Stream::ThenBlasGbmv(blas::Transpose trans, uint64 m, uint64 n,
 
   ThenBlasImpl<blas::Transpose, uint64, uint64, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGbmv, trans, m, n, kl, ku, alpha,
               a, lda, x, incx, beta, y, incy);
 }
@@ -2117,8 +2666,7 @@ Stream &Stream::ThenBlasGbmv(blas::Transpose trans, uint64 m, uint64 n,
 
   ThenBlasImpl<blas::Transpose, uint64, uint64, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGbmv, trans, m, n, kl, ku, alpha,
               a, lda, x, incx, beta, y, incy);
 }
@@ -2137,8 +2685,8 @@ Stream &Stream::ThenBlasGbmv(blas::Transpose trans, uint64 m, uint64 n,
   ThenBlasImpl<blas::Transpose, uint64, uint64, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGbmv, trans, m, n, kl, ku, alpha,
               a, lda, x, incx, beta, y, incy);
 }
@@ -2157,8 +2705,8 @@ Stream &Stream::ThenBlasGbmv(blas::Transpose trans, uint64 m, uint64 n,
   ThenBlasImpl<blas::Transpose, uint64, uint64, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGbmv, trans, m, n, kl, ku, alpha,
               a, lda, x, incx, beta, y, incy);
 }
@@ -2173,8 +2721,7 @@ Stream &Stream::ThenBlasGemv(blas::Transpose trans, uint64 m, uint64 n,
 
   ThenBlasImpl<blas::Transpose, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemv, trans, m, n, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2189,8 +2736,7 @@ Stream &Stream::ThenBlasGemv(blas::Transpose trans, uint64 m, uint64 n,
 
   ThenBlasImpl<blas::Transpose, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemv, trans, m, n, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2209,8 +2755,8 @@ Stream &Stream::ThenBlasGemv(blas::Transpose trans, uint64 m, uint64 n,
   ThenBlasImpl<blas::Transpose, uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemv, trans, m, n, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2229,8 +2775,8 @@ Stream &Stream::ThenBlasGemv(blas::Transpose trans, uint64 m, uint64 n,
   ThenBlasImpl<blas::Transpose, uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemv, trans, m, n, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2243,8 +2789,8 @@ Stream &Stream::ThenBlasGer(uint64 m, uint64 n, float alpha,
             PARAM(incy), PARAM(a), PARAM(lda));
 
   ThenBlasImpl<uint64, uint64, float, const DeviceMemory<float> &, int,
-               const DeviceMemory<float> &, int, DeviceMemory<float> *, int>
-      impl;
+               const DeviceMemory<float> &, int, DeviceMemory<float> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGer, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2257,8 +2803,8 @@ Stream &Stream::ThenBlasGer(uint64 m, uint64 n, double alpha,
             PARAM(incy), PARAM(a), PARAM(lda));
 
   ThenBlasImpl<uint64, uint64, double, const DeviceMemory<double> &, int,
-               const DeviceMemory<double> &, int, DeviceMemory<double> *, int>
-      impl;
+               const DeviceMemory<double> &, int, DeviceMemory<double> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGer, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2275,8 +2821,7 @@ Stream &Stream::ThenBlasGerc(uint64 m, uint64 n, std::complex<float> alpha,
   ThenBlasImpl<uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGerc, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2293,8 +2838,7 @@ Stream &Stream::ThenBlasGerc(uint64 m, uint64 n, std::complex<double> alpha,
   ThenBlasImpl<uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGerc, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2311,8 +2855,7 @@ Stream &Stream::ThenBlasGeru(uint64 m, uint64 n, std::complex<float> alpha,
   ThenBlasImpl<uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGeru, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2329,8 +2872,7 @@ Stream &Stream::ThenBlasGeru(uint64 m, uint64 n, std::complex<double> alpha,
   ThenBlasImpl<uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGeru, m, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2348,8 +2890,8 @@ Stream &Stream::ThenBlasHbmv(blas::UpperLower uplo, uint64 n, uint64 k,
   ThenBlasImpl<blas::UpperLower, uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHbmv, uplo, n, k, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2367,8 +2909,8 @@ Stream &Stream::ThenBlasHbmv(blas::UpperLower uplo, uint64 n, uint64 k,
   ThenBlasImpl<blas::UpperLower, uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHbmv, uplo, n, k, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2386,8 +2928,8 @@ Stream &Stream::ThenBlasHemv(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHemv, uplo, n, alpha, a, lda, x,
               incx, beta, y, incy);
 }
@@ -2405,8 +2947,8 @@ Stream &Stream::ThenBlasHemv(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHemv, uplo, n, alpha, a, lda, x,
               incx, beta, y, incy);
 }
@@ -2420,8 +2962,7 @@ Stream &Stream::ThenBlasHer(blas::UpperLower uplo, uint64 n, float alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, float,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer, uplo, n, alpha, x, incx, a,
               lda);
 }
@@ -2435,8 +2976,7 @@ Stream &Stream::ThenBlasHer(blas::UpperLower uplo, uint64 n, double alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, double,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer, uplo, n, alpha, x, incx, a,
               lda);
 }
@@ -2454,8 +2994,7 @@ Stream &Stream::ThenBlasHer2(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer2, uplo, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2473,8 +3012,7 @@ Stream &Stream::ThenBlasHer2(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer2, uplo, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2491,8 +3029,8 @@ Stream &Stream::ThenBlasHpmv(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &,
                const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpmv, uplo, n, alpha, ap, x, incx,
               beta, y, incy);
 }
@@ -2509,8 +3047,8 @@ Stream &Stream::ThenBlasHpmv(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &,
                const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpmv, uplo, n, alpha, ap, x, incx,
               beta, y, incy);
 }
@@ -2523,8 +3061,7 @@ Stream &Stream::ThenBlasHpr(blas::UpperLower uplo, uint64 n, float alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, float,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *>
-      impl;
+               DeviceMemory<std::complex<float>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpr, uplo, n, alpha, x, incx, ap);
 }
 
@@ -2536,8 +3073,7 @@ Stream &Stream::ThenBlasHpr(blas::UpperLower uplo, uint64 n, double alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, double,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *>
-      impl;
+               DeviceMemory<std::complex<double>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpr, uplo, n, alpha, x, incx, ap);
 }
 
@@ -2553,8 +3089,7 @@ Stream &Stream::ThenBlasHpr2(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *>
-      impl;
+               DeviceMemory<std::complex<float>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpr2, uplo, n, alpha, x, incx, y,
               incy, ap);
 }
@@ -2571,8 +3106,7 @@ Stream &Stream::ThenBlasHpr2(blas::UpperLower uplo, uint64 n,
   ThenBlasImpl<blas::UpperLower, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *>
-      impl;
+               DeviceMemory<std::complex<double>> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasHpr2, uplo, n, alpha, x, incx, y,
               incy, ap);
 }
@@ -2586,8 +3120,7 @@ Stream &Stream::ThenBlasSbmv(blas::UpperLower uplo, uint64 n, uint64 k,
 
   ThenBlasImpl<blas::UpperLower, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSbmv, uplo, n, k, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2601,8 +3134,7 @@ Stream &Stream::ThenBlasSbmv(blas::UpperLower uplo, uint64 n, uint64 k,
 
   ThenBlasImpl<blas::UpperLower, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSbmv, uplo, n, k, alpha, a, lda,
               x, incx, beta, y, incy);
 }
@@ -2616,8 +3148,7 @@ Stream &Stream::ThenBlasSpmv(blas::UpperLower uplo, uint64 n, float alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
                const DeviceMemory<float> &, int, float, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpmv, uplo, n, alpha, ap, x, incx,
               beta, y, incy);
 }
@@ -2631,8 +3162,7 @@ Stream &Stream::ThenBlasSpmv(blas::UpperLower uplo, uint64 n, double alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
                const DeviceMemory<double> &, int, double,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpmv, uplo, n, alpha, ap, x, incx,
               beta, y, incy);
 }
@@ -2644,8 +3174,7 @@ Stream &Stream::ThenBlasSpr(blas::UpperLower uplo, uint64 n, float alpha,
             PARAM(ap));
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
-               int, DeviceMemory<float> *>
-      impl;
+               int, DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpr, uplo, n, alpha, x, incx, ap);
 }
 
@@ -2656,8 +3185,7 @@ Stream &Stream::ThenBlasSpr(blas::UpperLower uplo, uint64 n, double alpha,
             PARAM(ap));
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
-               int, DeviceMemory<double> *>
-      impl;
+               int, DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpr, uplo, n, alpha, x, incx, ap);
 }
 
@@ -2669,8 +3197,8 @@ Stream &Stream::ThenBlasSpr2(blas::UpperLower uplo, uint64 n, float alpha,
             PARAM(y), PARAM(incy), PARAM(ap));
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
-               int, const DeviceMemory<float> &, int, DeviceMemory<float> *>
-      impl;
+               int, const DeviceMemory<float> &, int,
+               DeviceMemory<float> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpr2, uplo, n, alpha, x, incx, y,
               incy, ap);
 }
@@ -2683,8 +3211,8 @@ Stream &Stream::ThenBlasSpr2(blas::UpperLower uplo, uint64 n, double alpha,
             PARAM(y), PARAM(incy), PARAM(ap));
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
-               int, const DeviceMemory<double> &, int, DeviceMemory<double> *>
-      impl;
+               int, const DeviceMemory<double> &, int,
+               DeviceMemory<double> *> impl;
   return impl(this, &blas::BlasSupport::DoBlasSpr2, uplo, n, alpha, x, incx, y,
               incy, ap);
 }
@@ -2698,8 +3226,7 @@ Stream &Stream::ThenBlasSymv(blas::UpperLower uplo, uint64 n, float alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
                int, const DeviceMemory<float> &, int, float,
-               DeviceMemory<float> *, int>
-      impl;
+               DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymv, uplo, n, alpha, a, lda, x,
               incx, beta, y, incy);
 }
@@ -2713,8 +3240,7 @@ Stream &Stream::ThenBlasSymv(blas::UpperLower uplo, uint64 n, double alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
                int, const DeviceMemory<double> &, int, double,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymv, uplo, n, alpha, a, lda, x,
               incx, beta, y, incy);
 }
@@ -2726,8 +3252,7 @@ Stream &Stream::ThenBlasSyr(blas::UpperLower uplo, uint64 n, float alpha,
             PARAM(a), PARAM(lda));
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
-               int, DeviceMemory<float> *, int>
-      impl;
+               int, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr, uplo, n, alpha, x, incx, a,
               lda);
 }
@@ -2739,8 +3264,7 @@ Stream &Stream::ThenBlasSyr(blas::UpperLower uplo, uint64 n, double alpha,
             PARAM(a), PARAM(lda));
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
-               int, DeviceMemory<double> *, int>
-      impl;
+               int, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr, uplo, n, alpha, x, incx, a,
               lda);
 }
@@ -2754,8 +3278,7 @@ Stream &Stream::ThenBlasSyr2(blas::UpperLower uplo, uint64 n, float alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, float, const DeviceMemory<float> &,
                int, const DeviceMemory<float> &, int, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2, uplo, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2769,8 +3292,7 @@ Stream &Stream::ThenBlasSyr2(blas::UpperLower uplo, uint64 n, double alpha,
 
   ThenBlasImpl<blas::UpperLower, uint64, double, const DeviceMemory<double> &,
                int, const DeviceMemory<double> &, int, DeviceMemory<double> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2, uplo, n, alpha, x, incx, y,
               incy, a, lda);
 }
@@ -2784,8 +3306,7 @@ Stream &Stream::ThenBlasTbmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<float> &, int, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbmv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2799,8 +3320,7 @@ Stream &Stream::ThenBlasTbmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbmv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2815,8 +3335,7 @@ Stream &Stream::ThenBlasTbmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbmv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2831,8 +3350,7 @@ Stream &Stream::ThenBlasTbmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbmv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2846,8 +3364,7 @@ Stream &Stream::ThenBlasTbsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<float> &, int, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbsv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2861,8 +3378,7 @@ Stream &Stream::ThenBlasTbsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbsv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2877,8 +3393,7 @@ Stream &Stream::ThenBlasTbsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbsv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2893,8 +3408,7 @@ Stream &Stream::ThenBlasTbsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                uint64, const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTbsv, uplo, trans, diag, n, k, a,
               lda, x, incx);
 }
@@ -2907,8 +3421,7 @@ Stream &Stream::ThenBlasTpmv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<float> &, DeviceMemory<float> *, int>
-      impl;
+               const DeviceMemory<float> &, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpmv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2921,8 +3434,7 @@ Stream &Stream::ThenBlasTpmv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<double> &, DeviceMemory<double> *, int>
-      impl;
+               const DeviceMemory<double> &, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpmv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2936,8 +3448,7 @@ Stream &Stream::ThenBlasTpmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<float>> &,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpmv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2951,8 +3462,7 @@ Stream &Stream::ThenBlasTpmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<double>> &,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpmv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2965,8 +3475,7 @@ Stream &Stream::ThenBlasTpsv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<float> &, DeviceMemory<float> *, int>
-      impl;
+               const DeviceMemory<float> &, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpsv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2979,8 +3488,7 @@ Stream &Stream::ThenBlasTpsv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<double> &, DeviceMemory<double> *, int>
-      impl;
+               const DeviceMemory<double> &, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpsv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -2994,8 +3502,7 @@ Stream &Stream::ThenBlasTpsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<float>> &,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpsv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -3009,8 +3516,7 @@ Stream &Stream::ThenBlasTpsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<double>> &,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTpsv, uplo, trans, diag, n, ap, x,
               incx);
 }
@@ -3023,8 +3529,8 @@ Stream &Stream::ThenBlasTrmv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(lda), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<float> &, int, DeviceMemory<float> *, int>
-      impl;
+               const DeviceMemory<float> &, int, DeviceMemory<float> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3037,8 +3543,8 @@ Stream &Stream::ThenBlasTrmv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(lda), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<double> &, int, DeviceMemory<double> *, int>
-      impl;
+               const DeviceMemory<double> &, int, DeviceMemory<double> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3053,8 +3559,7 @@ Stream &Stream::ThenBlasTrmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3069,8 +3574,7 @@ Stream &Stream::ThenBlasTrmv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3083,8 +3587,8 @@ Stream &Stream::ThenBlasTrsv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(lda), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<float> &, int, DeviceMemory<float> *, int>
-      impl;
+               const DeviceMemory<float> &, int, DeviceMemory<float> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3097,8 +3601,8 @@ Stream &Stream::ThenBlasTrsv(blas::UpperLower uplo, blas::Transpose trans,
             PARAM(lda), PARAM(x), PARAM(incx));
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
-               const DeviceMemory<double> &, int, DeviceMemory<double> *, int>
-      impl;
+               const DeviceMemory<double> &, int, DeviceMemory<double> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3113,8 +3617,7 @@ Stream &Stream::ThenBlasTrsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3129,8 +3632,7 @@ Stream &Stream::ThenBlasTrsv(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, blas::Diagonal, uint64,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsv, uplo, trans, diag, n, a,
               lda, x, incx);
 }
@@ -3139,17 +3641,16 @@ Stream &Stream::ThenBlasGemm(blas::Transpose transa, blas::Transpose transb,
                              uint64 m, uint64 n, uint64 k, float alpha,
                              const DeviceMemory<Eigen::half> &a, int lda,
                              const DeviceMemory<Eigen::half> &b, int ldb,
-                             float beta, DeviceMemory<Eigen::half> *c,
-                             int ldc) {
+                             float beta,
+                             DeviceMemory<Eigen::half> *c, int ldc) {
   VLOG_CALL(PARAM(transa), PARAM(transb), PARAM(m), PARAM(n), PARAM(k),
             PARAM(alpha), PARAM(a), PARAM(lda), PARAM(b), PARAM(ldb),
             PARAM(beta), PARAM(c), PARAM(ldc));
 
   ThenBlasImpl<blas::Transpose, blas::Transpose, uint64, uint64, uint64, float,
                const DeviceMemory<Eigen::half> &, int,
-               const DeviceMemory<Eigen::half> &, int, float,
-               DeviceMemory<Eigen::half> *, int>
-      impl;
+               const DeviceMemory<Eigen::half> &, int,
+               float, DeviceMemory<Eigen::half> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemm, transa, transb, m, n, k,
               alpha, a, lda, b, ldb, beta, c, ldc);
 }
@@ -3165,8 +3666,7 @@ Stream &Stream::ThenBlasGemm(blas::Transpose transa, blas::Transpose transb,
 
   ThenBlasImpl<blas::Transpose, blas::Transpose, uint64, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemm, transa, transb, m, n, k,
               alpha, a, lda, b, ldb, beta, c, ldc);
 }
@@ -3182,8 +3682,7 @@ Stream &Stream::ThenBlasGemm(blas::Transpose transa, blas::Transpose transb,
 
   ThenBlasImpl<blas::Transpose, blas::Transpose, uint64, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemm, transa, transb, m, n, k,
               alpha, a, lda, b, ldb, beta, c, ldc);
 }
@@ -3203,8 +3702,8 @@ Stream &Stream::ThenBlasGemm(blas::Transpose transa, blas::Transpose transb,
   ThenBlasImpl<blas::Transpose, blas::Transpose, uint64, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemm, transa, transb, m, n, k,
               alpha, a, lda, b, ldb, beta, c, ldc);
 }
@@ -3224,8 +3723,8 @@ Stream &Stream::ThenBlasGemm(blas::Transpose transa, blas::Transpose transb,
   ThenBlasImpl<blas::Transpose, blas::Transpose, uint64, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasGemm, transa, transb, m, n, k,
               alpha, a, lda, b, ldb, beta, c, ldc);
 }
@@ -3591,8 +4090,8 @@ Stream &Stream::ThenBlasHemm(blas::Side side, blas::UpperLower uplo, uint64 m,
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHemm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3611,8 +4110,8 @@ Stream &Stream::ThenBlasHemm(blas::Side side, blas::UpperLower uplo, uint64 m,
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHemm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3627,8 +4126,7 @@ Stream &Stream::ThenBlasHerk(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, float,
                const DeviceMemory<std::complex<float>> &, int, float,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHerk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3643,8 +4141,7 @@ Stream &Stream::ThenBlasHerk(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, double,
                const DeviceMemory<std::complex<double>> &, int, double,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHerk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3663,8 +4160,7 @@ Stream &Stream::ThenBlasHer2k(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int, float,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3683,8 +4179,7 @@ Stream &Stream::ThenBlasHer2k(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int, double,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasHer2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3700,8 +4195,7 @@ Stream &Stream::ThenBlasSymm(blas::Side side, blas::UpperLower uplo, uint64 m,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3717,8 +4211,7 @@ Stream &Stream::ThenBlasSymm(blas::Side side, blas::UpperLower uplo, uint64 m,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3737,8 +4230,8 @@ Stream &Stream::ThenBlasSymm(blas::Side side, blas::UpperLower uplo, uint64 m,
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3757,8 +4250,8 @@ Stream &Stream::ThenBlasSymm(blas::Side side, blas::UpperLower uplo, uint64 m,
   ThenBlasImpl<blas::Side, blas::UpperLower, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSymm, side, uplo, m, n, alpha, a,
               lda, b, ldb, beta, c, ldc);
 }
@@ -3772,8 +4265,7 @@ Stream &Stream::ThenBlasSyrk(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, float,
                const DeviceMemory<float> &, int, float, DeviceMemory<float> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyrk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3787,8 +4279,7 @@ Stream &Stream::ThenBlasSyrk(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, double,
                const DeviceMemory<double> &, int, double,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyrk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3804,8 +4295,7 @@ Stream &Stream::ThenBlasSyrk(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, std::complex<float>, DeviceMemory<std::complex<float>> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyrk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3821,8 +4311,7 @@ Stream &Stream::ThenBlasSyrk(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, std::complex<double>, DeviceMemory<std::complex<double>> *,
-               int>
-      impl;
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyrk, uplo, trans, n, k, alpha, a,
               lda, beta, c, ldc);
 }
@@ -3838,8 +4327,7 @@ Stream &Stream::ThenBlasSyr2k(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, float,
                const DeviceMemory<float> &, int, const DeviceMemory<float> &,
-               int, float, DeviceMemory<float> *, int>
-      impl;
+               int, float, DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3855,8 +4343,7 @@ Stream &Stream::ThenBlasSyr2k(blas::UpperLower uplo, blas::Transpose trans,
 
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64, double,
                const DeviceMemory<double> &, int, const DeviceMemory<double> &,
-               int, double, DeviceMemory<double> *, int>
-      impl;
+               int, double, DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3875,8 +4362,8 @@ Stream &Stream::ThenBlasSyr2k(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<float>, const DeviceMemory<std::complex<float>> &,
                int, const DeviceMemory<std::complex<float>> &, int,
-               std::complex<float>, DeviceMemory<std::complex<float>> *, int>
-      impl;
+               std::complex<float>, DeviceMemory<std::complex<float>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3895,8 +4382,8 @@ Stream &Stream::ThenBlasSyr2k(blas::UpperLower uplo, blas::Transpose trans,
   ThenBlasImpl<blas::UpperLower, blas::Transpose, uint64, uint64,
                std::complex<double>, const DeviceMemory<std::complex<double>> &,
                int, const DeviceMemory<std::complex<double>> &, int,
-               std::complex<double>, DeviceMemory<std::complex<double>> *, int>
-      impl;
+               std::complex<double>, DeviceMemory<std::complex<double>> *,
+               int> impl;
   return impl(this, &blas::BlasSupport::DoBlasSyr2k, uplo, trans, n, k, alpha,
               a, lda, b, ldb, beta, c, ldc);
 }
@@ -3911,8 +4398,7 @@ Stream &Stream::ThenBlasTrmm(blas::Side side, blas::UpperLower uplo,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, float, const DeviceMemory<float> &, int,
-               DeviceMemory<float> *, int>
-      impl;
+               DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -3927,8 +4413,7 @@ Stream &Stream::ThenBlasTrmm(blas::Side side, blas::UpperLower uplo,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, double, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -3945,8 +4430,7 @@ Stream &Stream::ThenBlasTrmm(blas::Side side, blas::UpperLower uplo,
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -3963,8 +4447,7 @@ Stream &Stream::ThenBlasTrmm(blas::Side side, blas::UpperLower uplo,
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrmm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -3979,8 +4462,7 @@ Stream &Stream::ThenBlasTrsm(blas::Side side, blas::UpperLower uplo,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, float, const DeviceMemory<float> &, int,
-               DeviceMemory<float> *, int>
-      impl;
+               DeviceMemory<float> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -3995,8 +4477,7 @@ Stream &Stream::ThenBlasTrsm(blas::Side side, blas::UpperLower uplo,
 
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, double, const DeviceMemory<double> &, int,
-               DeviceMemory<double> *, int>
-      impl;
+               DeviceMemory<double> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -4013,8 +4494,7 @@ Stream &Stream::ThenBlasTrsm(blas::Side side, blas::UpperLower uplo,
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, std::complex<float>,
                const DeviceMemory<std::complex<float>> &, int,
-               DeviceMemory<std::complex<float>> *, int>
-      impl;
+               DeviceMemory<std::complex<float>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -4031,8 +4511,7 @@ Stream &Stream::ThenBlasTrsm(blas::Side side, blas::UpperLower uplo,
   ThenBlasImpl<blas::Side, blas::UpperLower, blas::Transpose, blas::Diagonal,
                uint64, uint64, std::complex<double>,
                const DeviceMemory<std::complex<double>> &, int,
-               DeviceMemory<std::complex<double>> *, int>
-      impl;
+               DeviceMemory<std::complex<double>> *, int> impl;
   return impl(this, &blas::BlasSupport::DoBlasTrsm, side, uplo, transa, diag, m,
               n, alpha, a, lda, b, ldb);
 }
@@ -4322,88 +4801,20 @@ Stream &Stream::ThenBlasGemmStridedBatched(
               c, ldc, stride_c, batch_count);
 }
 
-template <typename ABType, typename CType>
-Stream &Stream::ThenBlasLtMatmulImpl(
-    const blas::IBlasLtMatmulPlan *plan, const HostOrDeviceScalar<CType> &alpha,
-    const DeviceMemory<ABType> &a, const DeviceMemory<ABType> &b,
-    const HostOrDeviceScalar<CType> &beta, DeviceMemory<CType> *c,
-    ScratchAllocator *scratch_allocator,
-    const blas::IBlasLtMatmulAlgorithm *algorithm,
-    const DeviceMemory<CType> &bias,
-    blas::ProfileResult *output_profile_result) {
-  VLOG_CALL(PARAM(plan), PARAM(alpha), PARAM(a), PARAM(b), PARAM(beta),
-            PARAM(c), PARAM(algorithm), PARAM(bias));
-
-  ThenBlasWithProfileImpl<
-      const blas::IBlasLtMatmulPlan *, const HostOrDeviceScalar<CType> &,
-      const DeviceMemory<ABType> &, const DeviceMemory<ABType> &,
-      const HostOrDeviceScalar<CType> &, DeviceMemory<CType> *,
-      ScratchAllocator *, const blas::IBlasLtMatmulAlgorithm *,
-      const DeviceMemory<CType> &>
-      impl;
-  return impl(this, &blas::BlasSupport::DoBlasLtMatmul, plan, alpha, a, b, beta,
-              c, scratch_allocator, algorithm, bias, output_profile_result);
-}
-
-// Explicit template instantiations for each supported type combination.
-template Stream &Stream::ThenBlasLtMatmulImpl<int8, int32>(
-    const blas::IBlasLtMatmulPlan *, const HostOrDeviceScalar<int32> &,
-    const DeviceMemory<int8> &, const DeviceMemory<int8> &,
-    const HostOrDeviceScalar<int32> &, DeviceMemory<int32> *,
-    ScratchAllocator *, const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<int32> &, blas::ProfileResult *);
-
-template Stream &Stream::ThenBlasLtMatmulImpl<Eigen::half, Eigen::half>(
-    const blas::IBlasLtMatmulPlan *, const HostOrDeviceScalar<Eigen::half> &,
-    const DeviceMemory<Eigen::half> &, const DeviceMemory<Eigen::half> &,
-    const HostOrDeviceScalar<Eigen::half> &, DeviceMemory<Eigen::half> *,
-    ScratchAllocator *, const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<Eigen::half> &, blas::ProfileResult *);
-
-template Stream &Stream::ThenBlasLtMatmulImpl<float, float>(
-    const blas::IBlasLtMatmulPlan *, const HostOrDeviceScalar<float> &,
-    const DeviceMemory<float> &, const DeviceMemory<float> &,
-    const HostOrDeviceScalar<float> &, DeviceMemory<float> *,
-    ScratchAllocator *, const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<float> &, blas::ProfileResult *);
-
-template Stream &Stream::ThenBlasLtMatmulImpl<double, double>(
-    const blas::IBlasLtMatmulPlan *, const HostOrDeviceScalar<double> &,
-    const DeviceMemory<double> &, const DeviceMemory<double> &,
-    const HostOrDeviceScalar<double> &, DeviceMemory<double> *,
-    ScratchAllocator *, const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<double> &, blas::ProfileResult *);
-
-template Stream &
-Stream::ThenBlasLtMatmulImpl<std::complex<float>, std::complex<float>>(
-    const blas::IBlasLtMatmulPlan *,
-    const HostOrDeviceScalar<std::complex<float>> &,
-    const DeviceMemory<std::complex<float>> &,
-    const DeviceMemory<std::complex<float>> &,
-    const HostOrDeviceScalar<std::complex<float>> &,
-    DeviceMemory<std::complex<float>> *, ScratchAllocator *,
-    const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<std::complex<float>> &, blas::ProfileResult *);
-
-template Stream &
-Stream::ThenBlasLtMatmulImpl<std::complex<double>, std::complex<double>>(
-    const blas::IBlasLtMatmulPlan *,
-    const HostOrDeviceScalar<std::complex<double>> &,
-    const DeviceMemory<std::complex<double>> &,
-    const DeviceMemory<std::complex<double>> &,
-    const HostOrDeviceScalar<std::complex<double>> &,
-    DeviceMemory<std::complex<double>> *, ScratchAllocator *,
-    const blas::IBlasLtMatmulAlgorithm *,
-    const DeviceMemory<std::complex<double>> &, blas::ProfileResult *);
-
 Stream &Stream::ThenSetRngSeed(const uint8 *seed, uint64 seed_bytes) {
   VLOG_CALL(PARAM(seed), PARAM(seed_bytes));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->SetSeed(this, seed, seed_bytes));
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->SetSeed(this, seed, seed_bytes));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers() << " unable to initialize RNG";
+    }
   } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers() << " unable to initialize RNG";
+    LOG(INFO) << DebugStreamPointers()
+              << " did not set RNG seed: " << static_cast<const void *>(seed)
+              << "; bytes: " << seed_bytes;
   }
   return *this;
 }
@@ -4411,13 +4822,15 @@ Stream &Stream::ThenSetRngSeed(const uint8 *seed, uint64 seed_bytes) {
 Stream &Stream::ThenPopulateRandUniform(DeviceMemory<float> *values) {
   VLOG_CALL(PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandUniform(this, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandUniform(this, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4426,13 +4839,15 @@ Stream &Stream::ThenPopulateRandGaussian(float mean, float sd,
                                          DeviceMemory<float> *values) {
   VLOG_CALL(PARAM(mean), PARAM(sd), PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandGaussian(this, mean, sd, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandGaussian(this, mean, sd, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4441,13 +4856,15 @@ Stream &Stream::ThenPopulateRandGaussian(double mean, double sd,
                                          DeviceMemory<double> *values) {
   VLOG_CALL(PARAM(mean), PARAM(sd), PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandGaussian(this, mean, sd, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandGaussian(this, mean, sd, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4455,13 +4872,15 @@ Stream &Stream::ThenPopulateRandGaussian(double mean, double sd,
 Stream &Stream::ThenPopulateRandUniform(DeviceMemory<double> *values) {
   VLOG_CALL(PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandUniform(this, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandUniform(this, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4470,13 +4889,15 @@ Stream &Stream::ThenPopulateRandUniform(
     DeviceMemory<std::complex<float>> *values) {
   VLOG_CALL(PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandUniform(this, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandUniform(this, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4485,13 +4906,15 @@ Stream &Stream::ThenPopulateRandUniform(
     DeviceMemory<std::complex<double>> *values) {
   VLOG_CALL(PARAM(values));
 
-  if (rng::RngSupport *rng = parent_->AsRng()) {
-    CheckError(rng->DoPopulateRandUniform(this, values));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform RNG operation using StreamExecutor"
-                 " without RNG support.";
+  if (ok()) {
+    if (rng::RngSupport *rng = parent_->AsRng()) {
+      CheckError(rng->DoPopulateRandUniform(this, values));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform RNG operation using StreamExecutor"
+                   " without RNG support.";
+    }
   }
   return *this;
 }
@@ -4500,7 +4923,12 @@ Stream &Stream::ThenMemcpy(void *host_dst, const DeviceMemoryBase &gpu_src,
                            uint64 size) {
   VLOG_CALL(PARAM(host_dst), PARAM(gpu_src), PARAM(size));
 
-  CheckError(parent_->Memcpy(this, host_dst, gpu_src, size));
+  if (ok()) {
+    CheckError(parent_->Memcpy(this, host_dst, gpu_src, size));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not memcpy device-to-host; source: " << gpu_src.opaque();
+  }
   return *this;
 }
 
@@ -4508,7 +4936,12 @@ Stream &Stream::ThenMemcpy(DeviceMemoryBase *gpu_dst, const void *host_src,
                            uint64 size) {
   VLOG_CALL(PARAM(gpu_dst), PARAM(host_src), PARAM(size));
 
-  CheckError(parent_->Memcpy(this, gpu_dst, host_src, size));
+  if (ok()) {
+    CheckError(parent_->Memcpy(this, gpu_dst, host_src, size));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not memcpy host-to-device; source: " << host_src;
+  }
   return *this;
 }
 
@@ -4516,14 +4949,24 @@ Stream &Stream::ThenMemcpy(DeviceMemoryBase *gpu_dst,
                            const DeviceMemoryBase &gpu_src, uint64 size) {
   VLOG_CALL(PARAM(gpu_dst), PARAM(gpu_src), PARAM(size));
 
-  CheckError(parent_->MemcpyDeviceToDevice(this, gpu_dst, gpu_src, size));
+  if (ok()) {
+    CheckError(parent_->MemcpyDeviceToDevice(this, gpu_dst, gpu_src, size));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not memcpy gpu-to-gpu; source: " << &gpu_src;
+  }
   return *this;
 }
 
 Stream &Stream::ThenMemZero(DeviceMemoryBase *location, uint64 size) {
   VLOG_CALL(PARAM(location), PARAM(size));
 
-  CheckStatus(parent_->MemZero(this, location, size));
+  if (ok()) {
+    CheckStatus(parent_->MemZero(this, location, size));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not memzero GPU location; source: " << location;
+  }
   return *this;
 }
 
@@ -4531,7 +4974,13 @@ Stream &Stream::ThenMemset32(DeviceMemoryBase *location, uint32 pattern,
                              uint64 size) {
   VLOG_CALL(PARAM(location), PARAM(pattern), PARAM(size));
 
-  CheckStatus(parent_->Memset32(this, location, pattern, size));
+  if (ok()) {
+    CheckStatus(parent_->Memset32(this, location, pattern, size));
+  } else {
+    LOG(INFO) << DebugStreamPointers()
+              << " did not memset GPU location; source: " << location
+              << "; size: " << size << "; pattern: " << std::hex << pattern;
+  }
   return *this;
 }
 
@@ -4554,17 +5003,20 @@ Stream &Stream::ThenRnnForward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnForward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data, is_training,
-        reserve_space_allocator, workspace_allocator, output_profile_result);
-    if (!status && !output_profile_result) {
-      SetError();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnForward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          is_training, reserve_space_allocator, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
     }
-  } else {
-    SetErrorAndLogNoDnnSupport();
   }
   return *this;
 }
@@ -4587,17 +5039,20 @@ Stream &Stream::ThenRnnForward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnForward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data, is_training,
-        reserve_space_allocator, workspace_allocator, output_profile_result);
-    if (!status && !output_profile_result) {
-      SetError();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnForward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          is_training, reserve_space_allocator, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
     }
-  } else {
-    SetErrorAndLogNoDnnSupport();
   }
   return *this;
 }
@@ -4621,17 +5076,20 @@ Stream &Stream::ThenRnnForward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnForward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data, is_training,
-        reserve_space_allocator, workspace_allocator, output_profile_result);
-    if (!status && !output_profile_result) {
-      SetError();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnForward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          is_training, reserve_space_allocator, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
     }
-  } else {
-    SetErrorAndLogNoDnnSupport();
   }
   return *this;
 }
@@ -4662,21 +5120,23 @@ Stream &Stream::ThenRnnBackward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnBackward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data,
-        output_backprop_data, output_h_backprop_data, output_c_backprop_data,
-        input_backprop_data, input_h_backprop_data, input_c_backprop_data,
-        params_backprop_data, reserve_space_data, workspace_allocator,
-        output_profile_result);
-    if (!status && !output_profile_result) {
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnBackward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          output_backprop_data, output_h_backprop_data, output_c_backprop_data,
+          input_backprop_data, input_h_backprop_data, input_c_backprop_data,
+          params_backprop_data, reserve_space_data, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
       SetError();
+      LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
     }
-  } else {
-    SetError();
-    LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
   }
   return *this;
 }
@@ -4706,21 +5166,23 @@ Stream &Stream::ThenRnnBackward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnBackward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data,
-        output_backprop_data, output_h_backprop_data, output_c_backprop_data,
-        input_backprop_data, input_h_backprop_data, input_c_backprop_data,
-        params_backprop_data, reserve_space_data, workspace_allocator,
-        output_profile_result);
-    if (!status && !output_profile_result) {
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnBackward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          output_backprop_data, output_h_backprop_data, output_c_backprop_data,
+          input_backprop_data, input_h_backprop_data, input_c_backprop_data,
+          params_backprop_data, reserve_space_data, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
       SetError();
+      LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
     }
-  } else {
-    SetError();
-    LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
   }
   return *this;
 }
@@ -4751,21 +5213,23 @@ Stream &Stream::ThenRnnBackward(
     ScratchAllocator *workspace_allocator,
     dnn::ProfileResult *output_profile_result) {
   // TODO(zhengxq): add VLOG PARAM calls.
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    auto status = dnn->DoRnnBackward(
-        this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
-        input_c_desc, input_c_data, params, output_desc, output_data,
-        output_h_desc, output_h_data, output_c_desc, output_c_data,
-        output_backprop_data, output_h_backprop_data, output_c_backprop_data,
-        input_backprop_data, input_h_backprop_data, input_c_backprop_data,
-        params_backprop_data, reserve_space_data, workspace_allocator,
-        output_profile_result);
-    if (!status && !output_profile_result) {
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      auto status = dnn->DoRnnBackward(
+          this, rnn_desc, input_desc, input_data, input_h_desc, input_h_data,
+          input_c_desc, input_c_data, params, output_desc, output_data,
+          output_h_desc, output_h_data, output_c_desc, output_c_data,
+          output_backprop_data, output_h_backprop_data, output_c_backprop_data,
+          input_backprop_data, input_h_backprop_data, input_c_backprop_data,
+          params_backprop_data, reserve_space_data, workspace_allocator,
+          output_profile_result);
+      if (!status && !output_profile_result) {
+        SetError();
+      }
+    } else {
       SetError();
+      LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
     }
-  } else {
-    SetError();
-    LOG(WARNING) << "Attempting to call ThenRnnBackward without DNN support";
   }
   return *this;
 }
@@ -4779,26 +5243,26 @@ Stream &Stream::ThenCtcLoss(const dnn::RnnStateTensorDescriptor &probs_desc,
                             const dnn::RnnStateTensorDescriptor &grads_desc,
                             DeviceMemory<float> *grads_data,
                             ScratchAllocator *workspace_allocator) {
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    DeviceMemory<uint8> scratch_memory;
-    int ctc_loss_algo_id;
-    auto status =
-        dnn->PrepareForCtcLoss(this, probs_desc, probs_data, grads_desc,
-                               labels_data, labels_lengths_data,
-                               input_lengths_data, workspace_allocator,
-                               &scratch_memory, &ctc_loss_algo_id)
-            .ok();
-    if (status) {
-      status = dnn->DoCtcLoss(this, probs_desc, probs_data, labels_data,
-                              labels_lengths_data, input_lengths_data,
-                              costs_data, grads_desc, grads_data,
-                              &scratch_memory, ctc_loss_algo_id);
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      DeviceMemory<uint8> scratch_memory;
+      auto status = dnn->PrepareForCtcLoss(
+                           this, probs_desc, probs_data, grads_desc,
+                           labels_data, labels_lengths_data, input_lengths_data,
+                           workspace_allocator, &scratch_memory)
+                        .ok();
+      if (status) {
+        status =
+            dnn->DoCtcLoss(this, probs_desc, probs_data, labels_data,
+                           labels_lengths_data, input_lengths_data, costs_data,
+                           grads_desc, grads_data, &scratch_memory);
+      }
+      if (!status) {
+        SetError();
+      }
+    } else {
+      SetErrorAndLogNoDnnSupport();
     }
-    if (!status) {
-      SetError();
-    }
-  } else {
-    SetErrorAndLogNoDnnSupport();
   }
   return *this;
 }
@@ -4812,12 +5276,14 @@ Stream &Stream::ThenTransformTensor(const dnn::BatchDescriptor &input_desc,
   VLOG_CALL(PARAM(input_desc), PARAM(input_type), PARAM(input_data),
             PARAM(output_desc), PARAM(output_type), PARAM(scale),
             PARAM(output_data));
-  if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
-    CheckError(dnn->DoTransformTensor(this, input_desc, input_type, input_data,
-                                      output_desc, output_type, scale,
-                                      output_data));
-  } else {
-    SetErrorAndLogNoDnnSupport();
+  if (ok()) {
+    if (dnn::DnnSupport *dnn = parent_->AsDnn()) {
+      CheckError(dnn->DoTransformTensor(this, input_desc, input_type,
+                                        input_data, output_desc, output_type,
+                                        scale, output_data));
+    } else {
+      SetErrorAndLogNoDnnSupport();
+    }
   }
   return *this;
 }
@@ -4864,13 +5330,15 @@ Stream &Stream::ThenFft(fft::Plan *plan,
                         DeviceMemory<std::complex<float>> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4880,13 +5348,15 @@ Stream &Stream::ThenFft(fft::Plan *plan,
                         DeviceMemory<std::complex<double>> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4895,13 +5365,15 @@ Stream &Stream::ThenFft(fft::Plan *plan, const DeviceMemory<float> &input,
                         DeviceMemory<std::complex<float>> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4910,13 +5382,15 @@ Stream &Stream::ThenFft(fft::Plan *plan, const DeviceMemory<double> &input,
                         DeviceMemory<std::complex<double>> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4926,13 +5400,15 @@ Stream &Stream::ThenFft(fft::Plan *plan,
                         DeviceMemory<float> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4942,13 +5418,15 @@ Stream &Stream::ThenFft(fft::Plan *plan,
                         DeviceMemory<double> *output) {
   VLOG_CALL(PARAM(plan), PARAM(input), PARAM(output));
 
-  if (fft::FftSupport *fft = parent_->AsFft()) {
-    CheckError(fft->DoFft(this, plan, input, output));
-  } else {
-    SetError();
-    LOG(INFO) << DebugStreamPointers()
-              << " attempting to perform FFT operation using StreamExecutor"
-                 " without FFT support";
+  if (ok()) {
+    if (fft::FftSupport *fft = parent_->AsFft()) {
+      CheckError(fft->DoFft(this, plan, input, output));
+    } else {
+      SetError();
+      LOG(INFO) << DebugStreamPointers()
+                << " attempting to perform FFT operation using StreamExecutor"
+                   " without FFT support";
+    }
   }
   return *this;
 }
@@ -4998,7 +5476,7 @@ void Stream::RunAfterBlockHostUntilDoneCallbacks() {
   }
 }
 
-std::string Stream::DebugStreamPointers() const {
+string Stream::DebugStreamPointers() const {
   // Relies on the ToVlogString(const void*) overload above.
   return absl::StrCat("[stream=", ToVlogString(this),
                       ",impl=", ToVlogString(implementation_.get()), "]");
@@ -5010,7 +5488,7 @@ void Stream::CheckStatus(port::Status status) {
   }
   LOG(ERROR) << status;
   absl::MutexLock lock(&mu_);
-  status_ = status;
+  ok_ = false;
 }
 
 }  // namespace stream_executor

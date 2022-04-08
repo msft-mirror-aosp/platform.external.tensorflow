@@ -28,15 +28,15 @@ template <DenseIndex Planes, DenseIndex Rows, DenseIndex Cols, typename ArgType,
 struct CustomTensorEvaluator {
   typedef TensorVolumePatchOp<Planes, Rows, Cols, ArgType> XprType;
   typedef typename XprType::Index Index;
-  static constexpr int NumInputDims = internal::array_size<
+  static const int NumInputDims = internal::array_size<
       typename TensorEvaluator<ArgType, Device>::Dimensions>::value;
-  static constexpr int NumDims = NumInputDims + 1;
+  static const int NumDims = NumInputDims + 1;
   typedef DSizes<Index, NumDims> Dimensions;
   typedef
       typename internal::remove_const<typename XprType::Scalar>::type Scalar;
   typedef typename XprType::CoeffReturnType CoeffReturnType;
   typedef typename PacketType<CoeffReturnType, Device>::type PacketReturnType;
-  static constexpr Index PacketSize =
+  static const Index PacketSize =
       internal::unpacket_traits<PacketReturnType>::size;
 
   enum {
@@ -565,7 +565,7 @@ struct CustomTensorEvaluator {
 
   Dimensions m_dimensions;
 
-  // Parameters passed to the constructor.
+  // Parameters passed to the costructor.
   Index m_plane_strides;
   Index m_row_strides;
   Index m_col_strides;

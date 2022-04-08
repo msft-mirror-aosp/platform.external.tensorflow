@@ -42,7 +42,7 @@ class TestDriver : public TfDriver {
   }
 };
 
-TEST(TfDriverTest, ReadingAndWritingValues) {
+TEST(TfDriverTest, ReadingAndWrintingValues) {
   TestDriver driver;
   ASSERT_EQ(driver.WriteAndReadBack(tensorflow::DT_FLOAT, {1, 2, 2},
                                     "0.10,0.20,0.30,0.40"),
@@ -55,7 +55,7 @@ TEST(TfDriverTest, ReadingAndWritingValues) {
             "0,1,y,z");
 }
 
-TEST(TfDriverTest, ReadingAndWritingValuesStrings) {
+TEST(TfDriverTest, ReadingAndWrintingValuesStrings) {
   TestDriver driver;
 
   auto set_buffer = [](const std::vector<string>& values, string* buffer) {

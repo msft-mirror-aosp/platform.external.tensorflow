@@ -66,14 +66,6 @@ class CostModel {
     }
   }
 
-  inline int GlobalId(const Node* n, int offset) const {
-    if (is_global_) {
-      return n->cost_id();
-    } else {
-      return n->id() + offset;
-    }
-  }
-
   // Initializes cost model for 'g'.
   void InitFromGraph(const Graph& g);
 

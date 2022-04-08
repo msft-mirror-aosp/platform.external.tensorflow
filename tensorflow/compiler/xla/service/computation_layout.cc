@@ -32,8 +32,6 @@ ComputationLayout::ComputationLayout(const ProgramShape& program_shape,
   }
   if (ignore_layouts) {
     SetToDefaultLayout();
-  } else {
-    SetToDefaultLayoutIfEmpty();
   }
 }
 
@@ -42,17 +40,6 @@ void ComputationLayout::SetToDefaultLayout() {
     parameter_layout.SetToDefaultLayout();
   }
   result_layout_.SetToDefaultLayout();
-}
-
-void ComputationLayout::SetToDefaultLayoutIfEmpty() {
-  for (auto& parameter_layout : parameter_layouts_) {
-    if (!parameter_layout.LayoutIsSet()) {
-      parameter_layout.SetToDefaultLayout();
-    }
-  }
-  if (!result_layout_.LayoutIsSet()) {
-    result_layout_.SetToDefaultLayout();
-  }
 }
 
 bool ComputationLayout::LayoutIsSet() const {

@@ -14,18 +14,15 @@ limitations under the License.
 ==============================================================================*/
 // Unit test for TFLite Bidirectional RNN op.
 
-#include <algorithm>
-#include <functional>
-#include <initializer_list>
-#include <iterator>
-#include <tuple>
+#include <iomanip>
 #include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "flatbuffers/flatbuffers.h"  // from @flatbuffers
+#include "tensorflow/lite/interpreter.h"
+#include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/kernels/test_util.h"
-#include "tensorflow/lite/schema/schema_generated.h"
+#include "tensorflow/lite/model.h"
 
 namespace tflite {
 namespace {
@@ -665,26 +662,22 @@ class BidirectionalRNNOpModel : public SingleOpModel {
   BidirectionalRNNOpModel(int batches, int sequence_len, int fw_units,
                           int bw_units, int input_size, int aux_input_size,
                           AuxInputMode aux_input_mode, bool time_major,
-                          bool merge_outputs, bool quantize_weights = false,
-                          bool asymmetric_quantize_weights = false)
+                          bool merge_outputs)
       : batches_(batches),
         sequence_len_(sequence_len),
         fw_units_(fw_units),
         bw_units_(bw_units),
         input_size_(input_size),
-        aux_input_size_(aux_input_size),
-        quantize_weights_(quantize_weights) {
-    const TensorType tensor_type =
-        quantize_weights ? TensorType_UINT8 : TensorType_FLOAT32;
+        aux_input_size_(aux_input_size) {
     input_ = AddInput(TensorType_FLOAT32);
-    fw_weights_ = AddInput(tensor_type);
-    fw_recurrent_weights_ = AddInput(tensor_type);
+    fw_weights_ = AddInput(TensorType_FLOAT32);
+    fw_recurrent_weights_ = AddInput(TensorType_FLOAT32);
     fw_bias_ = AddInput(TensorType_FLOAT32);
-    fw_hidden_state_ = AddVariableInput(TensorType_FLOAT32);
-    bw_weights_ = AddInput(tensor_type);
-    bw_recurrent_weights_ = AddInput(tensor_type);
+    fw_hidden_state_ = AddInput(TensorType_FLOAT32, true);
+    bw_weights_ = AddInput(TensorType_FLOAT32);
+    bw_recurrent_weights_ = AddInput(TensorType_FLOAT32);
     bw_bias_ = AddInput(TensorType_FLOAT32);
-    bw_hidden_state_ = AddVariableInput(TensorType_FLOAT32);
+    bw_hidden_state_ = AddInput(TensorType_FLOAT32, true);
 
     const auto input_shape =
         (time_major) ? std::vector<int>({sequence_len_, batches_, input_size_})
@@ -704,8 +697,8 @@ class BidirectionalRNNOpModel : public SingleOpModel {
     }
 
     if (aux_input_mode == AuxInputMode::kCrossLinking) {
-      aux_fw_weights_ = AddInput(tensor_type);
-      aux_bw_weights_ = AddInput(tensor_type);
+      aux_fw_weights_ = AddInput(TensorType_FLOAT32);
+      aux_bw_weights_ = AddInput(TensorType_FLOAT32);
 
       aux_fw_weights_shape = {fw_units, aux_input_size_};
       aux_bw_weights_shape = {bw_units, aux_input_size_};
@@ -719,12 +712,12 @@ class BidirectionalRNNOpModel : public SingleOpModel {
       bw_output_ = AddOutput(TensorType_FLOAT32);
     }
 
-    SetBuiltinOp(BuiltinOperator_BIDIRECTIONAL_SEQUENCE_RNN,
-                 BuiltinOptions_BidirectionalSequenceRNNOptions,
-                 CreateBidirectionalSequenceRNNOptions(
-                     builder_, time_major, ActivationFunctionType_RELU,
-                     merge_outputs, asymmetric_quantize_weights)
-                     .Union());
+    SetBuiltinOp(
+        BuiltinOperator_BIDIRECTIONAL_SEQUENCE_RNN,
+        BuiltinOptions_BidirectionalSequenceRNNOptions,
+        CreateBidirectionalSequenceRNNOptions(
+            builder_, time_major, ActivationFunctionType_RELU, merge_outputs)
+            .Union());
 
     BuildInterpreter({
         input_shape,               // input
@@ -751,35 +744,19 @@ class BidirectionalRNNOpModel : public SingleOpModel {
   }
 
   void SetFwWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(fw_weights_, f);
-    } else {
-      PopulateTensor(fw_weights_, f);
-    }
+    PopulateTensor(fw_weights_, f);
   }
 
   void SetBwWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(bw_weights_, f);
-    } else {
-      PopulateTensor(bw_weights_, f);
-    }
+    PopulateTensor(bw_weights_, f);
   }
 
   void SetFwRecurrentWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(fw_recurrent_weights_, f);
-    } else {
-      PopulateTensor(fw_recurrent_weights_, f);
-    }
+    PopulateTensor(fw_recurrent_weights_, f);
   }
 
   void SetBwRecurrentWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(bw_recurrent_weights_, f);
-    } else {
-      PopulateTensor(bw_recurrent_weights_, f);
-    }
+    PopulateTensor(bw_recurrent_weights_, f);
   }
 
   void SetInput(std::initializer_list<float> data) {
@@ -795,19 +772,11 @@ class BidirectionalRNNOpModel : public SingleOpModel {
   }
 
   void SetAuxFwWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(aux_fw_weights_, f);
-    } else {
-      PopulateTensor(aux_fw_weights_, f);
-    }
+    PopulateTensor(aux_fw_weights_, f);
   }
 
   void SetAuxBwWeights(const std::vector<float>& f) {
-    if (quantize_weights_) {
-      SymmetricQuantizeAndPopulate(aux_bw_weights_, f);
-    } else {
-      PopulateTensor(aux_bw_weights_, f);
-    }
+    PopulateTensor(aux_bw_weights_, f);
   }
 
   std::vector<float> GetFwOutput() { return ExtractVector<float>(fw_output_); }
@@ -842,31 +811,17 @@ class BidirectionalRNNOpModel : public SingleOpModel {
   int bw_units_;
   int input_size_;
   int aux_input_size_;
-  bool quantize_weights_;
 };
-
-// Declare LSTMOpTest as a parameterized test.
-class BidirectionalRNNOpTest
-    : public ::testing::TestWithParam<::testing::tuple<bool, bool>> {};
-
-INSTANTIATE_TEST_SUITE_P(QuantizationOrNot, BidirectionalRNNOpTest,
-                         ::testing::Combine(
-                             /*quantize_weights*/ ::testing::Bool(),
-                             /*asymmetric_quantize_inputs*/ ::testing::Bool()));
 
 // TODO(mirkov): add another test which directly compares to TF once TOCO
 // supports the conversion from dynamic_rnn with BasicRNNCell.
-TEST_P(BidirectionalRNNOpTest, ClosedBoxTest) {
-  auto params = GetParam();
-  const bool quantize_weights = std::get<0>(params);
-  const bool asymmetric_quantize_inputs = std::get<1>(params);
+TEST(BidirectionalRNNOpTest, BlackBoxTest) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/0,
                               /*aux_input_mode=*/AuxInputMode::kNoAuxInput,
                               /*time_major=*/false,
-                              /*merge_outputs=*/false, quantize_weights,
-                              asymmetric_quantize_inputs);
+                              /*merge_outputs=*/false);
   rnn.SetFwWeights(weights);
   rnn.SetBwWeights(weights);
   rnn.SetFwBias(biases);
@@ -888,9 +843,7 @@ TEST_P(BidirectionalRNNOpTest, ClosedBoxTest) {
   std::vector<float> fw_expected;
   fw_expected.insert(fw_expected.end(), golden_fw_start, golden_fw_end);
   fw_expected.insert(fw_expected.end(), golden_fw_start, golden_fw_end);
-  EXPECT_THAT(rnn.GetFwOutput(),
-              ElementsAreArray(ArrayFloatNear(
-                  fw_expected, quantize_weights ? 1.42e-2 : 1e-5)));
+  EXPECT_THAT(rnn.GetFwOutput(), ElementsAreArray(ArrayFloatNear(fw_expected)));
 
   float* golden_bw_start = rnn_golden_bw_output;
   float* golden_bw_end =
@@ -898,23 +851,17 @@ TEST_P(BidirectionalRNNOpTest, ClosedBoxTest) {
   std::vector<float> bw_expected;
   bw_expected.insert(bw_expected.end(), golden_bw_start, golden_bw_end);
   bw_expected.insert(bw_expected.end(), golden_bw_start, golden_bw_end);
-  EXPECT_THAT(rnn.GetBwOutput(),
-              ElementsAreArray(ArrayFloatNear(
-                  bw_expected, quantize_weights ? 1.42e-2 : 1e-5)));
+  EXPECT_THAT(rnn.GetBwOutput(), ElementsAreArray(ArrayFloatNear(bw_expected)));
 }
 
-// Same as ClosedBox test, but input is reshuffled to time_major format.
-TEST_P(BidirectionalRNNOpTest, ClosedBoxTestTimeMajor) {
-  auto params = GetParam();
-  const bool quantize_weights = std::get<0>(params);
-  const bool asymmetric_quantize_inputs = std::get<1>(params);
+// Same as BlackBox test, but input is reshuffled to time_major format.
+TEST(BidirectionalRNNOpTest, BlackBoxTestTimeMajor) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/0,
                               /*aux_input_mode=*/AuxInputMode::kNoAuxInput,
                               /*time_major=*/true,
-                              /*merge_outputs=*/false, quantize_weights,
-                              asymmetric_quantize_inputs);
+                              /*merge_outputs=*/false);
   rnn.SetFwWeights(weights);
   rnn.SetBwWeights(weights);
   rnn.SetFwBias(biases);
@@ -942,26 +889,17 @@ TEST_P(BidirectionalRNNOpTest, ClosedBoxTestTimeMajor) {
     fw_expected.insert(fw_expected.end(), golden_fw_start, golden_fw_end);
     fw_expected.insert(fw_expected.end(), golden_fw_start, golden_fw_end);
   }
-  constexpr float kHybridTolerance = 3.57e-1;
-  constexpr float kFloatTolerance = 1e-5;
-  EXPECT_THAT(
-      rnn.GetFwOutput(),
-      ElementsAreArray(ArrayFloatNear(
-          fw_expected, quantize_weights ? kHybridTolerance : kFloatTolerance)));
+  EXPECT_THAT(rnn.GetFwOutput(), ElementsAreArray(ArrayFloatNear(fw_expected)));
 }
 
-// Same as ClosedBox test, yet with merged outputs.
-TEST_P(BidirectionalRNNOpTest, ClosedBoxTestMergeOutputs) {
-  auto params = GetParam();
-  const bool quantize_weights = std::get<0>(params);
-  const bool asymmetric_quantize_inputs = std::get<1>(params);
+// Same as BlackBox test, yet with merged outputs.
+TEST(BidirectionalRNNOpTest, BlackBoxTestMergeOutputs) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/0,
                               /*aux_input_mode=*/AuxInputMode::kNoAuxInput,
                               /*time_major=*/false,
-                              /*merge_outputs=*/true, quantize_weights,
-                              asymmetric_quantize_inputs);
+                              /*merge_outputs=*/true);
   rnn.SetFwWeights(weights);
   rnn.SetBwWeights(weights);
   rnn.SetFwBias(biases);
@@ -991,12 +929,11 @@ TEST_P(BidirectionalRNNOpTest, ClosedBoxTestMergeOutputs) {
     }
   }
   EXPECT_THAT(rnn.GetFwOutput(),
-              ElementsAreArray(ArrayFloatNear(
-                  merged_expected, quantize_weights ? 1.42e-2 : 1e-5)));
+              ElementsAreArray(ArrayFloatNear(merged_expected)));
 }
 
-// Same as ClosedBox test, but input is reshuffled to time_major format.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestTimeMajorMergeOutputs) {
+// Same as BlackBox test, but input is reshuffled to time_major format.
+TEST(BidirectionalRNNOpTest, BlackBoxTestTimeMajorMergeOutputs) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/0,
@@ -1042,7 +979,7 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestTimeMajorMergeOutputs) {
 
 // Check that if the input sequence is reversed the outputs are the same just
 // forward and backward are swapped (and reversed).
-TEST(BidirectionalRNNOpTest, ClosedBoxTestReverseInputs) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestReverseInputs) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/0,
@@ -1163,11 +1100,11 @@ TEST(BidirectionalRNNOpTest, EndToEndTest) {
   }
 }
 
-// Same as ClosedBox test, but has an auxiliary input. The layer has no
+// Same as BlackBox test, but has an auxiliary input. The layer has no
 // cross-linking, i.e. the regular input is passed as an input to the forward
 // network only and the auxiliary input is passed as an input to the backward
 // network only.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingRegularAndAuxInput) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestNoCrossLinkingRegularAndAuxInput) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/8,
@@ -1216,7 +1153,7 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingRegularAndAuxInput) {
 
 // Same as above but the auxiliary input is set to zeroes. This test makes sure
 // that the forward network works as expected in a no-cross-linking mode.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingRegularInputOnly) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestNoCrossLinkingRegularInputOnly) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/8,
@@ -1264,7 +1201,7 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingRegularInputOnly) {
 // Same as above but the regular (i.e. not auxiliary) input is set to zeroes.
 // This test makes sure that the backward network works as expected in a
 // no-cross-linking mode.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingAuxInputOnly) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestNoCrossLinkingAuxInputOnly) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/8,
@@ -1309,9 +1246,9 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestNoCrossLinkingAuxInputOnly) {
   EXPECT_THAT(rnn.GetBwOutput(), ElementsAreArray(ArrayFloatNear(bw_expected)));
 }
 
-// Same as ClosedBox test, but an input is passed to auxiliary input instead of
+// Same as BlackBox test, but an input is passed to auxiliary input instead of
 // the regular one. Regular input and weights are set to zero.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestCrossLinkingAuxInputOnly) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestCrossLinkingAuxInputOnly) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/8,
@@ -1358,10 +1295,10 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestCrossLinkingAuxInputOnly) {
   EXPECT_THAT(rnn.GetBwOutput(), ElementsAreArray(ArrayFloatNear(bw_expected)));
 }
 
-// Same as ClosedBox test, but an input is passed to auxiliary input instead of
+// Same as BlackBox test, but an input is passed to auxiliary input instead of
 // the regular one. Regular input and weights are set to zero. Time major inputs
 // and outputs.
-TEST(BidirectionalRNNOpTest, ClosedBoxTestCrossLinkingAuxInputOnlyTimeMajor) {
+TEST(BidirectionalRNNOpTest, BlackBoxTestCrossLinkingAuxInputOnlyTimeMajor) {
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/16, /*bw_units=*/16,
                               /*input_size=*/8, /*aux_input_size=*/8,
@@ -1408,8 +1345,8 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestCrossLinkingAuxInputOnlyTimeMajor) {
   EXPECT_THAT(rnn.GetFwOutput(), ElementsAreArray(ArrayFloatNear(fw_expected)));
 }
 
-// Same as ClosedBox test, but the input tensor and weights tensor are split
-// along the last dimension and passed to both regular and auxiliary inputs and
+// Same as BlackBox test, but the input tensor and weights tensor are split
+// along the last dimension and passed to both regular and auxiliry inputs and
 // weights. The output in this case is the same. To understand this, let's
 // define W and V as regular input weights matrix and auxiliary input weights
 // matrix correspondingly. It's easy to see that this is equivalent to a regular
@@ -1418,7 +1355,7 @@ TEST(BidirectionalRNNOpTest, ClosedBoxTestCrossLinkingAuxInputOnlyTimeMajor) {
 //   f(z) = Uz + b
 // is equivalent to:
 //   f((x^T|y^T)^T) = (Wx + Vy) + b.
-void run_closedbox_test_with_input_split(int input_size, int aux_input_size) {
+void run_blackbox_test_with_input_split(int input_size, int aux_input_size) {
   const int num_units = 16;
   BidirectionalRNNOpModel rnn(/*batches=*/2, /*sequence_len=*/16,
                               /*fw_units=*/num_units, /*bw_units=*/num_units,
@@ -1498,14 +1435,14 @@ void run_closedbox_test_with_input_split(int input_size, int aux_input_size) {
 }
 
 TEST(BidirectionalRNNOpTest,
-     ClosedBoxTestCrossLinkingRegularAndAuxInputEvenSplit) {
-  run_closedbox_test_with_input_split(/*input_size=*/4, /*aux_input_size=*/4);
+     BlackBoxTestCrossLinkingRegularAndAuxInputEvenSplit) {
+  run_blackbox_test_with_input_split(/*input_size=*/4, /*aux_input_size=*/4);
 }
 
 // Same as above but the input tensor and the weights tensor are split unevenly.
 TEST(BidirectionalRNNOpTest,
-     ClosedBoxTestCrossLinkingRegularAndAuxInputUnevenSplit) {
-  run_closedbox_test_with_input_split(/*input_size=*/2, /*aux_input_size=*/6);
+     BlackBoxTestCrossLinkingRegularAndAuxInputUnevenSplit) {
+  run_blackbox_test_with_input_split(/*input_size=*/2, /*aux_input_size=*/6);
 }
 
 }  // namespace

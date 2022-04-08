@@ -20,11 +20,9 @@ op {
         "A `Tensor` of type T. An alias of `x`. The content "
         "of `y` is undefined if there are duplicates in `i`."
   }
-  summary: "Updates specified rows 'i' with values 'v'."
-  description: <<END
-Computes `x[i, :] = v; return x`.
+  summary: <<END
+    Updates specified rows with values in `v`.
 
-Originally this function is mutative however for compilation we make this
-operation create / operate on a copy of `x`.
+    Computes `x[i, :] = v; return x`.
 END
 }

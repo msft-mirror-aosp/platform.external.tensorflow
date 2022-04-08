@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/strings/numbers.h"
 #include "tensorflow/core/lib/strings/str_util.h"
-#include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/types.h"
@@ -116,6 +115,20 @@ void BaseRendezvousMgr::Cleanup(int64 step_id) {
   }
 }
 
+void BaseRendezvousMgr::CleanupAll() {
+  std::vector<Rendezvous*> rendezs;
+  {
+    mutex_lock l(mu_);
+    for (const auto& entry : table_) {
+      rendezs.push_back(entry.second);
+    }
+    table_.clear();
+  }
+  for (auto rendez : rendezs) {
+    StartAbortRendevous(rendez, errors::Aborted("Shutdown"));
+  }
+}
+
 BaseRemoteRendezvous::BaseRemoteRendezvous(const WorkerEnv* env, int64 step_id)
     : env_(env),
       step_id_(step_id),
@@ -139,7 +152,7 @@ Status BaseRemoteRendezvous::Initialize(WorkerSession* session) {
   CHECK_NE(session, nullptr) << "session must not be null!";
   std::vector<DeferredCall> deferred_calls;
   {
-    mutex_lock l(mu_);
+    mutex_lock l(init_mu_);
     if (session_ != nullptr) {
       if (session_->worker_name() == session->worker_name()) {
         VLOG(1) << "Skipping rendezvous re-initialization.";
@@ -161,12 +174,12 @@ Status BaseRemoteRendezvous::Initialize(WorkerSession* session) {
 }
 
 WorkerSession* BaseRemoteRendezvous::session() {
-  tf_shared_lock l(mu_);
+  tf_shared_lock l(init_mu_);
   return session_;
 }
 
 bool BaseRemoteRendezvous::is_initialized() {
-  tf_shared_lock l(mu_);
+  tf_shared_lock l(init_mu_);
   return is_initialized_locked();
 }
 
@@ -176,7 +189,7 @@ Status BaseRemoteRendezvous::Send(const Rendezvous::ParsedKey& parsed,
   VLOG(1) << "BaseRemoteRendezvous Send " << this << " " << parsed.FullKey();
   WorkerSession* sess = nullptr;
   {
-    tf_shared_lock l(mu_);
+    tf_shared_lock l(init_mu_);
     if (!status_.ok()) return status_;
     DCHECK(is_initialized_locked());
     sess = session_;
@@ -198,7 +211,7 @@ Status BaseRemoteRendezvous::ValidateDevices(const ParsedKey& parsed,
   // (e.g. calling session())
   WorkerSession* sess = nullptr;
   {
-    tf_shared_lock l(mu_);
+    tf_shared_lock l(init_mu_);
     if (!status_.ok()) return status_;
     if (!is_initialized_locked()) {
       return errors::Internal("ValidateDevices called before initialization.");
@@ -259,8 +272,10 @@ void BaseRemoteRendezvous::SameWorkerRecvDone(
     return;
   }
 
-  ScopedMemoryDebugAnnotation op_annotation("SameWorkerRecvDone", step_id_,
-                                            "dynamic", in.dtype(), &in.shape());
+  MEMDEBUG_CACHE_STEPID(0);
+  // Note that it would be nice to cache the step_id here, but it's not
+  // available.
+  MEMDEBUG_CACHE_OP("SameWorkerRecvDone");
   AllocatorAttributes attr = recv_args.alloc_attrs;
   attr.set_gpu_compatible(send_args.alloc_attrs.gpu_compatible() ||
                           recv_args.alloc_attrs.gpu_compatible());
@@ -309,7 +324,8 @@ void BaseRemoteRendezvous::RecvAsync(const ParsedKey& parsed,
   DCHECK(is_initialized()) << "RecvAsync called when uninitialized (key: "
                            << parsed.FullKey() << ").";
 
-  ScopedMemoryDebugAnnotation op_annotation("RecvAsync", step_id_);
+  MEMDEBUG_CACHE_OP("RecvAsync");
+  MEMDEBUG_CACHE_STEPID(0);
   // Are src and dst in the same worker?
   if (IsSameWorker(parsed.src, parsed.dst)) {
     // Recv the tensor from local_.
@@ -345,7 +361,7 @@ void BaseRemoteRendezvous::RecvLocalAsync(const ParsedKey& parsed,
   // Test whether the rendezvous is initialized using a shared lock, to avoid
   // the need for exclusive access in the common case.
   if (TF_PREDICT_FALSE(!is_initialized())) {
-    mutex_lock l(mu_);
+    mutex_lock l(init_mu_);
     if (!is_initialized_locked()) {
       // RecvLocalAsync can be called (due to an incoming RecvTensor RPC from a
       // remote worker) before the RunStep (or PartialRunStep) RPC from the
@@ -374,19 +390,17 @@ void BaseRemoteRendezvous::RecvLocalAsyncInternal(const ParsedKey& parsed,
 
 void BaseRemoteRendezvous::StartAbort(const Status& s) {
   CHECK(!s.ok());
-  // If the status passed in is a cancelled or aborted error, mark it as
-  // "derived" for the rendezvous. Derived status messages are ignored when
-  // aggregating errors across devices: this allows us to prefer our original
-  // status message over any cancellation related errors.
-  Status derived_status = s;
-  if (errors::IsCancelled(s) || errors::IsAborted(s)) {
-    derived_status = StatusGroup::MakeDerived(s);
-  }
+  // Use a "derived" status as the status for the rendezvous. Derived
+  // status messages are ignored when aggregating errors across devices: this
+  // allows us to prefer our original status message over any cancellation
+  // related errors.
+  Status derived_status = StatusGroup::MakeDerived(s);
 
   local_->StartAbort(derived_status);
   {
     // Aborts all active RecvTensor calls.
-    mutex_lock l(mu_);
+    mutex_lock l(init_mu_);
+    mutex_lock l2(active_mu_);
     if (status_.ok()) {
       status_ = derived_status;
       for (auto& entry : active_) {
@@ -401,36 +415,42 @@ void BaseRemoteRendezvous::StartAbort(const Status& s) {
 void BaseRemoteRendezvous::RegisterCall(BaseRecvTensorCall* call,
                                         const Rendezvous::Args& args) {
   CancellationManager* cm = args.cancellation_manager;
+  Status captured_status;
+  {
+    tf_shared_lock l(init_mu_);
+    if (!status_.ok()) {
+      captured_status = status_;
+    }
+  }
+  if (!captured_status.ok()) {
+    call->StartAbort(captured_status);
+    return;
+  }
+
   bool already_cancelled = false;
   InactiveCallback callback = [] {};
-  {
-    mutex_lock l(mu_);
-    if (!status_.ok()) {
-      call->StartAbort(status_);
-      return;
-    }
-    if (cm != nullptr) {
-      auto token = cm->get_cancellation_token();
-      already_cancelled = !cm->RegisterCallback(token, [this, call] {
-        {
-          mutex_lock l(mu_);
-          if (active_.find(call) == active_.end()) return;
-          call->StartAbort(
-              errors::Cancelled("RecvFromRemoteAsync is cancelled."));
-        }
-      });
-      callback = [cm, token] { cm->TryDeregisterCallback(token); };
-    }
-    if (already_cancelled) {
+  if (cm != nullptr) {
+    auto token = cm->get_cancellation_token();
+    already_cancelled = !cm->RegisterCallback(token, [this, call] {
+      {
+        tf_shared_lock l(active_mu_);
+        if (active_.find(call) == active_.end()) return;
+      }
       call->StartAbort(errors::Cancelled("RecvFromRemoteAsync is cancelled."));
-    } else {
-      CHECK(active_.emplace(call, callback).second);
-    }
+    });
+    callback = [cm, token] { cm->TryDeregisterCallback(token); };
+  }
+
+  if (already_cancelled) {
+    call->StartAbort(errors::Cancelled("RecvFromRemoteAsync is cancelled."));
+  } else {
+    mutex_lock l(active_mu_);
+    CHECK(active_.emplace(call, callback).second);
   }
 }
 
 void BaseRemoteRendezvous::DeregisterCall(BaseRecvTensorCall* call) {
-  mutex_lock l(mu_);
+  mutex_lock l(active_mu_);
   auto it = active_.find(call);
   if (it != active_.end()) {
     // Deregister the cancellation callback, if one was registered.

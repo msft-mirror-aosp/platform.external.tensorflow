@@ -33,6 +33,7 @@ namespace grappler {
 
 namespace {
 
+constexpr char kRetValOp[] = "_Retval";
 constexpr char kPrefetchDatasetOp[] = "PrefetchDataset";
 
 template <std::size_t SIZE>
@@ -50,7 +51,7 @@ bool IsDatasetNodeOfType(const NodeDef& node,
 constexpr std::array<const char*, 2> kMultipleInputsDatasetOps = {
     "ZipDataset", "ConcatenateDataset"};
 
-constexpr std::array<const char*, 22> kPassThroughOps = {
+constexpr std::array<const char*, 21> kPassThroughOps = {
     "CacheDataset",
     "CacheDatasetV2",
     "ExperimentalMaxIntraOpParallelismDataset",
@@ -69,7 +70,6 @@ constexpr std::array<const char*, 22> kPassThroughOps = {
     "ShuffleAndRepeatDataset",
     "ShuffleDataset",
     "ShuffleDatasetV2",
-    "ShuffleDatasetV3",
     "SkipDataset",
     "TakeDataset",
     "WindowDataset",
@@ -100,9 +100,10 @@ Status Slack::RecursivelyHandleOp(const MutableGraphView& graph,
     return Status::OK();
   }
 
-  LOG(WARNING) << "Could not find a final `prefetch` in the input pipeline to "
-                  "which to introduce slack.";
-  return Status::OK();
+  return errors::InvalidArgument(
+      "Encountered unsupported op \"", dataset_node->op(),
+      "\" when rewriting the input pipeline graph to use slack in its "
+      "final prefetch transformation.");
 }
 
 Status Slack::OptimizeAndCollectStats(Cluster* cluster,
@@ -115,13 +116,17 @@ Status Slack::OptimizeAndCollectStats(Cluster* cluster,
 
   *output = item.graph;
   MutableGraphView graph(output);
-
-  // If the GrapplerItem is derived from a FunctionDef, we don't optimize it,
-  // because we only want to add slack to the prefetch on the main dataset
-  // pipeline.
-  if (graph_utils::IsItemDerivedFromFunctionDef(item, graph))
-    return Status::OK();
-
+  for (const auto& fetch_name : item.fetch) {
+    // If the GrapplerItem is derived from a FunctionDef, we don't optimize it,
+    // because we only want to add slack to the prefetch on the main dataset
+    // pipeline.
+    auto fetch = graph.GetNode(fetch_name);
+    if (fetch == nullptr || fetch->op() == kRetValOp) {
+      // Heuristic: If the fetch nodes are Retval ops, this item is from a
+      // function.
+      return Status::OK();
+    }
+  }
   if (item.fetch.size() != 1) {
     return errors::InvalidArgument(
         "Expected only one fetch node but there were ", item.fetch.size(), ": ",

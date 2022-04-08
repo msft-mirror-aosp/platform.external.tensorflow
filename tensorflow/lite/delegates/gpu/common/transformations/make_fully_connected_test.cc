@@ -15,18 +15,13 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/common/transformations/make_fully_connected.h"
 
-#include <memory>
-#include <string>
-#include <vector>
-
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "absl/status/status.h"
 #include "absl/types/any.h"
 #include "tensorflow/lite/delegates/gpu/common/model.h"
 #include "tensorflow/lite/delegates/gpu/common/model_transformer.h"
 #include "tensorflow/lite/delegates/gpu/common/operations.h"
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
-#include "tensorflow/lite/delegates/gpu/common/tensor.h"
 
 namespace tflite {
 namespace gpu {
@@ -73,16 +68,16 @@ TEST(MakeFullyConnected, Smoke) {
 
   ASSERT_TRUE(graph.AddConsumer(conv1x1_node0->id, input->id).ok());
 
-  Value* output = nullptr;
+  Value<TensorRef<BHWC>>* output;
   ASSERT_TRUE(AddOutput(&graph, conv1x1_node2, &output).ok());
   output->tensor.shape = BHWC(1, 1, 1, 32);
 
-  Value* link1 = nullptr;
+  Value<TensorRef<BHWC>>* link1;
   ASSERT_TRUE(
       ConnectTwoNodes(&graph, conv1x1_node0, conv4x4_node1, &link1).ok());
   link1->tensor.shape = BHWC(1, 4, 4, 16);
 
-  Value* link2 = nullptr;
+  Value<TensorRef<BHWC>>* link2;
   ASSERT_TRUE(
       ConnectTwoNodes(&graph, conv4x4_node1, conv1x1_node2, &link2).ok());
   link2->tensor.shape = BHWC(1, 1, 1, 16);

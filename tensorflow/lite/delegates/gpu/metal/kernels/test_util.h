@@ -16,43 +16,57 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_DELEGATES_GPU_METAL_KERNELS_TEST_UTIL_H_
 #define TENSORFLOW_LITE_DELEGATES_GPU_METAL_KERNELS_TEST_UTIL_H_
 
-#import <Metal/Metal.h>
-
 #include <map>
 #include <vector>
 
+#include "tensorflow/lite/delegates/gpu/common/model.h"
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
-#include "tensorflow/lite/delegates/gpu/common/task/gpu_operation.h"
-#include "tensorflow/lite/delegates/gpu/common/task/testing_util.h"
 #include "tensorflow/lite/delegates/gpu/common/tensor.h"
-#include "tensorflow/lite/delegates/gpu/metal/metal_device.h"
+#include "tensorflow/lite/delegates/gpu/metal/compiled_model.h"
+#include "tensorflow/lite/delegates/gpu/metal/compute_task_descriptor.h"
+#include "tensorflow/lite/delegates/gpu/metal/inference_context.h"
+#include "tensorflow/lite/delegates/gpu/metal/runtime_options.h"
 
 namespace tflite {
 namespace gpu {
 namespace metal {
 
-class MetalExecutionEnvironment : public TestExecutionEnvironment {
+class SingleOpModel {
  public:
-  MetalExecutionEnvironment() = default;
-  ~MetalExecutionEnvironment() = default;
+  SingleOpModel() = delete;
+  SingleOpModel(Operation&& operation,
+                const std::vector<TensorRef<BHWC>>& inputs,
+                const std::vector<TensorRef<BHWC>>& outputs);
+  virtual ~SingleOpModel() = default;
 
-  std::vector<CalculationsPrecision> GetSupportedPrecisions() const override;
-  std::vector<TensorStorageType> GetSupportedStorages() const override;
-  std::vector<TensorStorageType> GetSupportedStoragesWithHWZeroClampSupport()
-      const override;
+  bool PopulateTensor(int index, std::vector<float>&& data) {
+    inputs_[index].data = data;
+    return true;
+  }
 
-  const GpuInfo& GetGpuInfo() const { return device_.GetInfo(); }
+  Status Invoke();
 
-  absl::Status ExecuteGPUOperation(
-      const std::vector<TensorFloat32>& src_cpu,
-      std::unique_ptr<GPUOperation>&& operation,
-      const std::vector<BHWC>& dst_sizes,
-      const std::vector<TensorFloat32*>& dst_cpu) override;
+  const std::vector<float>& GetOutput(int index) const {
+    return outputs_[index].data;
+  }
 
- private:
-  MetalDevice device_;
+ protected:
+  GraphFloat32 graph_;
+  std::vector<TensorFloat32> inputs_;
+  std::vector<TensorFloat32> outputs_;
 };
+
+Status CompareVectors(const std::vector<float>& reference,
+                      const std::vector<float>& output, float max_error);
+
+/// Helper function that compiles previously configured graph (with added
+/// tasks), initializes graph with specified inputs, invokes and fills specified
+/// outputs
+Status RunGraph(const std::vector<ComputeTaskDescriptorPtr>& graph,
+                id<MTLDevice> device,
+                const std::map<ValueId, TensorFloat32>& inputs,
+                std::map<ValueId, TensorFloat32>* outputs);
 
 }  // namespace metal
 }  // namespace gpu

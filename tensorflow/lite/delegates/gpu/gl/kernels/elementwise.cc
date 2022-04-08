@@ -18,7 +18,6 @@ limitations under the License.
 #include <string>
 
 #include "absl/memory/memory.h"
-#include "absl/strings/substitute.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
 #include "tensorflow/lite/delegates/gpu/common/types.h"
 
@@ -31,8 +30,8 @@ class ElementwiseOneArgument : public NodeShader {
  public:
   explicit ElementwiseOneArgument(OperationType operation_type)
       : operation_type_(operation_type) {}
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
     std::string source;
     switch (operation_type_) {
       case OperationType::ABS:
@@ -40,20 +39,6 @@ class ElementwiseOneArgument : public NodeShader {
         break;
       case OperationType::COS:
         source = "value_0 = cos(value_0);";
-        break;
-      case OperationType::COPY:
-        source = "value_0 = value_0;";
-        break;
-      case OperationType::ELU:
-        source = R"(
-            value_0.x = value_0.x < 0.0 ? exp(value_0.x) - 1.0 : value_0.x;
-            value_0.y = value_0.y < 0.0 ? exp(value_0.y) - 1.0 : value_0.y;
-            value_0.z = value_0.z < 0.0 ? exp(value_0.z) - 1.0 : value_0.z;
-            value_0.w = value_0.w < 0.0 ? exp(value_0.w) - 1.0 : value_0.w;
-        )";
-        break;
-      case OperationType::EXP:
-        source = "value_0 = exp(value_0);";
         break;
       case OperationType::HARD_SWISH:
         source =
@@ -69,16 +54,13 @@ class ElementwiseOneArgument : public NodeShader {
             value_0.w = value_0.w > 0.0 ? log(value_0.w) : nan;
         )";
         break;
-      case OperationType::NEG:
-        source = "value_0 = -(value_0);";
-        break;
       case OperationType::RSQRT:
         source = R"(
             const float nan = normalize(vec4(0, 0, 0, 0)).x;
-            value_0.x = value_0.x > 0.0 ? 1.0 / sqrt(value_0.x) : nan;
-            value_0.y = value_0.y > 0.0 ? 1.0 / sqrt(value_0.y) : nan;
-            value_0.z = value_0.z > 0.0 ? 1.0 / sqrt(value_0.z) : nan;
-            value_0.w = value_0.w > 0.0 ? 1.0 / sqrt(value_0.w) : nan;
+            value_0.x = value_0.x >= 0.0 ? 1.0 / sqrt(value_0.x) : nan;
+            value_0.y = value_0.y >= 0.0 ? 1.0 / sqrt(value_0.y) : nan;
+            value_0.z = value_0.z >= 0.0 ? 1.0 / sqrt(value_0.z) : nan;
+            value_0.w = value_0.w >= 0.0 ? 1.0 / sqrt(value_0.w) : nan;
         )";
         break;
       case OperationType::SIGMOID:
@@ -103,8 +85,7 @@ class ElementwiseOneArgument : public NodeShader {
         source = "value_0 = tanh(value_0);";
         break;
       default:
-        return absl::InvalidArgumentError(
-            "Incorrect elementwise operation type.");
+        return InvalidArgumentError("Incorrect elementwise operation type.");
     }
     *generated_code = {
         /*parameters=*/{},
@@ -116,7 +97,7 @@ class ElementwiseOneArgument : public NodeShader {
         /*input=*/IOStructure::AUTO,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
+    return OkStatus();
   }
 
  private:
@@ -128,83 +109,54 @@ class ElementwiseTwoArguments : public NodeShader {
   explicit ElementwiseTwoArguments(OperationType operation_type)
       : operation_type_(operation_type) {}
 
-  inline bool IsElementwiseSupported(const GenerationContext& ctx) const {
-    return ctx.input_shapes.size() == 2 &&
-           ctx.input_shapes[0] == ctx.input_shapes[1];
-  }
+  bool IsSupportedElemwise(const GenerationContext& ctx) const {
+    auto inputs = ctx.graph->FindInputs(ctx.node->id);
 
-  inline bool IsBroadcastSupported(const GenerationContext& ctx) const {
-    return ctx.input_shapes.size() == 2 && ctx.input_shapes[1][1] == 1 &&
-           ctx.input_shapes[1][2] == 1 &&
-           ctx.input_shapes[0][3] == ctx.input_shapes[1][3];
-  }
-
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    std::vector<Variable> parameters;
-    std::vector<std::pair<std::string, Object>> objects;
-    std::string argument0, argument1;
-    if (IsElementwiseSupported(ctx)) {
-      argument0 = "value_0";
-      argument1 = "value_1";
-    } else if (IsBroadcastSupported(ctx)) {
-      argument0 = "$input_data_0[gid.x, gid.y, gid.z]$";
-      argument1 = "$input_data_1[0, 0, gid.z]$";
-    } else {  // Scalar of const vector case
-      const auto& attr =
-          absl::any_cast<const ElementwiseAttributes&>(ctx.op_attr);
-      const auto* tensor =
-          absl::get_if<Tensor<Linear, DataType::FLOAT32>>(&attr.param);
-      const auto* scalar = absl::get_if<float>(&attr.param);
-      if (!tensor && !scalar) {
-        return absl::InvalidArgumentError(
-            "Couldn't read scalar of const vector data from the attributes.");
-      }
-
-      argument0 = "value_0";
-      if (tensor) {
-        argument1 = "$const_data[gid.z]$";
-        objects.push_back({"const_data", MakeReadonlyObject(tensor->data)});
-      } else {
-        argument1 = "vec4($const_data$)";
-        parameters.push_back({"const_data", *scalar});
-      }
+    // Implementation supports concatenation of 2 tensors only.
+    if (inputs.size() != 2) {
+      return false;
     }
 
+    auto shape0 = inputs[0]->tensor.shape;
+    auto shape1 = inputs[1]->tensor.shape;
+
+    // Shapes must be the same
+    if (shape0 != shape1) {
+      return false;
+    }
+    return true;
+  }
+
+  Status ImplementElementwise(const GenerationContext& ctx,
+                              GeneratedCode* generated_code) const {
     std::string source;
     switch (operation_type_) {
-      case OperationType::DIV: {
-        source = "value_0 = $0/$1;";
-        break;
-      }
-      case OperationType::MAXIMUM: {
-        source = "value_0 = max($0, $1);";
-        break;
-      }
-      case OperationType::MINIMUM: {
-        source = "value_0 = min($0, $1);";
-        break;
-      }
-      case OperationType::SQUARED_DIFF: {
-        source = "value_0 = ($0 - $1) * ($0 - $1);";
-        break;
-      }
       case OperationType::SUB: {
-        source = "value_0 = $0 - $1;";
+        source = "value_0 -= value_1;";
+        break;
+      }
+      case OperationType::DIV: {
+        source = "value_0 /= value_1;";
         break;
       }
       case OperationType::POW: {
-        source = "value_0 = pow($0, $1);";
+        // From documentation :
+        // The result is undefined if x<0 or if x=0 and y≤0.
+        source = "value_0 = pow(value_0, value_1);";
         break;
       }
+      case OperationType::SQUARED_DIFF: {
+        source = "value_0 = (value_0 - value_1) * (value_0 - value_1);";
+        break;
+      }
+
       default:
-        return absl::InvalidArgumentError(
-            "Incorrect elementwise with scalar operation type.");
+        return InvalidArgumentError(
+            "Incorrect elementwise with two arguments operation type.");
     }
-    source = absl::Substitute(source, argument0, argument1);
     *generated_code = {
-        /*parameters=*/std::move(parameters),
-        /*objects=*/std::move(objects),
+        /*parameters=*/{},
+        /*objects=*/{},
         /*shared_variables=*/{},
         /*workload=*/uint3(),
         /*workgroup=*/uint3(),
@@ -212,7 +164,63 @@ class ElementwiseTwoArguments : public NodeShader {
         /*input=*/IOStructure::AUTO,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
+    return OkStatus();
+  }
+
+  bool IsSupportedBroadcast(const GenerationContext& ctx) const {
+    auto inputs = ctx.graph->FindInputs(ctx.node->id);
+    auto outputs = ctx.graph->FindOutputs(ctx.node->id);
+
+    if (inputs.size() != 2) {
+      return false;
+    }
+    if (inputs[1]->tensor.shape.h != 1 || inputs[1]->tensor.shape.w != 1 ||
+        inputs[0]->tensor.shape.c != inputs[1]->tensor.shape.c) {
+      return false;
+    }
+    return true;
+  }
+
+  Status ImplementElementwiseBroadcast(const GenerationContext& ctx,
+                                       GeneratedCode* generated_code) const {
+    std::string source;
+    switch (operation_type_) {
+      case OperationType::SQUARED_DIFF: {
+        source = R"(
+        vec4 diff = $input_data_0[gid.x, gid.y, gid.z]$ -
+                    $input_data_1[0, 0, gid.z]$;
+        value_0 = diff * diff;
+        )";
+        break;
+      }
+
+      default:
+        return InvalidArgumentError(
+            "Incorrect elementwise with two arguments operation type.");
+    }
+    *generated_code = {
+        /*parameters=*/{},
+        /*objects=*/{},
+        /*shared_variables=*/{},
+        /*workload=*/uint3(),
+        /*workgroup=*/uint3(),
+        /*source_code=*/source,
+        /*input=*/IOStructure::ONLY_DEFINITIONS,
+        /*output=*/IOStructure::AUTO,
+    };
+    return OkStatus();
+  }
+
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    if (IsSupportedElemwise(ctx)) {
+      return ImplementElementwise(ctx, generated_code);
+    }
+    if (IsSupportedBroadcast(ctx)) {
+      return ImplementElementwiseBroadcast(ctx, generated_code);
+    }
+    return InvalidArgumentError(
+        "This case is not supported by subtract operation");
   }
 
  private:
@@ -226,12 +234,8 @@ std::unique_ptr<NodeShader> NewElementwiseNodeShader(
   switch (operation_type) {
     case OperationType::ABS:
     case OperationType::COS:
-    case OperationType::COPY:
-    case OperationType::ELU:
-    case OperationType::EXP:
-    case OperationType::HARD_SWISH:
     case OperationType::LOG:
-    case OperationType::NEG:
+    case OperationType::HARD_SWISH:
     case OperationType::RSQRT:
     case OperationType::SIGMOID:
     case OperationType::SIN:
@@ -240,8 +244,6 @@ std::unique_ptr<NodeShader> NewElementwiseNodeShader(
     case OperationType::TANH:
       return absl::make_unique<ElementwiseOneArgument>(operation_type);
     case OperationType::DIV:
-    case OperationType::MAXIMUM:
-    case OperationType::MINIMUM:
     case OperationType::POW:
     case OperationType::SQUARED_DIFF:
     case OperationType::SUB:

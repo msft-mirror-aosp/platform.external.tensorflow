@@ -56,7 +56,7 @@ class FuzzStringSplitV2 : public FuzzSession {
   }
 
  private:
-  static constexpr size_t kMaxSepSize = 4;
+  static const size_t kMaxSepSize = 4;
 };
 
 STANDARD_TF_FUZZ_FUNCTION(FuzzStringSplitV2);

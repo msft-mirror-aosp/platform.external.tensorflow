@@ -19,8 +19,7 @@ package tensorflow
 import "testing"
 
 func TestSavedModel(t *testing.T) {
-	tags := []string{"serve"}
-	bundle, err := LoadSavedModel("../cc/saved_model/testdata/half_plus_two/00000123", tags, nil)
+	bundle, err := LoadSavedModel("../cc/saved_model/testdata/half_plus_two/00000123", []string{"serve"}, nil)
 	if err != nil {
 		t.Fatalf("LoadSavedModel(): %v", err)
 	}
@@ -30,12 +29,4 @@ func TestSavedModel(t *testing.T) {
 	t.Logf("SavedModel: %+v", bundle)
 	// TODO(jhseu): half_plus_two has a tf.Example proto dependency to run. Add a
 	// more thorough test when the generated protobufs are available.
-}
-
-func TestSavedModelWithEmptyTags(t *testing.T) {
-	tags := []string{}
-	_, err := LoadSavedModel("../cc/saved_model/testdata/half_plus_two/00000123", tags, nil)
-	if err == nil {
-		t.Fatalf("LoadSavedModel() should return an error if tags are empty")
-	}
 }

@@ -26,7 +26,7 @@ static constexpr bool DBG = false;
 
 class CpuUtilsTest : public ::testing::Test {
  protected:
-  void SetUp() override { CpuUtils::EnableClockCycleProfiling(); }
+  void SetUp() override { CpuUtils::EnableClockCycleProfiling(true); }
 };
 
 TEST_F(CpuUtilsTest, SetUpTestCase) {}

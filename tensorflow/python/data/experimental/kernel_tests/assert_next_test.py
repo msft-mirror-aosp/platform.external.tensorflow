@@ -39,17 +39,6 @@ class AssertNextTest(test_base.DatasetTestBase, parameterized.TestCase):
     self.assertDatasetProduces(dataset, expected_output=[0])
 
   @combinations.generate(test_base.default_test_combinations())
-  def testIgnoreVersionSuffix(self):
-    # The `batch` transformation creates a "BatchV2" dataset, but we should
-    # still match that with "Batch".
-    dataset = dataset_ops.Dataset.from_tensors(0).apply(
-        testing.assert_next(["Map", "Batch"])).map(lambda x: x).batch(1)
-    options = dataset_ops.Options()
-    options.experimental_optimization.apply_default_optimizations = False
-    dataset = dataset.with_options(options)
-    self.assertDatasetProduces(dataset, expected_output=[[0]])
-
-  @combinations.generate(test_base.default_test_combinations())
   def testAssertNextInvalid(self):
     dataset = dataset_ops.Dataset.from_tensors(0).apply(
         testing.assert_next(["Whoops"])).map(lambda x: x)
@@ -58,8 +47,10 @@ class AssertNextTest(test_base.DatasetTestBase, parameterized.TestCase):
     dataset = dataset.with_options(options)
     self.assertDatasetProduces(
         dataset,
-        expected_error=(errors.InvalidArgumentError,
-                        "Asserted transformation matching Whoops"))
+        expected_error=(
+            errors.InvalidArgumentError,
+            "Asserted Whoops transformation at offset 0 but encountered "
+            "Map transformation instead."))
 
   @combinations.generate(test_base.default_test_combinations())
   def testAssertNextShort(self):

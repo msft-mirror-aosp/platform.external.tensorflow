@@ -15,26 +15,18 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/common/transformations/make_padding.h"
 
-#include <memory>
-#include <string>
-#include <vector>
-
 #include "absl/memory/memory.h"
-#include "absl/strings/string_view.h"
 #include "absl/types/any.h"
 #include "tensorflow/lite/delegates/gpu/common/model.h"
-#include "tensorflow/lite/delegates/gpu/common/model_transformer.h"
 #include "tensorflow/lite/delegates/gpu/common/operations.h"
-#include "tensorflow/lite/delegates/gpu/common/shape.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
-#include "tensorflow/lite/delegates/gpu/common/tensor.h"
 
 namespace tflite {
 namespace gpu {
 namespace {
 
 bool IsConstZeros(const Node& node) {
-  if (node.operation.type != ToString(OperationType::CONSTANT)) {
+  if (node.operation.type != ToString(OperationType::CONST)) {
     return false;
   }
   auto& attr =
@@ -84,10 +76,10 @@ class MakePaddingFromZerosConcat : public NodeTransformation {
                     "Padding for concat axis is unsupported: " +
                         ToString(concat_attr.axis)};
         }
-        absl::Status status = RemovePrecedingNode(graph, dep, node);
+        Status status = RemovePrecedingNode(graph, dep, node);
         if (!status.ok()) {
-          return {TransformStatus::INVALID, "Unable to remove const node: " +
-                                                std::string(status.message())};
+          return {TransformStatus::INVALID,
+                  "Unable to remove const node: " + status.error_message()};
         }
         node->operation.attributes = pad_attr;
         node->operation.type = ToString(OperationType::PAD);

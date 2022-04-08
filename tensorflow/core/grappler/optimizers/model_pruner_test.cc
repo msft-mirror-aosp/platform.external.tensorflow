@@ -100,13 +100,12 @@ TEST_F(ModelPrunerTest, IdentityPruning) {
 
     Output a = ops::Const(s.WithOpName("a"), 0.0f, {10, 10});
     Output b = ops::Sqrt(s.WithOpName("b"), {a});
-    Output c = ops::Identity(s.WithOpName("c").WithControlDependencies(b), b);
+    Output c = ops::Identity(s.WithOpName("c"), b);
     Output d = ops::Identity(s.WithOpName("d"), c);
     Output e = ops::Sqrt(s.WithOpName("e"), {d});
 
     TF_ASSERT_OK(s.ToGraphDef(&item.graph));
   }
-  item.fetch.push_back("e");
 
   ModelPruner pruner;
   GraphDef output;
@@ -118,6 +117,8 @@ TEST_F(ModelPrunerTest, IdentityPruning) {
 
     Output a = ops::Const(s.WithOpName("a"), 0.0f, {10, 10});
     Output b = ops::Sqrt(s.WithOpName("b"), {a});
+    Output c = ops::Identity(s.WithOpName("c"), b);
+    Output d = ops::Identity(s.WithOpName("d"), b);
     Output e = ops::Sqrt(s.WithOpName("e"), {b});
 
     TF_ASSERT_OK(s.ToGraphDef(&expected));
@@ -125,9 +126,10 @@ TEST_F(ModelPrunerTest, IdentityPruning) {
 
   CompareGraphs(expected, output);
 
-  auto actual_tensors = EvaluateNodes(output, item.fetch);
+  std::vector<string> fetch = {"e"};
+  auto actual_tensors = EvaluateNodes(output, fetch);
   ASSERT_EQ(actual_tensors.size(), 1);
-  auto expected_tensors = EvaluateNodes(item.graph, item.fetch);
+  auto expected_tensors = EvaluateNodes(item.graph, fetch);
   ASSERT_EQ(expected_tensors.size(), 1);
   test::ExpectTensorEqual<float>(actual_tensors[0], expected_tensors[0]);
 }
@@ -404,7 +406,7 @@ TEST_F(ModelPrunerTest, PruningForwardsCtrlDependencies) {
 }
 */
 
-TEST_F(ModelPrunerTest, PruningPreservesFetch) {
+TEST_F(ModelPrunerTest, PruningPerservesFetch) {
   // Build a simple graph with a few trivially prunable ops.
   GrapplerItem item;
   {
@@ -443,7 +445,7 @@ TEST_F(ModelPrunerTest, PruningPreservesFetch) {
   test::ExpectTensorEqual<float>(actual_tensors[0], expected_tensors[0]);
 }
 
-TEST_F(ModelPrunerTest, PruningPreservesCrossDeviceIdentity) {
+TEST_F(ModelPrunerTest, PruningPerservesCrossDeviceIdentity) {
   GrapplerItem item;
   {
     tensorflow::Scope s = tensorflow::Scope::NewRootScope();

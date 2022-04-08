@@ -178,8 +178,7 @@ class LinearOperatorTriDiagMatrixTest(
 
 
 if __name__ == '__main__':
-  if not test_util.is_xla_enabled():
-    linear_operator_test_util.add_tests(LinearOperatorTriDiagCompactTest)
-    linear_operator_test_util.add_tests(LinearOperatorTriDiagSequenceTest)
-    linear_operator_test_util.add_tests(LinearOperatorTriDiagMatrixTest)
+  linear_operator_test_util.add_tests(LinearOperatorTriDiagCompactTest)
+  linear_operator_test_util.add_tests(LinearOperatorTriDiagSequenceTest)
+  linear_operator_test_util.add_tests(LinearOperatorTriDiagMatrixTest)
   test.main()

@@ -133,7 +133,7 @@ TEST(AllocatorAttributesDeathTest, MergeDifferentScopeIds) {
 }
 
 TEST(CPUAllocatorTest, Simple) {
-  EnableCPUAllocatorStats();
+  EnableCPUAllocatorStats(true);
   Allocator* a = cpu_allocator();
   std::vector<void*> ptrs;
   for (int s = 1; s < 1024; s++) {
@@ -162,7 +162,7 @@ TEST(CPUAllocatorTest, Simple) {
              1048576 * sizeof(double));
   a->ClearStats();
   CheckStats(a, 0, 0, 0, 0);
-  DisableCPUAllocatorStats();
+  EnableCPUAllocatorStats(false);
 }
 
 // Define a struct that we will use to observe behavior in the unit tests
@@ -221,21 +221,19 @@ TEST(CustomAllocatorAttributes, TestSetterAndGetter) {
   EXPECT_FALSE(HasDeviceAllocatorAttribute(AllocatorAttributes()));
 }
 
-static void BM_Allocation(::testing::benchmark::State& state) {
-  const int arg = state.range(0);
-
+static void BM_Allocation(int iters, int arg) {
   Allocator* a = cpu_allocator();
   // Exercise a few different allocation sizes
   std::vector<int> sizes = {256, 4096, 16384, 524288, 512, 1048576};
   int size_index = 0;
 
-  if (arg) EnableCPUAllocatorStats();
-  for (auto s : state) {
+  if (arg) EnableCPUAllocatorStats(true);
+  while (--iters > 0) {
     int bytes = sizes[size_index++ % sizes.size()];
     void* p = a->AllocateRaw(1, bytes);
     a->DeallocateRaw(p);
   }
-  if (arg) DisableCPUAllocatorStats();
+  if (arg) EnableCPUAllocatorStats(false);
 }
 BENCHMARK(BM_Allocation)->Arg(0)->Arg(1);
 

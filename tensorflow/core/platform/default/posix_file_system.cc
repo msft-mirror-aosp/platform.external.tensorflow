@@ -19,7 +19,6 @@ limitations under the License.
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
-
 #if defined(__linux__)
 #include <sys/sendfile.h>
 #endif
@@ -32,7 +31,6 @@ limitations under the License.
 #include "tensorflow/core/platform/default/posix_file_system.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/error.h"
-#include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/file_system_helper.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/status.h"
@@ -53,11 +51,7 @@ class PosixRandomAccessFile : public RandomAccessFile {
  public:
   PosixRandomAccessFile(const string& fname, int fd)
       : filename_(fname), fd_(fd) {}
-  ~PosixRandomAccessFile() override {
-    if (close(fd_) < 0) {
-      LOG(ERROR) << "close() failed: " << strerror(errno);
-    }
-  }
+  ~PosixRandomAccessFile() override { close(fd_); }
 
   Status Name(StringPiece* result) const override {
     *result = filename_;
@@ -94,34 +88,6 @@ class PosixRandomAccessFile : public RandomAccessFile {
     *result = StringPiece(scratch, dst - scratch);
     return s;
   }
-
-#if defined(TF_CORD_SUPPORT)
-  Status Read(uint64 offset, size_t n, absl::Cord* cord) const override {
-    if (n == 0) {
-      return Status::OK();
-    }
-    if (n < 0) {
-      return errors::InvalidArgument(
-          "Attempting to read ", n,
-          " bytes. You cannot read a negative number of bytes.");
-    }
-
-    char* scratch = new char[n];
-    if (scratch == nullptr) {
-      return errors::ResourceExhausted("Unable to allocate ", n,
-                                       " bytes for file reading.");
-    }
-
-    StringPiece tmp;
-    Status s = Read(offset, n, &tmp, scratch);
-
-    absl::Cord tmp_cord = absl::MakeCordFromExternal(
-        absl::string_view(static_cast<char*>(scratch), tmp.size()),
-        [scratch](absl::string_view) { delete[] scratch; });
-    cord->Append(tmp_cord);
-    return s;
-  }
-#endif
 };
 
 class PosixWritableFile : public WritableFile {
@@ -147,19 +113,6 @@ class PosixWritableFile : public WritableFile {
     }
     return Status::OK();
   }
-
-#if defined(TF_CORD_SUPPORT)
-  // \brief Append 'cord' to the file.
-  Status Append(const absl::Cord& cord) override {
-    for (const auto& chunk : cord.Chunks()) {
-      size_t r = fwrite(chunk.data(), 1, chunk.size(), file_);
-      if (r != chunk.size()) {
-        return IOError(filename_, errno);
-      }
-    }
-    return Status::OK();
-  }
-#endif
 
   Status Close() override {
     if (file_ == nullptr) {
@@ -221,8 +174,7 @@ class PosixReadOnlyMemoryRegion : public ReadOnlyMemoryRegion {
 };
 
 Status PosixFileSystem::NewRandomAccessFile(
-    const string& fname, TransactionToken* token,
-    std::unique_ptr<RandomAccessFile>* result) {
+    const string& fname, std::unique_ptr<RandomAccessFile>* result) {
   string translated_fname = TranslateName(fname);
   Status s;
   int fd = open(translated_fname.c_str(), O_RDONLY);
@@ -235,7 +187,6 @@ Status PosixFileSystem::NewRandomAccessFile(
 }
 
 Status PosixFileSystem::NewWritableFile(const string& fname,
-                                        TransactionToken* token,
                                         std::unique_ptr<WritableFile>* result) {
   string translated_fname = TranslateName(fname);
   Status s;
@@ -249,8 +200,7 @@ Status PosixFileSystem::NewWritableFile(const string& fname,
 }
 
 Status PosixFileSystem::NewAppendableFile(
-    const string& fname, TransactionToken* token,
-    std::unique_ptr<WritableFile>* result) {
+    const string& fname, std::unique_ptr<WritableFile>* result) {
   string translated_fname = TranslateName(fname);
   Status s;
   FILE* f = fopen(translated_fname.c_str(), "a");
@@ -263,8 +213,7 @@ Status PosixFileSystem::NewAppendableFile(
 }
 
 Status PosixFileSystem::NewReadOnlyMemoryRegionFromFile(
-    const string& fname, TransactionToken* token,
-    std::unique_ptr<ReadOnlyMemoryRegion>* result) {
+    const string& fname, std::unique_ptr<ReadOnlyMemoryRegion>* result) {
   string translated_fname = TranslateName(fname);
   Status s = Status::OK();
   int fd = open(translated_fname.c_str(), O_RDONLY);
@@ -280,22 +229,19 @@ Status PosixFileSystem::NewReadOnlyMemoryRegionFromFile(
     } else {
       result->reset(new PosixReadOnlyMemoryRegion(address, st.st_size));
     }
-    if (close(fd) < 0) {
-      s = IOError(fname, errno);
-    }
+    close(fd);
   }
   return s;
 }
 
-Status PosixFileSystem::FileExists(const string& fname,
-                                   TransactionToken* token) {
+Status PosixFileSystem::FileExists(const string& fname) {
   if (access(TranslateName(fname).c_str(), F_OK) == 0) {
     return Status::OK();
   }
   return errors::NotFound(fname, " not found");
 }
 
-Status PosixFileSystem::GetChildren(const string& dir, TransactionToken* token,
+Status PosixFileSystem::GetChildren(const string& dir,
                                     std::vector<string>* result) {
   string translated_dir = TranslateName(dir);
   result->clear();
@@ -310,20 +256,16 @@ Status PosixFileSystem::GetChildren(const string& dir, TransactionToken* token,
       result->push_back(entry->d_name);
     }
   }
-  if (closedir(d) < 0) {
-    return IOError(dir, errno);
-  }
+  closedir(d);
   return Status::OK();
 }
 
 Status PosixFileSystem::GetMatchingPaths(const string& pattern,
-                                         TransactionToken* token,
                                          std::vector<string>* results) {
   return internal::GetMatchingPaths(this, Env::Default(), pattern, results);
 }
 
-Status PosixFileSystem::DeleteFile(const string& fname,
-                                   TransactionToken* token) {
+Status PosixFileSystem::DeleteFile(const string& fname) {
   Status result;
   if (unlink(TranslateName(fname).c_str()) != 0) {
     result = IOError(fname, errno);
@@ -331,7 +273,7 @@ Status PosixFileSystem::DeleteFile(const string& fname,
   return result;
 }
 
-Status PosixFileSystem::CreateDir(const string& name, TransactionToken* token) {
+Status PosixFileSystem::CreateDir(const string& name) {
   string translated = TranslateName(name);
   if (translated.empty()) {
     return errors::AlreadyExists(name);
@@ -342,7 +284,7 @@ Status PosixFileSystem::CreateDir(const string& name, TransactionToken* token) {
   return Status::OK();
 }
 
-Status PosixFileSystem::DeleteDir(const string& name, TransactionToken* token) {
+Status PosixFileSystem::DeleteDir(const string& name) {
   Status result;
   if (rmdir(TranslateName(name).c_str()) != 0) {
     result = IOError(name, errno);
@@ -350,8 +292,7 @@ Status PosixFileSystem::DeleteDir(const string& name, TransactionToken* token) {
   return result;
 }
 
-Status PosixFileSystem::GetFileSize(const string& fname,
-                                    TransactionToken* token, uint64* size) {
+Status PosixFileSystem::GetFileSize(const string& fname, uint64* size) {
   Status s;
   struct stat sbuf;
   if (stat(TranslateName(fname).c_str(), &sbuf) != 0) {
@@ -363,8 +304,7 @@ Status PosixFileSystem::GetFileSize(const string& fname,
   return s;
 }
 
-Status PosixFileSystem::Stat(const string& fname, TransactionToken* token,
-                             FileStatistics* stats) {
+Status PosixFileSystem::Stat(const string& fname, FileStatistics* stats) {
   Status s;
   struct stat sbuf;
   if (stat(TranslateName(fname).c_str(), &sbuf) != 0) {
@@ -377,8 +317,7 @@ Status PosixFileSystem::Stat(const string& fname, TransactionToken* token,
   return s;
 }
 
-Status PosixFileSystem::RenameFile(const string& src, const string& target,
-                                   TransactionToken* token) {
+Status PosixFileSystem::RenameFile(const string& src, const string& target) {
   Status result;
   if (rename(TranslateName(src).c_str(), TranslateName(target).c_str()) != 0) {
     result = IOError(src, errno);
@@ -386,8 +325,7 @@ Status PosixFileSystem::RenameFile(const string& src, const string& target,
   return result;
 }
 
-Status PosixFileSystem::CopyFile(const string& src, const string& target,
-                                 TransactionToken* token) {
+Status PosixFileSystem::CopyFile(const string& src, const string& target) {
   string translated_src = TranslateName(src);
   struct stat sbuf;
   if (stat(translated_src.c_str(), &sbuf) != 0) {

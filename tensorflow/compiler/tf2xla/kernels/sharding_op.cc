@@ -30,20 +30,12 @@ class ShardingOp : public XlaOpKernel {
   ~ShardingOp() override = default;
 
   void Compile(XlaOpKernelContext* ctx) override {
-    xla::XlaOp input;
-    {
-      // The builder might create a broadcast from a constant, so we clear
-      // sharding for the input.
-      xla::XlaScopedShardingAssignment no_sharding(ctx->builder(),
-                                                   absl::nullopt);
-      input = ctx->Input(0);
-    }
-    auto shape_or = ctx->builder()->GetShape(input);
-    OP_REQUIRES_OK(ctx, shape_or.status());
-
+    xla::XlaOp input = ctx->Input(0);
+    auto shape =
+        TensorShapeToXLAShape(ctx->input_xla_type(0), ctx->InputShape(0));
     ctx->SetOutput(
         0, xla::CustomCall(ctx->builder(), /*call_target_name=*/"Sharding",
-                           {input}, shape_or.ValueOrDie()));
+                           {input}, shape));
   }
 
  private:

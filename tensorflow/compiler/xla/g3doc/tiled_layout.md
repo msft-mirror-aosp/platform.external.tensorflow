@@ -3,13 +3,12 @@
 Caution: Tiled layout is *pre-release* and this describes how it's intended to
 work. Errors may be silently ignored.
 
-<p align="center">
-  <img src="images/xla_array_layout_figure1.png">
-  Figure 1
-</p>
+<center> ![](images/xla_array_layout_figure1.png)
+
+Figure 1 </center>
 
 Figure 1 shows how an array F32[3,5] is laid out in memory with 2x2 tiling. A
-shape with this layout is written as F32[3,5]{1,0:T(2,2)}, where 1,0 relates to
+shape with this layout is written as F32[3,5]{1,0:(2,2)}, where 1,0 relates to
 the physical order of dimensions (minor_to_major field in Layout) while (2,2)
 after the colon indicates tiling of the physical dimensions by a 2x2 tile.
 
@@ -121,10 +120,9 @@ element follows the formula above as expected.
 
 XLA's tiling becomes even more flexible by applying it repeatedly.
 
-<p align="center">
-  <img src="images/xla_array_layout_figure2.png">
-  Figure 2
-</p>
+<center> ![](images/xla_array_layout_figure2.png)
+
+Figure 2 </center>
 
 Figure 2 shows how an array of size 4x8 is tiled by two levels of tiling (first
 2x4 then 2x1). We represent this repeated tiling as (2,4)(2,1). Each color

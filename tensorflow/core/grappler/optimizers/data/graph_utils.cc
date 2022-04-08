@@ -27,7 +27,6 @@ namespace graph_utils {
 namespace {
 
 constexpr char kConstOpName[] = "Const";
-constexpr char kRetValOp[] = "_Retval";
 
 template <typename Predicate, typename Collection>
 std::vector<int> GetElementIndicesWithPredicate(const Predicate& predicate,
@@ -115,7 +114,7 @@ NodeDef* AddNode(StringPiece name, StringPiece op,
   for (const string& input : inputs) {
     node.add_input(input);
   }
-  for (const auto& attr : attributes) {
+  for (auto attr : attributes) {
     (*node.mutable_attr())[attr.first] = attr.second;
   }
   return graph->AddNode(std::move(node));
@@ -366,19 +365,6 @@ Status GetFetchNode(const MutableGraphView& graph, const GrapplerItem& item,
   *fetch_node = graph.GetNode(item.fetch.at(0));
 
   return Status::OK();
-}
-
-bool IsItemDerivedFromFunctionDef(const GrapplerItem& item,
-                                  const MutableGraphView& graph_view) {
-  for (const auto& fetch_name : item.fetch) {
-    auto fetch = graph_view.GetNode(fetch_name);
-    if (fetch != nullptr && fetch->op() != kRetValOp) {
-      // We found a fetch node which is not a `Retval` op.
-      return false;
-    }
-  }
-  // All fetch nodes are `Retval` ops (or we don't have any fetch nodes).
-  return true;
 }
 
 }  // namespace graph_utils

@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -37,8 +37,7 @@ def make_pad_tests(options):
           "paddings": [[[0, 0], [0, 1], [2, 3], [0, 0]],
                        [[0, 1], [0, 0], [0, 0], [2, 3]]],
           "constant_paddings": [True, False],
-          "fully_quantize": [False],
-          "quant_16x8": [False]
+          "fully_quantize": [False]
       },
       # 2D:
       {
@@ -46,8 +45,7 @@ def make_pad_tests(options):
           "input_shape": [[1, 2]],
           "paddings": [[[0, 1], [2, 3]]],
           "constant_paddings": [True, False],
-          "fully_quantize": [False],
-          "quant_16x8": [False]
+          "fully_quantize": [False]
       },
       # 1D:
       {
@@ -55,8 +53,7 @@ def make_pad_tests(options):
           "input_shape": [[1]],
           "paddings": [[[1, 2]]],
           "constant_paddings": [False],
-          "fully_quantize": [False],
-          "quant_16x8": [False]
+          "fully_quantize": [False]
       },
       # 4D:
       {
@@ -66,8 +63,7 @@ def make_pad_tests(options):
                        [[0, 1], [0, 0], [0, 0], [2, 3]],
                        [[0, 0], [0, 0], [0, 0], [0, 0]]],
           "constant_paddings": [True],
-          "fully_quantize": [True],
-          "quant_16x8": [False, True]
+          "fully_quantize": [True]
       },
       # 2D:
       {
@@ -75,8 +71,7 @@ def make_pad_tests(options):
           "input_shape": [[1, 2]],
           "paddings": [[[0, 1], [2, 3]]],
           "constant_paddings": [True],
-          "fully_quantize": [True],
-          "quant_16x8": [False, True],
+          "fully_quantize": [True]
       },
       # 1D:
       {
@@ -84,8 +79,7 @@ def make_pad_tests(options):
           "input_shape": [[1]],
           "paddings": [[[1, 2]]],
           "constant_paddings": [True],
-          "fully_quantize": [True],
-          "quant_16x8": [False, True],
+          "fully_quantize": [True]
       },
   ]
 

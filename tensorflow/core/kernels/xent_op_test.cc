@@ -33,14 +33,11 @@ static Graph* Xent(int batch_size, int num_classes) {
   return g;
 }
 
-#define BM_XentDev(BATCH, CLASS, DEVICE)                                      \
-  static void BM_Xent##_##BATCH##_##CLASS##_##DEVICE(                         \
-      ::testing::benchmark::State& state) {                                   \
-    test::Benchmark(#DEVICE, Xent(BATCH, CLASS), /*old_benchmark_api*/ false) \
-        .Run(state);                                                          \
-    state.SetItemsProcessed(static_cast<int64>(state.iterations()) * BATCH *  \
-                            CLASS);                                           \
-  }                                                                           \
+#define BM_XentDev(BATCH, CLASS, DEVICE)                                \
+  static void BM_Xent##_##BATCH##_##CLASS##_##DEVICE(int iters) {       \
+    testing::ItemsProcessed(static_cast<int64>(iters) * BATCH * CLASS); \
+    test::Benchmark(#DEVICE, Xent(BATCH, CLASS)).Run(iters);            \
+  }                                                                     \
   BENCHMARK(BM_Xent##_##BATCH##_##CLASS##_##DEVICE);
 
 /// The representative tests for ptb_word on GPU

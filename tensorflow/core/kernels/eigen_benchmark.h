@@ -35,9 +35,8 @@ class SpatialConvolutionBenchmarksSuite {
 
   using Dimensions = Eigen::DSizes<Eigen::Index, 4>;
 
-  SpatialConvolutionBenchmarksSuite(::testing::benchmark::State& state,
-                                    Device& device)
-      : state_(state), device_(device) {}
+  SpatialConvolutionBenchmarksSuite(int iters, Device& device)
+      : iters_(iters), device_(device) {}
 
   Eigen::Index BufferSize(const Dimensions& dims) {
     return dims.TotalSize() * sizeof(Scalar);
@@ -63,10 +62,12 @@ class SpatialConvolutionBenchmarksSuite {
     Filter filter(filter_data, filter_dims);
     Output output(output_data, output_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       output.device(device_) = Eigen::SpatialConvolution(input, filter);
       tensorflow::testing::DoNotOptimize(output);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(input_data);
     device_.deallocate(filter_data);
@@ -101,11 +102,13 @@ class SpatialConvolutionBenchmarksSuite {
     OutputBackward output_backward(output_backward_data, output_dims);
     InputBackward input_backward(input_backward_data, input_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       input_backward.device(device_) = Eigen::SpatialConvolutionBackwardInput(
           filter, output_backward, input_rows, input_cols);
       tensorflow::testing::DoNotOptimize(input_backward);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(filter_data);
     device_.deallocate(output_backward_data);
@@ -140,11 +143,13 @@ class SpatialConvolutionBenchmarksSuite {
     OutputBackward output_backward(output_backward_data, input_dims);
     FilterBackward filter_backward(filter_backward_data, filter_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       filter_backward.device(device_) = Eigen::SpatialConvolutionBackwardKernel(
           input, output_backward, filter_rows, filter_cols);
       tensorflow::testing::DoNotOptimize(filter_backward);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(input_data);
     device_.deallocate(output_backward_data);
@@ -152,8 +157,7 @@ class SpatialConvolutionBenchmarksSuite {
   }
 
  private:
-  ::testing::benchmark::State& state_;
-
+  int iters_;
   Device& device_;
 };
 
@@ -166,9 +170,8 @@ class CuboidConvolutionBenchmarksSuite {
 
   using Dimensions = Eigen::DSizes<Eigen::Index, 5>;
 
-  CuboidConvolutionBenchmarksSuite(::testing::benchmark::State& state,
-                                   Device& device)
-      : state_(state), device_(device) {}
+  CuboidConvolutionBenchmarksSuite(int iters, Device& device)
+      : iters_(iters), device_(device) {}
 
   Eigen::Index BufferSize(const Dimensions& dims) {
     return dims.TotalSize() * sizeof(Scalar);
@@ -195,10 +198,12 @@ class CuboidConvolutionBenchmarksSuite {
     Filter filter(filter_data, filter_dims);
     Output output(output_data, output_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       output.device(device_) = Eigen::CuboidConvolution(input, filter);
       tensorflow::testing::DoNotOptimize(output);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(input_data);
     device_.deallocate(filter_data);
@@ -235,11 +240,13 @@ class CuboidConvolutionBenchmarksSuite {
     OutputBackward output_backward(output_backward_data, output_dims);
     InputBackward input_backward(input_backward_data, input_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       input_backward.device(device_) = Eigen::CuboidConvolutionBackwardInput(
           filter, output_backward, input_planes, input_rows, input_cols);
       tensorflow::testing::DoNotOptimize(input_backward);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(filter_data);
     device_.deallocate(output_backward_data);
@@ -276,11 +283,13 @@ class CuboidConvolutionBenchmarksSuite {
     OutputBackward output_backward(output_backward_data, output_dims);
     FilterBackward filter_backward(filter_backward_data, filter_dims);
 
-    for (auto s : state_) {
+    ::tensorflow::testing::StartTiming();
+    for (int i = 0; i < iters_; ++i) {
       filter_backward.device(device_) = Eigen::CuboidConvolutionBackwardKernel(
           input, output_backward, filter_planes, filter_rows, filter_cols);
       tensorflow::testing::DoNotOptimize(filter_backward);
     }
+    ::tensorflow::testing::StopTiming();
 
     device_.deallocate(input_data);
     device_.deallocate(output_backward_data);
@@ -288,7 +297,7 @@ class CuboidConvolutionBenchmarksSuite {
   }
 
  private:
-  ::testing::benchmark::State& state_;
+  int iters_;
   Device& device_;
 };
 

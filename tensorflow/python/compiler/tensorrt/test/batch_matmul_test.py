@@ -18,8 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import unittest
-
 import numpy as np
 
 from tensorflow.python.compiler.tensorrt.test import tf_trt_integration_test_base as trt_test
@@ -31,30 +29,7 @@ from tensorflow.python.ops import nn
 from tensorflow.python.platform import test
 
 
-class BatchMatMultTestBase(trt_test.TfTrtIntegrationTestBase):
-  """Base class for BatchMatMult tests."""
-
-  # Shape inference of BatchMatMultV2 doesn't work. Use static batch size.
-  def BuildParams(self, graph_fn, dtype, input_shapes, output_shapes):
-    return self.BuildParamsWithMask(
-        graph_fn=graph_fn,
-        dtype=dtype,
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
-        input_mask=[[True] * len(s) for s in input_shapes],
-        output_mask=[[True] * len(s) for s in output_shapes],
-        extra_inputs=[],
-        extra_outputs=[])
-
-  @classmethod
-  def setUpClass(cls):
-    if cls is BatchMatMultTestBase:
-      raise unittest.SkipTest(
-          "BatchMatMultTestBase defines base class for other test.")
-    super(BatchMatMultTestBase, cls).setUpClass()
-
-
-class BatchMatMulTwoTensorTest(BatchMatMultTestBase):
+class BatchMatMulTwoTensorTest(trt_test.TfTrtIntegrationTestBase):
   """Testing conversion of BatchMatMul where both inputs are tensors."""
 
   def GraphFn(self, inp, inp1):
@@ -72,7 +47,7 @@ class BatchMatMulTwoTensorTest(BatchMatMultTestBase):
     return {"TRTEngineOp_0": ["matmul", "relu"]}
 
 
-class BatchMatMulWeightBroadcastTest(BatchMatMultTestBase):
+class BatchMatMulWeightBroadcastTest(trt_test.TfTrtIntegrationTestBase):
   """Testing BatchMatMulV2: one operand is weight and both have same rank."""
 
   def GraphFn(self, inp):
@@ -91,7 +66,7 @@ class BatchMatMulWeightBroadcastTest(BatchMatMultTestBase):
     return {"TRTEngineOp_0": ["matmul", "kernel"]}
 
 
-class BatchMatMulWeightBroadcastDims2Test(BatchMatMultTestBase):
+class BatchMatMulWeightBroadcastDims2Test(trt_test.TfTrtIntegrationTestBase):
   """Testing BatchMatMulV2: weight operand must be broadcasted."""
 
   def GraphFn(self, inp):

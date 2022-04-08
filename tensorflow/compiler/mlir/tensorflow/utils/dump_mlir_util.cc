@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <cstdint>
 #include <cstring>
-#include <memory>
 #include <string>
 
 #include "llvm/ADT/StringMap.h"
@@ -25,16 +24,13 @@ limitations under the License.
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/IR/Operation.h"  // from @llvm-project
+#include "mlir/IR/Operation.h"  // TF:llvm-project
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/path.h"
-
-using llvm::raw_ostream;
 
 namespace tensorflow {
-namespace {
 
+namespace {
 struct NameCounts {
   mutex counts_mutex;
   llvm::StringMap<int64_t> counts;
@@ -44,10 +40,9 @@ std::string MakeUniqueFilename(string name) {
   static NameCounts& instance = *new NameCounts;
 
   // Remove illegal characters from `name`.
-  for (int i = 0, e = name.size(); i < e; ++i) {
+  for (int i = 0; i < name.size(); ++i) {
     char ch = name[i];
-    if (ch == '/' || ch == '[' || ch == ']' || ch == '*' || ch == '?' ||
-        ch == '\\') {
+    if (ch == '/' || ch == '[' || ch == ']' || ch == '*' || ch == '?') {
       name[i] = '_';
     }
   }
@@ -66,14 +61,14 @@ std::string MakeUniqueFilename(string name) {
   return filename;
 }
 
-// Simple raw_ostream that prints to stderr.
+// Simple raw_ostream that prints to LOG(INFO).
 struct LogInfoRawStream : public llvm::raw_ostream {
   LogInfoRawStream() { SetUnbuffered(); }
   ~LogInfoRawStream() override = default;
   uint64_t current_pos() const override { return 0; }
 
   void write_impl(const char* ptr, size_t size) override {
-    fprintf(stderr, "%.*s", static_cast<int>(size), ptr);
+    LOG(INFO) << absl::string_view(ptr, size);
   }
 };
 
@@ -97,38 +92,29 @@ struct WritableFileRawStream : public llvm::raw_ostream {
   // The file being written to.
   std::unique_ptr<WritableFile> file;
 };
-
-struct CrashReproducerStream : public mlir::PassManager::ReproducerStream {
-  CrashReproducerStream(llvm::StringRef name,
-                        std::unique_ptr<WritableFile> file)
-      : name(name), ostream(std::move(file)) {}
-
-  llvm::StringRef description() override { return name; }
-  raw_ostream& os() override { return ostream; }
-
- private:
-  std::string name;
-  WritableFileRawStream ostream;
-};
 }  // namespace
 
 Status CreateFileForDumping(llvm::StringRef name,
-                            std::unique_ptr<raw_ostream>* os,
+                            std::unique_ptr<llvm::raw_ostream>* os,
                             std::string* filepath, llvm::StringRef dirname) {
-  std::string dir;
+  const char* dir = nullptr;
   if (!dirname.empty())
-    dir = std::string(dirname);
+    dir = dirname.data();
   else
-    dir = GetDumpDirFromEnvVar();
+    dir = getenv("TF_DUMP_GRAPH_PREFIX");
 
-  if (dir.empty()) {
+  if (!dir) {
+    LOG(WARNING)
+        << "Failed to generate file because dump location is not specified "
+           "through either "
+           "TF_DUMP_GRAPH_PREFIX environment variable or function argument.";
     return Status(error::Code::INVALID_ARGUMENT,
                   "(TF_DUMP_GRAPH_PREFIX not specified)");
   }
 
-  if (dir == "-") {
+  if (std::strncmp(dir, "-", 2) == 0) {
     *os = std::make_unique<LogInfoRawStream>();
-    *filepath = "(stderr)";
+    *filepath = "LOG(INFO)";
     return Status();
   }
 
@@ -140,7 +126,10 @@ Status CreateFileForDumping(llvm::StringRef name,
                  << "' directory for dumping: " << status;
     return Status(error::Code::UNAVAILABLE, "(unavailable)");
   }
-  *filepath = io::JoinPath(dir, MakeUniqueFilename(std::string(name)));
+  *filepath = llvm::Twine(dir)
+                  .concat("/")
+                  .concat(MakeUniqueFilename(std::string(name)))
+                  .str();
 
   // Try to open the file and generate a raw_ostream.
   std::unique_ptr<WritableFile> file;
@@ -155,112 +144,15 @@ Status CreateFileForDumping(llvm::StringRef name,
 
 std::string DumpMlirOpToFile(llvm::StringRef name, mlir::Operation* op,
                              llvm::StringRef dirname) {
-  std::unique_ptr<raw_ostream> os;
+  std::unique_ptr<llvm::raw_ostream> os;
   std::string filepath;
   Status result = CreateFileForDumping(name, &os, &filepath, dirname);
   if (!result.ok()) return result.error_message();
 
-  op->print(*os, mlir::OpPrintingFlags().useLocalScope().printGenericOpForm());
+  op->print(*os, mlir::OpPrintingFlags().useLocalScope());
   LOG(INFO) << "Dumped MLIR operation '" << op->getName().getStringRef().str()
             << "' to '" << filepath << "'";
   return filepath;
-}
-
-std::string GetDumpDirFromEnvVar() {
-  const char* prefix_env = getenv("TF_DUMP_GRAPH_PREFIX");
-  if (!prefix_env) {
-    LOG(WARNING)
-        << "Failed to dump MLIR module because dump location is not "
-        << " specified through TF_DUMP_GRAPH_PREFIX environment variable.";
-    return "";
-  }
-
-  std::string result = prefix_env;
-
-  if (absl::EqualsIgnoreCase(result, "sponge") &&
-      !io::GetTestUndeclaredOutputsDir(&result)) {
-    LOG(WARNING) << "TF_DUMP_GRAPH_PREFIX=sponge but "
-                    "TEST_UNDECLARED_OUTPUT_DIRS is not set";
-    return "";
-  }
-  return result;
-}
-
-std::string DumpRawStringToFile(llvm::StringRef name, llvm::StringRef content,
-                                llvm::StringRef dirname) {
-  std::unique_ptr<raw_ostream> os;
-  std::string filepath;
-  Status result = CreateFileForDumping(name, &os, &filepath, dirname);
-  if (!result.ok()) return result.error_message();
-
-  (*os) << content;
-  LOG(INFO) << "Outputted requested string to '" << filepath << "'";
-  return filepath;
-}
-
-void SetCrashReproducer(mlir::PassManager& pm, llvm::StringRef dir_path) {
-  std::string path = dir_path.str();
-  if (path.empty()) {
-    if (getenv("MLIR_CRASH_REPRODUCER_DIRECTORY"))
-      path = getenv("MLIR_CRASH_REPRODUCER_DIRECTORY");
-    else if (getenv("TEST_UNDECLARED_OUTPUTS_DIR"))
-      path = "sponge";
-  }
-  if (path.empty()) {
-    LOG_FIRST_N(INFO, 1) << "disabling MLIR crash reproducer, set env var "
-                            "`MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.";
-    return;
-  }
-
-  // Output dirs "sponge" (case-insensitive) have a special meaning: Dump into
-  // the directory specified by the environment variable
-  // TEST_UNDECLARED_OUTPUTS_DIR.
-  string lower_path = absl::AsciiStrToLower(path);
-  if (lower_path == "sponge") {
-    if (!tensorflow::io::GetTestUndeclaredOutputsDir(&path)) {
-      LOG(ERROR) << "MLIR crash reproducer is set to '" << dir_path.str()
-                 << "', but environment variable TEST_UNDECLARED_OUTPUTS_DIR "
-                    "is not set, so cannot dump anywhere.";
-      return;
-    }
-  }
-
-  auto* env = tensorflow::Env::Default();
-  auto status = env->RecursivelyCreateDir(path);
-  if (!status.ok()) {
-    LOG(WARNING) << "cannot create directory '" + path +
-                        "': " + status.error_message();
-    return;
-  }
-
-  path += "/mlir_reproducer_";
-
-  if (!tensorflow::Env::Default()->CreateUniqueFileName(&path, ".mlir")) {
-    LOG(WARNING)
-        << "cannot create unique filename, won't enable MLIR crash reproducer.";
-    return;
-  }
-
-  mlir::PassManager::ReproducerStreamFactory factory =
-      [path](std::string& error)
-      -> std::unique_ptr<mlir::PassManager::ReproducerStream> {
-    // Try to open the file and generate a raw_ostream.
-    std::unique_ptr<WritableFile> file;
-    Status status = tensorflow::Env::Default()->NewWritableFile(path, &file);
-    if (!status.ok()) {
-      error = absl::StrCat("Failed to create file '", path,
-                           "': ", status.error_message());
-      return nullptr;
-    }
-    return std::make_unique<CrashReproducerStream>(path, std::move(file));
-  };
-  pm.enableCrashReproducerGeneration(factory, /*genLocalReproducer=*/false);
-}
-
-void applyTensorflowAndCLOptions(mlir::PassManager& pm,
-                                 llvm::StringRef dir_path) {
-  mlir::applyPassManagerCLOptions(pm);
-  SetCrashReproducer(pm, dir_path);
 }
 
 }  // namespace tensorflow

@@ -22,7 +22,6 @@ import numpy as np
 
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import ops
 from tensorflow.python.framework import test_util
 from tensorflow.python.ops import embedding_ops
 from tensorflow.python.ops import math_ops
@@ -36,7 +35,7 @@ class AdagradDAOptimizerTest(test.TestCase):
 
   def doTestAdagradDAwithoutRegularizationBasic1(self, use_resource=False):
     for dtype in [dtypes.float64, dtypes.float32]:
-      with ops.Graph().as_default(), self.cached_session():
+      with self.cached_session() as sess:
         global_step = variables.Variable(0, dtype=dtypes.int64)
         if use_resource:
           var0 = resource_variable_ops.ResourceVariable([0.0, 0.0], dtype=dtype)
@@ -54,7 +53,7 @@ class AdagradDAOptimizerTest(test.TestCase):
             l2_regularization_strength=0.0)
         update = opt.apply_gradients(
             zip([grads0, grads1], [var0, var1]), global_step=global_step)
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
 
         v0_val, v1_val = self.evaluate([var0, var1])
         self.assertAllClose([0.0, 0.0], v0_val)
@@ -75,13 +74,15 @@ class AdagradDAOptimizerTest(test.TestCase):
         self.assertAllCloseAccordingToType(
             np.array([-0.094821, -0.189358]), v1_val)
 
+  @test_util.run_deprecated_v1
   def testAdagradDAWithoutRegularizationBasic1(self):
     self.doTestAdagradDAwithoutRegularizationBasic1()
 
+  @test_util.run_deprecated_v1
   def testResourceAdagradDAWithoutRegularizationBasic1(self):
     self.doTestAdagradDAwithoutRegularizationBasic1(use_resource=True)
 
-  @test_util.run_v1_only("loss needs to be callable in v2")
+  @test_util.run_deprecated_v1
   def testMinimizeSparseResourceVariable(self):
     for dtype in [dtypes.float32, dtypes.float64]:
       with self.cached_session():
@@ -93,7 +94,7 @@ class AdagradDAOptimizerTest(test.TestCase):
         loss = pred * pred
         sgd_op = adagrad_da.AdagradDAOptimizer(
             1.0, global_step).minimize(loss)
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
         # Fetch params to validate initial values
         self.assertAllCloseAccordingToType([[1.0, 2.0]], self.evaluate(var0))
         # Run 1 step of sgd
@@ -103,9 +104,10 @@ class AdagradDAOptimizerTest(test.TestCase):
                                            self.evaluate(var0),
                                            rtol=0.01)
 
+  @test_util.run_deprecated_v1
   def testAdagradDAwithoutRegularizationBasic2(self):
     for dtype in [dtypes.float64, dtypes.float32]:
-      with ops.Graph().as_default(), self.cached_session():
+      with self.cached_session() as sess:
         global_step = variables.Variable(0, dtype=dtypes.int64)
         var0 = variables.Variable([1.0, 2.0], dtype=dtype)
         var1 = variables.Variable([4.0, 3.0], dtype=dtype)
@@ -120,7 +122,7 @@ class AdagradDAOptimizerTest(test.TestCase):
             l2_regularization_strength=0.0)
         update = opt.apply_gradients(
             zip([grads0, grads1], [var0, var1]), global_step=global_step)
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
 
         v0_val, v1_val = self.evaluate([var0, var1])
         self.assertAllCloseAccordingToType([1.0, 2.0], v0_val)
@@ -135,9 +137,10 @@ class AdagradDAOptimizerTest(test.TestCase):
         self.assertAllCloseAccordingToType(
             np.array([-0.094821, -0.189358]), v1_val)
 
+  @test_util.run_deprecated_v1
   def testAdagradDAWithL1(self):
     for dtype in [dtypes.float64, dtypes.float32]:
-      with ops.Graph().as_default(), self.cached_session():
+      with self.cached_session() as sess:
         global_step = variables.Variable(0, dtype=dtypes.int64)
         var0 = variables.Variable([1.0, 2.0], dtype=dtype)
         var1 = variables.Variable([4.0, 3.0], dtype=dtype)
@@ -152,7 +155,7 @@ class AdagradDAOptimizerTest(test.TestCase):
             l2_regularization_strength=0.0)
         update = opt.apply_gradients(
             zip([grads0, grads1], [var0, var1]), global_step=global_step)
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
 
         v0_val, v1_val = self.evaluate([var0, var1])
         self.assertAllCloseAccordingToType([1.0, 2.0], v0_val)
@@ -167,9 +170,10 @@ class AdagradDAOptimizerTest(test.TestCase):
         self.assertAllCloseAccordingToType(
             np.array([-0.085339, -0.17989]), v1_val)
 
+  @test_util.run_deprecated_v1
   def testAdagradDAWithL1_L2(self):
     for dtype in [dtypes.float64, dtypes.float32]:
-      with ops.Graph().as_default(), self.cached_session():
+      with self.cached_session() as sess:
         global_step = variables.Variable(0, dtype=dtypes.int64)
         var0 = variables.Variable([1.0, 2.0], dtype=dtype)
         var1 = variables.Variable([4.0, 3.0], dtype=dtype)
@@ -184,7 +188,7 @@ class AdagradDAOptimizerTest(test.TestCase):
             l2_regularization_strength=2.0)
         update = opt.apply_gradients(
             zip([grads0, grads1], [var0, var1]), global_step=global_step)
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
 
         v0_val, v1_val = self.evaluate([var0, var1])
         self.assertAllCloseAccordingToType([1.0, 2.0], v0_val)

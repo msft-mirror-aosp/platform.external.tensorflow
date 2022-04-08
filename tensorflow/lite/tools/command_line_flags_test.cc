@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include "tensorflow/lite/testing/util.h"
 
 namespace tflite {
 namespace {
@@ -55,18 +56,16 @@ TEST(CommandLineFlagsTest, BasicUsage) {
           Flag::CreateFlag("some_numeric_bool", &some_numeric_bool,
                            "some numeric bool"),
           Flag::CreateFlag("some_int1", &some_int1, "some int"),
-          Flag::CreateFlag("some_int2", &some_int2, "some int",
-                           Flag::kRequired),
-          Flag::CreateFlag("float_1", &float_1, "some float",
-                           Flag::kPositional),
+          Flag::CreateFlag("some_int2", &some_int2, "some int", Flag::REQUIRED),
+          Flag::CreateFlag("float_1", &float_1, "some float", Flag::POSITIONAL),
       });
 
-  EXPECT_TRUE(parsed_ok);
+  EXPECT_EQ(true, parsed_ok);
   EXPECT_EQ(20, some_int32);
   EXPECT_EQ(8, some_int1);
   EXPECT_EQ(5, some_int2);
   EXPECT_EQ(214748364700, some_int64);
-  EXPECT_TRUE(some_switch);
+  EXPECT_EQ(true, some_switch);
   EXPECT_EQ("somethingelse", some_name);
   EXPECT_NEAR(42.0f, some_float, 1e-5f);
   EXPECT_NEAR(12.2f, float_1, 1e-5f);
@@ -83,7 +82,7 @@ TEST(CommandLineFlagsTest, EmptyStringFlag) {
       &argc, reinterpret_cast<const char**>(argv_strings),
       {Flag::CreateFlag("some_string", &some_string, "some string")});
 
-  EXPECT_TRUE(parsed_ok);
+  EXPECT_EQ(true, parsed_ok);
   EXPECT_EQ(some_string, "");
   EXPECT_EQ(argc, 1);
 }
@@ -96,7 +95,7 @@ TEST(CommandLineFlagsTest, BadIntValue) {
       Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
                    {Flag::CreateFlag("some_int", &some_int, "some int")});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_EQ(10, some_int);
   EXPECT_EQ(argc, 1);
 }
@@ -109,8 +108,8 @@ TEST(CommandLineFlagsTest, BadBoolValue) {
       &argc, reinterpret_cast<const char**>(argv_strings),
       {Flag::CreateFlag("some_switch", &some_switch, "some switch")});
 
-  EXPECT_FALSE(parsed_ok);
-  EXPECT_FALSE(some_switch);
+  EXPECT_EQ(false, parsed_ok);
+  EXPECT_EQ(false, some_switch);
   EXPECT_EQ(argc, 1);
 }
 
@@ -122,7 +121,7 @@ TEST(CommandLineFlagsTest, BadFloatValue) {
       Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
                    {Flag::CreateFlag("some_float", &some_float, "some float")});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_NEAR(-23.23f, some_float, 1e-5f);
   EXPECT_EQ(argc, 1);
 }
@@ -133,9 +132,9 @@ TEST(CommandLineFlagsTest, RequiredFlagNotFound) {
   const char* argv_strings[] = {"program_name", "--flag=12"};
   bool parsed_ok = Flags::Parse(
       &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_flag", &some_float, "", Flag::kRequired)});
+      {Flag::CreateFlag("some_flag", &some_float, "", Flag::REQUIRED)});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_NEAR(-23.23f, some_float, 1e-5f);
   EXPECT_EQ(argc, 2);
 }
@@ -146,9 +145,9 @@ TEST(CommandLineFlagsTest, NoArguments) {
   const char* argv_strings[] = {"program_name"};
   bool parsed_ok = Flags::Parse(
       &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_flag", &some_float, "", Flag::kRequired)});
+      {Flag::CreateFlag("some_flag", &some_float, "", Flag::REQUIRED)});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_NEAR(-23.23f, some_float, 1e-5f);
   EXPECT_EQ(argc, 1);
 }
@@ -159,9 +158,9 @@ TEST(CommandLineFlagsTest, NotEnoughArguments) {
   const char* argv_strings[] = {"program_name"};
   bool parsed_ok = Flags::Parse(
       &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_flag", &some_float, "", Flag::kPositional)});
+      {Flag::CreateFlag("some_flag", &some_float, "", Flag::POSITIONAL)});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_NEAR(-23.23f, some_float, 1e-5f);
   EXPECT_EQ(argc, 1);
 }
@@ -172,9 +171,9 @@ TEST(CommandLineFlagsTest, PositionalFlagFailed) {
   const char* argv_strings[] = {"program_name", "string"};
   bool parsed_ok = Flags::Parse(
       &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_flag", &some_float, "", Flag::kPositional)});
+      {Flag::CreateFlag("some_flag", &some_float, "", Flag::POSITIONAL)});
 
-  EXPECT_FALSE(parsed_ok);
+  EXPECT_EQ(false, parsed_ok);
   EXPECT_NEAR(-23.23f, some_float, 1e-5f);
   EXPECT_EQ(argc, 2);
 }
@@ -215,9 +214,9 @@ TEST(CommandLineFlagsTest, UsageString) {
       {Flag::CreateFlag("some_int", &some_int, "some int"),
        Flag::CreateFlag("some_int64", &some_int64, "some int64"),
        Flag::CreateFlag("some_switch", &some_switch, "some switch"),
-       Flag::CreateFlag("some_name", &some_name, "some name", Flag::kRequired),
+       Flag::CreateFlag("some_name", &some_name, "some name", Flag::REQUIRED),
        Flag::CreateFlag("some_int2", &some_int2, "some int",
-                        Flag::kPositional)});
+                        Flag::POSITIONAL)});
   // Match the usage message, being sloppy about whitespace.
   const char* expected_usage =
       " usage: some_tool_name <some_int2> <flags>\n"
@@ -236,133 +235,11 @@ TEST(CommandLineFlagsTest, UsageString) {
       << usage;
 }
 
-// When there are duplicate args, the flag value and the parsing result will be
-// based on the 1st arg.
-TEST(CommandLineFlagsTest, DuplicateArgsParsableValues) {
-  int some_int = -23;
-  int argc = 3;
-  const char* argv_strings[] = {"program_name", "--some_int=1", "--some_int=2"};
-  bool parsed_ok =
-      Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
-                   {Flag::CreateFlag("some_int", &some_int, "some int")});
-
-  EXPECT_TRUE(parsed_ok);
-  EXPECT_EQ(1, some_int);
-  EXPECT_EQ(argc, 2);
-  EXPECT_EQ("--some_int=2", argv_strings[1]);
-}
-
-TEST(CommandLineFlagsTest, DuplicateArgsBadValueAppearFirst) {
-  int some_int = -23;
-  int argc = 3;
-  const char* argv_strings[] = {"program_name", "--some_int=value",
-                                "--some_int=1"};
-  bool parsed_ok =
-      Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
-                   {Flag::CreateFlag("some_int", &some_int, "some int")});
-
-  EXPECT_FALSE(parsed_ok);
-  EXPECT_EQ(-23, some_int);
-  EXPECT_EQ(argc, 2);
-  EXPECT_EQ("--some_int=1", argv_strings[1]);
-}
-
-TEST(CommandLineFlagsTest, DuplicateArgsBadValueAppearSecondly) {
-  int some_int = -23;
-  int argc = 3;
-  // Although the 2nd arg has non-parsable int value, the flag 'some_int' value
-  // could still be set and the parsing result is ok.
-  const char* argv_strings[] = {"program_name", "--some_int=1",
-                                "--some_int=value"};
-  bool parsed_ok =
-      Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
-                   {Flag::CreateFlag("some_int", &some_int, "some int")});
-
-  EXPECT_TRUE(parsed_ok);
-  EXPECT_EQ(1, some_int);
-  EXPECT_EQ(argc, 2);
-  EXPECT_EQ("--some_int=value", argv_strings[1]);
-}
-
-// When there are duplicate flags, all of them will be checked against the arg
-// list.
-TEST(CommandLineFlagsTest, DuplicateFlags) {
-  int some_int1 = -23;
-  int some_int2 = -23;
-  int argc = 2;
-  const char* argv_strings[] = {"program_name", "--some_int=1"};
-  bool parsed_ok =
-      Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
-                   {Flag::CreateFlag("some_int", &some_int1, "some int1"),
-                    Flag::CreateFlag("some_int", &some_int2, "some int2")});
-
-  EXPECT_TRUE(parsed_ok);
-  EXPECT_EQ(1, some_int1);
-  EXPECT_EQ(1, some_int2);
-  EXPECT_EQ(argc, 1);
-}
-
-TEST(CommandLineFlagsTest, DuplicateFlagsNotFound) {
-  int some_int1 = -23;
-  int some_int2 = -23;
-  int argc = 2;
-  const char* argv_strings[] = {"program_name", "--some_float=1.0"};
-  bool parsed_ok = Flags::Parse(
-      &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_int", &some_int1, "some int1", Flag::kOptional),
-       Flag::CreateFlag("some_int", &some_int2, "some int2", Flag::kRequired)});
-
-  EXPECT_FALSE(parsed_ok);
-  EXPECT_EQ(-23, some_int1);
-  EXPECT_EQ(-23, some_int2);
-  EXPECT_EQ(argc, 2);
-}
-
-TEST(CommandLineFlagsTest, DuplicateFlagNamesButDifferentTypes) {
-  int some_int = -23;
-  bool some_bool = true;
-  int argc = 2;
-  const char* argv_strings[] = {"program_name", "--some_val=20"};
-  // In this case, the 2nd 'some_val' flag of bool type will cause a no-ok
-  // parsing result.
-  bool parsed_ok =
-      Flags::Parse(&argc, reinterpret_cast<const char**>(argv_strings),
-                   {Flag::CreateFlag("some_val", &some_int, "some val-int"),
-                    Flag::CreateFlag("some_val", &some_bool, "some val-bool")});
-
-  EXPECT_FALSE(parsed_ok);
-  EXPECT_EQ(20, some_int);
-  EXPECT_TRUE(some_bool);
-  EXPECT_EQ(argc, 1);
-}
-
-TEST(CommandLineFlagsTest, DuplicateFlagsAndArgs) {
-  int some_int1 = -23;
-  int some_int2 = -23;
-  int argc = 3;
-  const char* argv_strings[] = {"program_name", "--some_int=1", "--some_int=2"};
-  bool parsed_ok = Flags::Parse(
-      &argc, reinterpret_cast<const char**>(argv_strings),
-      {Flag::CreateFlag("some_int", &some_int1, "flag1: bind with some_int1"),
-       Flag::CreateFlag("some_int", &some_int2, "flag2: bind with some_int2")});
-
-  // Note, when there're duplicate args, the flag value and the parsing result
-  // will be based on the 1st arg (i.e. --some_int=1). And both duplicate flags
-  // (i.e. flag1 and flag2) are checked, thus resulting their associated values
-  // (some_int1 and some_int2) being set to 1.
-  EXPECT_TRUE(parsed_ok);
-  EXPECT_EQ(1, some_int1);
-  EXPECT_EQ(1, some_int2);
-  EXPECT_EQ(argc, 2);
-}
-
-TEST(CommandLineFlagsTest, ArgsToString) {
-  int argc = 3;
-  const char* argv_strings[] = {"program_name", "--some_int=1", "--some_int=2"};
-  std::string args =
-      Flags::ArgsToString(argc, reinterpret_cast<const char**>(argv_strings));
-  EXPECT_EQ("--some_int=1 --some_int=2", args);
-}
-
 }  // namespace
 }  // namespace tflite
+
+int main(int argc, char** argv) {
+  ::tflite::LogToStderr();
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

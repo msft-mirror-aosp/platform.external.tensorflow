@@ -22,8 +22,7 @@ limitations under the License.
 #include <vector>
 
 #include "tensorflow/core/common_runtime/bfc_allocator.h"
-#include "tensorflow/core/common_runtime/device/device_mem_allocator.h"
-#include "tensorflow/core/common_runtime/gpu/gpu_virtual_mem_allocator.h"
+#include "tensorflow/core/common_runtime/gpu/gpu_mem_allocator.h"
 #include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/protobuf/config.pb.h"
@@ -34,13 +33,17 @@ namespace tensorflow {
 // algorithm.
 class GPUBFCAllocator : public BFCAllocator {
  public:
-  GPUBFCAllocator(SubAllocator* sub_allocator, size_t total_memory,
+  GPUBFCAllocator(GPUMemAllocator* sub_allocator, size_t total_memory,
                   const string& name);
-  GPUBFCAllocator(SubAllocator* sub_allocator, size_t total_memory,
+  GPUBFCAllocator(GPUMemAllocator* sub_allocator, size_t total_memory,
                   const GPUOptions& gpu_options, const string& name);
   ~GPUBFCAllocator() override {}
 
   TF_DISALLOW_COPY_AND_ASSIGN(GPUBFCAllocator);
+
+#ifdef TENSORFLOW_MEM_DEBUG
+  bool ShouldRecordOpName() const override { return true; }
+#endif
 
  private:
   static bool GetAllowGrowthValue(const GPUOptions& gpu_options);

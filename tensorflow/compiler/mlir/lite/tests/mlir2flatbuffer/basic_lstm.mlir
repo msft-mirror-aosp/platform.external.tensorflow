@@ -1,12 +1,11 @@
-// RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -o - | flatbuffer_to_string - | FileCheck %s
+// RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -o - | flatbuffer_to_string - | FileCheck --dump-input-on-failure %s
 
 func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384xf32>, tensor<1x96xf32>) -> tensor<1x96xf32> {
 // CHECK: {
 // CHECK-NEXT:  version: 3,
 // CHECK-NEXT:  operator_codes: [ {
-// CHECK-NEXT:    deprecated_builtin_code: 16,
+// CHECK-NEXT:    builtin_code: LSTM,
 // CHECK-NEXT:    version: 2
-// CHECK-NEXT:    builtin_code: LSTM
 // CHECK-NEXT:  } ],
 // CHECK-NEXT:  subgraphs: [ {
 // CHECK-NEXT:    tensors: [ {
@@ -84,8 +83,7 @@ func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384x
 // CHECK-NEXT:        cell_clip: 1.0,
 // CHECK-NEXT:        proj_clip: 2.0,
 // CHECK-NEXT:        kernel_type: BASIC
-// CHECK-NEXT:      },
-// CHECK-NEXT:      intermediates: [ ]
+// CHECK-NEXT:      }
 // CHECK-NEXT:    } ],
 // CHECK-NEXT:    name: "main"
 // CHECK-NEXT:  } ],
@@ -110,14 +108,7 @@ func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384x
 // CHECK-EMPTY:
 // CHECK-NEXT:  }, {
 // CHECK-EMPTY:
-// CHECK-NEXT:  }, {
-// CHECK-NEXT:  data: [ 49, 46, 49, 48, 46, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
-// CHECK-NEXT:  } ],
-// CHECK-NEXT:  metadata: [ {
-// CHECK-NEXT:  name: "min_runtime_version",
-// CHECK-NEXT:  buffer: 10
 // CHECK-NEXT:  } ]
-// CHECK-NEXT:  signature_defs: [ ]
 // CHECK-NEXT:}
 
 ^bb0(%arg0: tensor<1x384xf32>, %arg1: tensor<1x96xf32>, %arg2: tensor<384x480xf32>, %arg3: tensor<384xf32>, %arg4: tensor<1x96xf32>):

@@ -237,7 +237,8 @@ TEST_F(HloLiveRangeTest, AliasedParameter) {
       HloInstruction::CreateBinary(f32vec4_, HloOpcode::kAdd, mul, paramY));
   module_->AddEntryComputation(builder.Build());
   // Set up alias of the first parameter.
-  TF_ASSERT_OK(module_->input_output_alias_config().SetUpAlias({}, 0, {}));
+  TF_ASSERT_OK(module_->input_output_alias_config().SetUpAlias(
+      {}, 0, {}, HloInputOutputAliasConfig::kUserAlias));
 
   HloSchedule schedule(module_.get());
 

@@ -14,11 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
 
-#include <stdint.h>
-
-#include <string>
-#include <vector>
-
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 

@@ -13,11 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <stdarg.h>
+#include "tensorflow/lite/minimal_logging.h"
 
 #include <cstdio>
-
-#include "tensorflow/lite/minimal_logging.h"
 
 namespace tflite {
 namespace logging_internal {

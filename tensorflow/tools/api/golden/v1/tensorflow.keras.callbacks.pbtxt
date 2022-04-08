@@ -13,10 +13,6 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "CallbackList"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "EarlyStopping"
     mtype: "<type \'type\'>"
   }

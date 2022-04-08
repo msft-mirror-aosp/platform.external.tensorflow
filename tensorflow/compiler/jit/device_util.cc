@@ -26,8 +26,8 @@ using xla::StatusOr;
 void DeviceSet::Insert(DeviceId device_id) {
   int word_index = device_id.id() / kWordSize;
   int bit_index = device_id.id() % kWordSize;
-  const int storage_size = storage_.size();
-  if (word_index >= storage_size) {
+
+  if (word_index >= storage_.size()) {
     storage_.resize(word_index + 1, 0);
   }
 
@@ -39,7 +39,7 @@ void DeviceSet::UnionWith(const DeviceSet& other) {
     storage_.resize(other.storage_.size(), 0);
   }
 
-  for (int i = 0, end = other.storage_.size(); i < end; i++) {
+  for (int i = 0; i < other.storage_.size(); i++) {
     storage_[i] |= other.storage_[i];
   }
 }

@@ -62,9 +62,9 @@ class StringDest : public WritableFile {
     contents_->append(slice.data(), slice.size());
     return Status::OK();
   }
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   Status Append(const absl::Cord& data) override {
-    contents_->append(std::string(data));
+    contents_->append(data.ToString());
     return Status::OK();
   }
 #endif
@@ -136,7 +136,7 @@ class RecordioTest : public ::testing::Test {
     TF_ASSERT_OK(writer_->WriteRecord(StringPiece(msg)));
   }
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   void Write(const absl::Cord& msg) {
     ASSERT_TRUE(!reading_) << "Write() after starting to read";
     TF_ASSERT_OK(writer_->WriteRecord(msg));
@@ -204,7 +204,7 @@ TEST_F(RecordioTest, ReadWrite) {
   ASSERT_EQ("EOF", Read());  // Make sure reads at eof work
 }
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
 TEST_F(RecordioTest, ReadWriteCords) {
   Write(absl::Cord("foo"));
   Write(absl::Cord("bar"));

@@ -6,14 +6,6 @@ tf_class {
     name: "environment"
     mtype: "<type \'property\'>"
   }
-  member {
-    name: "task_id"
-    mtype: "<type \'property\'>"
-  }
-  member {
-    name: "task_type"
-    mtype: "<type \'property\'>"
-  }
   member_method {
     name: "__init__"
   }

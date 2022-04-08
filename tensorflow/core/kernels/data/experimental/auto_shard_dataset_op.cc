@@ -25,7 +25,6 @@ namespace experimental {
 /* static */ constexpr const char* const AutoShardDatasetOp::kDatasetType;
 /* static */ constexpr const char* const AutoShardDatasetOp::kInputDataset;
 /* static */ constexpr const char* const AutoShardDatasetOp::kNumWorkers;
-/* static */ constexpr const char* const AutoShardDatasetOp::kNumReplicas;
 /* static */ constexpr const char* const AutoShardDatasetOp::kIndex;
 /* static */ constexpr const char* const AutoShardDatasetOp::kOutputTypes;
 /* static */ constexpr const char* const AutoShardDatasetOp::kOutputShapes;
@@ -34,17 +33,14 @@ constexpr char kOptimizerName[] = "tf_auto_shard";
 
 AutoShardDatasetOp::AutoShardDatasetOp(OpKernelConstruction* ctx)
     : UnaryDatasetOpKernel(ctx), auto_shard_policy_(0) {
-  if (ctx->HasAttr(kAutoShardPolicy)) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr(kAutoShardPolicy, &auto_shard_policy_));
-  }
-  if (ctx->HasAttr(kNumReplicas)) {
-    OP_REQUIRES_OK(ctx, ctx->GetAttr(kNumReplicas, &num_replicas_));
+  if (ctx->HasAttr("auto_shard_policy")) {
+    OP_REQUIRES_OK(ctx, ctx->GetAttr("auto_shard_policy", &auto_shard_policy_));
   }
 }
 
 void AutoShardDatasetOp::MakeDataset(OpKernelContext* ctx, DatasetBase* input,
                                      DatasetBase** output) {
-  int64 index, num_workers, auto_shard_policy, num_replicas;
+  int64 index, num_workers, auto_shard_policy;
   OP_REQUIRES_OK(ctx, ParseScalarArgument(ctx, kNumWorkers, &num_workers));
   OP_REQUIRES(
       ctx, num_workers > 0,
@@ -55,11 +51,9 @@ void AutoShardDatasetOp::MakeDataset(OpKernelContext* ctx, DatasetBase* input,
       ctx, index >= 0 && index < num_workers,
       errors::InvalidArgument("index must be between 0 and ", num_workers - 1));
   auto_shard_policy = auto_shard_policy_;
-  num_replicas = num_replicas_;
 
-  auto config_factory = [num_workers, index, auto_shard_policy,
-                         num_replicas]() {
-    return CreateConfig(num_workers, index, auto_shard_policy, num_replicas);
+  auto config_factory = [num_workers, index, auto_shard_policy]() {
+    return CreateConfig(num_workers, index, auto_shard_policy);
   };
 
   // We only want to optimize functions for some particular datasets like
@@ -67,12 +61,12 @@ void AutoShardDatasetOp::MakeDataset(OpKernelContext* ctx, DatasetBase* input,
   // function optimization and explicitly handle function modifications
   // for those datasets in the rewrite.
   OP_REQUIRES_OK(ctx, RewriteDataset(ctx, input, std::move(config_factory),
+                                     /*optimize_function_library=*/false,
                                      /*record_fingerprint=*/false, output));
 }
 
 RewriterConfig AutoShardDatasetOp::CreateConfig(int64 num_workers, int64 index,
-                                                int64 auto_shard_policy,
-                                                int64 num_replicas) {
+                                                int64 auto_shard_policy) {
   RewriterConfig rewriter_config;
   rewriter_config.set_fail_on_optimizer_errors(true);
   rewriter_config.set_meta_optimizer_iterations(RewriterConfig::ONE);
@@ -80,18 +74,16 @@ RewriterConfig AutoShardDatasetOp::CreateConfig(int64 num_workers, int64 index,
   rewriter_config.add_optimizers(kOptimizerName);
   auto custom_optimizer = rewriter_config.add_custom_optimizers();
   custom_optimizer->set_name(kOptimizerName);
-
-  const std::array<std::pair<const char* const, int64>, 4> attr_pairs = {
-      {{kNumWorkers, num_workers},
-       {kIndex, index},
-       {kAutoShardPolicy, auto_shard_policy},
-       {kNumReplicas, num_replicas}}};
-
-  for (const auto& pair : attr_pairs) {
-    AttrValue attr;
-    attr.set_i(pair.second);
-    (*custom_optimizer->mutable_parameter_map())[pair.first] = attr;
-  }
+  AttrValue num_workers_attr;
+  num_workers_attr.set_i(num_workers);
+  (*custom_optimizer->mutable_parameter_map())[kNumWorkers] = num_workers_attr;
+  AttrValue index_attr;
+  index_attr.set_i(index);
+  (*custom_optimizer->mutable_parameter_map())[kIndex] = index_attr;
+  AttrValue auto_shard_policy_attr;
+  auto_shard_policy_attr.set_i(auto_shard_policy);
+  (*custom_optimizer->mutable_parameter_map())[kAutoShardPolicy] =
+      auto_shard_policy_attr;
 
   return rewriter_config;
 }

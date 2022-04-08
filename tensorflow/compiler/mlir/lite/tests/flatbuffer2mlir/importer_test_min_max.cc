@@ -24,7 +24,6 @@ limitations under the License.
 #include "llvm/Support/raw_ostream.h"
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-#include "tensorflow/lite/schema/schema_utils.h"
 
 using llvm::Optional;
 using llvm::cl::opt;
@@ -115,8 +114,7 @@ Optional<std::unique_ptr<tflite::ModelT>> InjectStatsToFullyConnected(
   // Find the tensors and inject the min and max to the input and output
   for (auto& sub_graph : model->subgraphs) {
     for (auto& op : sub_graph->operators) {
-      if (tflite::GetBuiltinCode(
-              model->operator_codes[op->opcode_index].get()) ==
+      if (model->operator_codes[op->opcode_index]->builtin_code ==
           tflite::BuiltinOperator_FULLY_CONNECTED) {
         // inject min/max to the input and output tensors
         auto& input_tensor = sub_graph->tensors[op->inputs[0]];

@@ -15,9 +15,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/jit/xla_compilation_cache.h"
 
-#include "tensorflow/compiler/jit/flags.h"
 #include "tensorflow/compiler/tf2xla/shape_util.h"
-#include "tensorflow/compiler/xla/client/client_library.h"
 #include "tensorflow/core/platform/test.h"
 #include "tensorflow/core/platform/test_benchmark.h"
 
@@ -54,33 +52,7 @@ TEST(XlaCompilationCacheTest, SignatureEquality) {
   }
 }
 
-TEST(XlaCompilationCacheTest, TestDisabledXlaCompilation) {
-  NameAttrList fn;
-  fn.set_name("afunction");
-
-  DisableXlaCompilation();
-
-  xla::LocalClient* client = xla::ClientLibrary::LocalClientOrDie();
-  DeviceType device_type = DeviceType(DEVICE_CPU_XLA_JIT);
-
-  const XlaCompiler::CompilationResult* compilation_result;
-  xla::LocalExecutable* executable;
-
-  auto cache = new XlaCompilationCache(client, device_type);
-  core::ScopedUnref cache_ref(cache);
-
-  Status status = cache->Compile(XlaCompiler::Options{}, fn, {},
-                                 XlaCompiler::CompileOptions{},
-                                 XlaCompilationCache::CompileMode::kStrict,
-                                 &compilation_result, &executable);
-  EXPECT_FALSE(status.ok());
-  EXPECT_TRUE(
-      absl::StrContains(status.error_message(), "XLA compilation disabled"));
-}
-
-void BM_BuildSignature(::testing::benchmark::State& state) {
-  const int n_args = state.range(0);
-
+static void BM_BuildSignature(int iters, int n_args) {
   NameAttrList fn;
   fn.set_name("afunction");
   for (int i = 0; i < n_args; i++) {
@@ -95,7 +67,7 @@ void BM_BuildSignature(::testing::benchmark::State& state) {
     args[i].constant_value = Tensor(DT_INT32, {4, 0});
   }
 
-  for (auto i : state) {
+  while (--iters > 0) {
     xla::StatusOr<XlaCompilationCache::Signature> s =
         XlaCompilationCache::BuildSignature(fn, args);
     CHECK(s.ok());

@@ -40,21 +40,6 @@ bool IsSelectedMetric(const xrt::XRTMetricsCollect& metrics,
   return false;
 }
 
-void SetUnitOfMeasure(xrt::MetricValues* metrics,
-                      monitoring::UnitOfMeasure unit_of_measure) {
-  switch (unit_of_measure) {
-    case monitoring::UnitOfMeasure::kNumber:
-      metrics->set_unit_of_measure(xrt::MetricValues::NUMBER);
-      break;
-    case monitoring::UnitOfMeasure::kTime:
-      metrics->set_unit_of_measure(xrt::MetricValues::TIME);
-      break;
-    case monitoring::UnitOfMeasure::kBytes:
-      metrics->set_unit_of_measure(xrt::MetricValues::BYTES);
-      break;
-  }
-}
-
 Status AddMetrics(xrt::MetricsReport* report,
                   const monitoring::PointSet& point_set) {
   for (auto& point : point_set.points) {
@@ -62,7 +47,6 @@ Status AddMetrics(xrt::MetricsReport* report,
     metrics->set_name(point_set.metric_name);
     if (point->value_type == monitoring::ValueType::kPercentiles) {
       xrt::Percentiles* percentiles = metrics->mutable_percentiles_value();
-      SetUnitOfMeasure(metrics, point->percentiles_value.unit_of_measure);
       percentiles->set_start_nstime(point->percentiles_value.start_nstime);
       percentiles->set_end_nstime(point->percentiles_value.end_nstime);
       percentiles->set_min_value(point->percentiles_value.min_value);
@@ -78,7 +62,6 @@ Status AddMetrics(xrt::MetricsReport* report,
         xpoint->set_value(pct_point.value);
       }
     } else if (point->value_type == monitoring::ValueType::kInt64) {
-      metrics->set_unit_of_measure(xrt::MetricValues::NUMBER);
       metrics->set_int64_value(point->int64_value);
     }
   }
@@ -93,8 +76,7 @@ monitoring::PercentileSamplerCell* GetAllocateCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/allocate", "Tracks XRTAllocate times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -104,8 +86,7 @@ monitoring::PercentileSamplerCell* GetAllocateUninitializedCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/allocate_uninitialized",
            "Tracks XRTAllocateUninitialized times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -115,8 +96,7 @@ monitoring::PercentileSamplerCell* GetAllocateFromTensorCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/allocate_from_tensor",
            "Tracks XRTAllocateFromTensor times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -125,8 +105,7 @@ monitoring::PercentileSamplerCell* GetSubTupleCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/sub_tuple", "Tracks XRTSubTuple times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -135,8 +114,7 @@ monitoring::PercentileSamplerCell* GetMakeTupleCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/make_tuple", "Tracks XRTMakeTuple times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -145,8 +123,7 @@ monitoring::PercentileSamplerCell* GetReadLiteralCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/read_literal", "Tracks XRTReadLiteral times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -155,8 +132,7 @@ monitoring::PercentileSamplerCell* GetReadToTensorCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/read_tensor", "Tracks XRTReadToTensor times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -165,8 +141,7 @@ monitoring::PercentileSamplerCell* GetWriteLiteralCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/write_literal", "Tracks XRTWriteLiteral times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -176,8 +151,7 @@ monitoring::PercentileSamplerCell* GetReleaseAllocationCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/release_allocation",
            "Tracks XRTReleaseAllocation times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -187,8 +161,7 @@ monitoring::PercentileSamplerCell* GetReleaseAllAllocationsCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/release_all_allocations",
            "Tracks XRTReleaseAllAllocations times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -198,8 +171,7 @@ monitoring::PercentileSamplerCell* GetCompactAllocationsCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/compact_allocations",
            "Tracks XRTCompactAllocations times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -208,8 +180,7 @@ monitoring::PercentileSamplerCell* GetCompileCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/compile", "Tracks XRTCompile times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -219,8 +190,7 @@ monitoring::PercentileSamplerCell* GetReleaseCompilationCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/release_compilation",
            "Tracks XRTReleaseCompilationRef times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -229,8 +199,7 @@ monitoring::PercentileSamplerCell* GetExecuteCell() {
   static monitoring::PercentileSamplerCell* cell =
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/execute", "Tracks XRTExecute times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -240,8 +209,7 @@ monitoring::PercentileSamplerCell* GetExecuteChainedCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/ops/execute_chained",
            "Tracks XRTExecuteChained times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -251,8 +219,7 @@ monitoring::PercentileSamplerCell* GetMemoryCompactCell() {
       monitoring::PercentileSampler<0>::New(
           {"/tensorflow/xrt/memory_manager/compaction",
            "Tracks XRT memory manager memory compaction times"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }
@@ -263,8 +230,7 @@ monitoring::PercentileSamplerCell* GetTryFreeMemoryCell() {
           {"/tensorflow/xrt/memory_manager/try_free_memory",
            "Tracks XRT memory manager times in trying to "
            "free memory by swpping device memory to host memory"},
-          GetDefaultPercentiles(), kMaxSamples,
-          monitoring::UnitOfMeasure::kTime)
+          GetDefaultPercentiles(), kMaxSamples)
           ->GetCell();
   return cell;
 }

@@ -234,8 +234,8 @@ class HasKwargsTest(test.TestCase):
     self.assertEqual(double_wrapped_fn(some_arg), some_arg)
 
   def test_raises_type_error(self):
-    with self.assertRaisesRegex(TypeError,
-                                'fn should be a function-like object'):
+    with self.assertRaisesRegexp(
+        TypeError, 'fn should be a function-like object'):
       function_utils.has_kwargs('not a function')
 
 
@@ -253,14 +253,15 @@ class GetFuncNameTest(test.TestCase):
 
   def testWithCallableClass(self):
     callable_instance = SillyCallableClass()
-    self.assertRegex(
+    self.assertRegexpMatches(
         function_utils.get_func_name(callable_instance),
         '<.*SillyCallableClass.*>')
 
   def testWithFunctoolsPartial(self):
     partial = functools.partial(silly_example_function)
-    self.assertRegex(
-        function_utils.get_func_name(partial), '<.*functools.partial.*>')
+    self.assertRegexpMatches(
+        function_utils.get_func_name(partial),
+        '<.*functools.partial.*>')
 
   def testWithLambda(self):
     anon_fn = lambda x: x
@@ -276,24 +277,24 @@ class GetFuncCodeTest(test.TestCase):
   def testWithSimpleFunction(self):
     code = function_utils.get_func_code(silly_example_function)
     self.assertIsNotNone(code)
-    self.assertRegex(code.co_filename, 'function_utils_test.py')
+    self.assertRegexpMatches(code.co_filename, 'function_utils_test.py')
 
   def testWithClassMethod(self):
     code = function_utils.get_func_code(self.testWithClassMethod)
     self.assertIsNotNone(code)
-    self.assertRegex(code.co_filename, 'function_utils_test.py')
+    self.assertRegexpMatches(code.co_filename, 'function_utils_test.py')
 
   def testWithCallableClass(self):
     callable_instance = SillyCallableClass()
     code = function_utils.get_func_code(callable_instance)
     self.assertIsNotNone(code)
-    self.assertRegex(code.co_filename, 'function_utils_test.py')
+    self.assertRegexpMatches(code.co_filename, 'function_utils_test.py')
 
   def testWithLambda(self):
     anon_fn = lambda x: x
     code = function_utils.get_func_code(anon_fn)
     self.assertIsNotNone(code)
-    self.assertRegex(code.co_filename, 'function_utils_test.py')
+    self.assertRegexpMatches(code.co_filename, 'function_utils_test.py')
 
   def testWithFunctoolsPartial(self):
     partial = functools.partial(silly_example_function)

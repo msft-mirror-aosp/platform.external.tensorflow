@@ -1,5 +1,3 @@
-load("//tensorflow:tensorflow.bzl", "filegroup")
-load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load("//tensorflow:tensorflow.bzl", "if_windows", "tf_cc_test")
 load("//tensorflow/stream_executor:build_defs.bzl", "stream_executor_friends")
 

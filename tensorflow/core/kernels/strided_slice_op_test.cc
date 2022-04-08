@@ -38,8 +38,8 @@ namespace {
 // For the benchmark, we set up two 2-dimensional tensors, each kDim1 x 'dim'
 // in size, and concat them together along "concat_dimension"
 template <typename T>
-static void SliceHelper(::testing::benchmark::State& state) {
-  const int size = state.range(0);
+static void SliceHelper(int iters, int size) {
+  testing::StopTiming();
   Graph* g = new Graph(OpRegistry::Global());
   DataType dt = DataTypeToEnum<T>::v();
   int kDim = 100;
@@ -70,30 +70,32 @@ static void SliceHelper(::testing::benchmark::State& state) {
                   .Attr("T", dt)
                   .Finalize(g, &node));
 
-  test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);
-  state.SetBytesProcessed(static_cast<int64>(state.iterations()) * kDim * size *
-                          sizeof(T));
+  testing::BytesProcessed(static_cast<int64>(iters) * kDim * size * sizeof(T));
+  testing::StartTiming();
+  test::Benchmark("cpu", g).Run(iters);
+  testing::UseRealTime();
 }
 
-void BM_SliceFloat(::testing::benchmark::State& state) {
-  SliceHelper<float>(state);
+static void BM_SliceFloat(int iters, int dim2) {
+  SliceHelper<float>(iters, dim2);
 }
 
-BENCHMARK(BM_SliceFloat)->UseRealTime()->Arg(100)->Arg(1000)->Arg(10000);
+BENCHMARK(BM_SliceFloat)->Arg(100)->Arg(1000)->Arg(10000);
 
-void BM_SliceComplex64(::testing::benchmark::State& state) {
-  SliceHelper<std::complex<float>>(state);
+static void BM_SliceComplex64(int iters, int dim2) {
+  SliceHelper<std::complex<float>>(iters, dim2);
 }
 
-BENCHMARK(BM_SliceComplex64)->UseRealTime()->Arg(100)->Arg(1000)->Arg(10000);
+BENCHMARK(BM_SliceComplex64)->Arg(100)->Arg(1000)->Arg(10000);
 
-void BM_SliceBFloat16(::testing::benchmark::State& state) {
-  SliceHelper<bfloat16>(state);
+static void BM_SliceBFloat16(int iters, int dim2) {
+  SliceHelper<bfloat16>(iters, dim2);
 }
 
-BENCHMARK(BM_SliceBFloat16)->UseRealTime()->Arg(100)->Arg(1000)->Arg(10000);
+BENCHMARK(BM_SliceBFloat16)->Arg(100)->Arg(1000)->Arg(10000);
 
-void BM_ValidateStridedSliceOp(::testing::benchmark::State& state) {
+static void BM_ValidateStridedSliceOp(int iters) {
+  testing::StopTiming();
   int kDim = 100;
   int kMaxSize = 15000;
   int size = 100;
@@ -102,7 +104,8 @@ void BM_ValidateStridedSliceOp(::testing::benchmark::State& state) {
   Tensor strides = test::AsTensor<int32>({1, 1});
   TensorShape input_shape({2 * kDim, kMaxSize});
 
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     TensorShape processing_shape, final_shape;
     bool is_identity = true, slice_dim0 = true, is_simple_slice = true;
     gtl::InlinedVector<int64, 4> begin_out, end_out, strides_out;

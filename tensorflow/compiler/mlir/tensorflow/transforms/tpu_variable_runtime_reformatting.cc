@@ -26,26 +26,25 @@ limitations under the License.
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/TypeUtilities.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "mlir/Pass/PassRegistry.h"  // from @llvm-project
-#include "mlir/Transforms/RegionUtils.h"  // from @llvm-project
+#include "mlir/Dialect/StandardOps/Ops.h"  // TF:llvm-project
+#include "mlir/IR/Attributes.h"  // TF:llvm-project
+#include "mlir/IR/Builders.h"  // TF:llvm-project
+#include "mlir/IR/Function.h"  // TF:llvm-project
+#include "mlir/IR/Location.h"  // TF:llvm-project
+#include "mlir/IR/MLIRContext.h"  // TF:llvm-project
+#include "mlir/IR/Operation.h"  // TF:llvm-project
+#include "mlir/IR/TypeUtilities.h"  // TF:llvm-project
+#include "mlir/IR/Types.h"  // TF:llvm-project
+#include "mlir/IR/Value.h"  // TF:llvm-project
+#include "mlir/Pass/Pass.h"  // TF:llvm-project
+#include "mlir/Pass/PassRegistry.h"  // TF:llvm-project
+#include "mlir/Transforms/RegionUtils.h"  // TF:llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_device.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_executor.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/convert_tensor.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/mangling_util.h"
-#include "tensorflow/compiler/mlir/tensorflow/utils/tpu_rewrite_device_util.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/tensor_shape.pb.h"
 #include "tensorflow/core/framework/types.pb.h"
@@ -115,43 +114,36 @@ std::string GetRandomStateVariableName() {
 //    tf.TPUReshardVariablesOp(%rvar, %default_format, %rstate)
 //  }
 struct TPUVariableRuntimeReformattingPass
-    : public PassWrapper<TPUVariableRuntimeReformattingPass,
-                         OperationPass<ModuleOp>> {
-  void runOnOperation() override;
+    : public ModulePass<TPUVariableRuntimeReformattingPass> {
+  void runOnModule() override;
 };
 
-// Returns the earlier value of which `v` is an identity. If `skipped` is
-// provided, it will be used to store the identity nodes skipped.
-Value SkipIdentity(Value v, bool allow_other_use,
-                   llvm::SmallPtrSet<Operation*, 4>* skipped = nullptr) {
+// Returns the earlier value of which `v` is an identity.
+Value SkipIdentity(Value v, bool allow_other_use) {
   while (auto result = v.dyn_cast<OpResult>()) {
     if (!(allow_other_use || v.hasOneUse())) break;
     auto op = result.getDefiningOp();
-    if (!llvm::isa<TF::IdentityOp, TF::IdentityNOp>(op)) {
+    if (!llvm::isa<TF::IdentityOp>(op) && !llvm::isa<TF::IdentityNOp>(op)) {
       break;
     }
     v = op->getOperand(result.getResultNumber());
-    if (skipped) skipped->insert(op);
   }
   return v;
 }
 
 // Finds the formattable arguments of `execute` and annotates the metadata of
 // `compile` to record these arguments. In addition, it returns a mapping from
-// the formattable arguments of `execute` to the corresponding operand of
-// `replicate`. The
+// the formattable arguments of `execute` to the corresponding arguments of
+// `while_op` (which should be passed through to `execute` via `replicate`). The
 // entries in the mapping are sorted in the order of operands of `execute`.
 llvm::SmallVector<std::pair<int64_t, llvm::SmallVector<Value, 4>>, 4>
 AnnotateCompileOpAndGetExecuteArgToWhileArgsMapping(
-    TF::WhileRegionOp while_op, tf_device::ReplicateOp replicate,
-    TF::TPUExecuteAndUpdateVariablesOp execute,
-    tf_device::LaunchOp compile_launch) {
-  Region& body = while_op.body();
-  Region& cond = while_op.cond();
-
+    TF::WhileOp while_op, tf_device::ReplicateOp replicate,
+    TF::TPUExecuteAndUpdateVariablesOp execute, Operation* compile, FuncOp body,
+    FuncOp cond) {
   llvm::SmallVector<std::pair<int64_t, llvm::SmallVector<Value, 4>>, 4> mapping;
   auto mirrored_variable_indices_attr =
-      replicate->getAttrOfType<ArrayAttr>(kMirroredVariableIndicesAttr);
+      replicate.getAttrOfType<ArrayAttr>(kMirroredVariableIndicesAttr);
   if (!mirrored_variable_indices_attr) return mapping;
 
   // Finds the mapping from a replicate argument to an execute operand.
@@ -172,12 +164,11 @@ AnnotateCompileOpAndGetExecuteArgToWhileArgsMapping(
   if (replicate_arg_to_execute_arg.empty()) return mapping;
 
   // Parse the original compile metadata.
-  Operation& compile = compile_launch.GetBody().front();
-  auto metadata_str = compile.getAttrOfType<StringAttr>("metadata");
+  auto metadata_str = compile->getAttrOfType<StringAttr>("metadata");
   assert(metadata_str && "Missing compilation metadata");
   tensorflow::tpu::TPUCompileMetadataProto metadata;
   metadata.ParseFromString(std::string(metadata_str.getValue()));
-  int64_t num_replicas = replicate.n();
+  int64_t num_replicas = replicate.n().getLimitedValue();
   // Find the formattable operands of `execute`, which must be mirrored
   // variables (arguments of `replicate`), and must be pass-throughs from while
   // operands.
@@ -195,58 +186,43 @@ AnnotateCompileOpAndGetExecuteArgToWhileArgsMapping(
     // The XLA backend does not yet support formatting 64-bit data types.
     if (data_type.getIntOrFloatBitWidth() == 64) continue;
 
-    const auto& block_arg = replicate.GetBody().getArgument(replicate_arg);
-
-    int64_t num_inputs = 0;
-    if (replicate.IsReplicatedBlockArgument(block_arg)) {
-      num_inputs = num_replicas;
-    } else {
-      num_inputs = 1;
-    }
-
     // We have found a mirrored variable which is an input to the replicated
-    // `execute`. Now find if this mirrored variable is a pass-through of while
-    // arguments.
-    llvm::SmallVector<Value, 4> replicate_args;
-    for (int64_t i = 0; i < num_inputs; ++i) {
-      llvm::SmallPtrSet<Operation*, 4> skipped_identities;
-
-      auto replicate_operand = SkipIdentity(
-          replicate.GetReplicaOperandForBlockArgument(block_arg, i),
-          /*allow_other_use=*/false, &skipped_identities);
-      // For region based control flow, the resource operand for the replicate
-      // should be a region capture. If this has any use other than the
-      // replicate op (within the body of the while) or the skipped identities,
-      // then do not apply the transformation to this variable.
-      bool is_region_capture =
-          replicate_operand.getParentRegion()->isProperAncestor(&body);
-      bool has_other_use_in_body =
-          llvm::any_of(replicate_operand.getUsers(), [&](Operation* user) {
-            // Ignore uses that are not in the while body or condition.
-            if (!body.isAncestor(user->getParentRegion()) &&
-                !cond.isAncestor(user->getParentRegion()))
-              return false;
-            // Within the body or cond, only uses in replicate and the skipped
-            // identities is allowed.
-            return user != replicate && skipped_identities.count(user) == 0;
-          });
-
-      if (!is_region_capture || has_other_use_in_body) {
-        replicate_args.clear();
-        break;
-      }
-      replicate_args.push_back(replicate_operand);
-    }
-    if (replicate_args.empty()) continue;
-    // Now set the enable_xla_sharding field in the metadata to inform the
-    // compile op.
+    // `execute`. Now set the enable_xla_sharding field in the metadata to
+    // inform the compile op.
     auto metadata_arg = metadata.mutable_args(it->second);
     metadata_arg->set_enable_xla_sharding(
         ::tensorflow::tpu::TPUCompileMetadataProto_Arg::ALLOWED);
-    mapping.emplace_back(it->second, std::move(replicate_args));
+
+    // Now find if this mirrored variable is a pass-through of while arguments.
+    llvm::SmallVector<Value, 4> while_args;
+    for (int64_t i = 0; i < num_replicas; ++i) {
+      auto replicate_operand =
+          SkipIdentity(replicate.getOperand(num_replicas * replicate_arg + i),
+                       /*allow_other_use=*/false);
+      auto block_arg = replicate_operand.dyn_cast<BlockArgument>();
+      // To qualify for a valid pass-through mirrored variable, it must satisfy
+      //   1) it is the body's argument;
+      //   2) it has no other uses than `replicate`, the skipped identitiy ops,
+      //      or the return;
+      //   3) the corresponding argument in the cond function has no uses.
+      if (!block_arg || block_arg.getOwner() != &body.front() ||
+          llvm::any_of(replicate_operand.getUsers(),
+                       [&](Operation* user) {
+                         return user != body.front().getTerminator() &&
+                                !llvm::isa<TF::IdentityOp>(user) &&
+                                user != replicate;
+                       }) ||
+          !cond.getArgument(block_arg.getArgNumber()).use_empty()) {
+        while_args.clear();
+        break;
+      }
+      while_args.push_back(while_op.getOperand(block_arg.getArgNumber()));
+    }
+    if (while_args.empty()) continue;
+    mapping.emplace_back(it->second, std::move(while_args));
   }
   // Sort the mapping according to execute operand order.
-  llvm::sort(mapping, llvm::less_first());
+  llvm::sort(mapping);
   // Populate the `retval_index_for_sharding` field of the argument metadate.
   for (auto entry : llvm::enumerate(execute.device_var_reads_indices())) {
     int64_t arg_index = entry.value().cast<IntegerAttr>().getInt();
@@ -261,65 +237,39 @@ AnnotateCompileOpAndGetExecuteArgToWhileArgsMapping(
     }
   }
   // Update the metadata of the compile op.
-  compile.setAttr("metadata", StringAttr::get(compile.getContext(),
-                                              metadata.SerializeAsString()));
+  compile->setAttr("metadata", OpBuilder(compile).getStringAttr(
+                                   metadata.SerializeAsString()));
   return mapping;
 }
 
 // Adds a new replicated input to the replicate op.
-tf_device::ReplicateOp AddInputsToReplicateOp(
-    tf_device::ReplicateOp replicate,
-    MutableArrayRef<TF::VarHandleOp> new_inputs,
-    const llvm::SmallDenseMap<llvm::StringRef, llvm::SmallVector<StringRef, 4>>&
-        devices) {
-  int64_t num_replicas = replicate.n();
+tf_device::ReplicateOp AddInputsToReplicateOp(tf_device::ReplicateOp replicate,
+                                              ArrayRef<Value> new_inputs,
+                                              ArrayRef<StringRef> devices) {
+  int64_t num_replicas = replicate.n().getLimitedValue();
   assert(new_inputs.size() == num_replicas);
-
-  // As model parallelism is not yet supported, we assume that all ops are
-  // placed in logical core 0.
-  // TODO(b/148913020): Remove this constraint once model parallelism is
-  // supported.
-  assert(devices.find(tensorflow::GetDeviceAliasForLogicalCore(0))
-             ->getSecond()
-             .size() == num_replicas);
-
-  llvm::SmallVector<std::pair<ValueRange, Type>, 8> new_replicated_inputs;
-  llvm::SmallVector<Value, 8> new_packed_inputs;
+  assert(devices.size() == num_replicas);
+  llvm::SmallVector<std::pair<llvm::ArrayRef<Value>, Type>, 8>
+      new_replicated_inputs;
   llvm::SmallVector<llvm::SmallVector<Value, 8>, 8> replicated_inputs;
-  replicated_inputs.reserve(replicate.GetNumReplicatedBlockArguments());
-  new_packed_inputs.reserve(replicate.GetNumPackedBlockArguments());
-  for (const auto& arg : replicate.GetReplicatedBlockArguments()) {
+  for (auto arg : llvm::enumerate(replicate.GetBody().getArguments())) {
+    int64_t i = arg.index();
     replicated_inputs.emplace_back();
-    for (int64_t i = 0; i < num_replicas; ++i) {
-      replicated_inputs.back().push_back(
-          replicate.GetReplicaOperandForBlockArgument(arg, i));
+    for (int64_t j = i * num_replicas; j < (i + 1) * num_replicas; ++j) {
+      replicated_inputs.back().push_back(replicate.getOperand(j));
     }
-    new_replicated_inputs.emplace_back(replicated_inputs.back(), arg.getType());
+    new_replicated_inputs.emplace_back(replicated_inputs.back(),
+                                       arg.value().getType());
   }
-  for (const auto& arg : replicate.GetPackedBlockArguments()) {
-    new_packed_inputs.emplace_back(
-        replicate.GetReplicaOperandForBlockArgument(arg, /*replica=*/0));
-  }
-  SmallVector<Value, 4> new_input_values;
-  new_input_values.reserve(new_inputs.size());
-  for (auto var : new_inputs) new_input_values.push_back(var.resource());
-  new_replicated_inputs.emplace_back(new_input_values,
-                                     new_input_values.front().getType());
+  new_replicated_inputs.emplace_back(new_inputs, new_inputs.front().getType());
   OpBuilder builder(replicate);
   auto new_replicate = builder.create<tf_device::ReplicateOp>(
       replicate.getLoc(), num_replicas, devices, new_replicated_inputs,
-      new_packed_inputs,
-      replicate.GetBody().getTerminator()->getOperandTypes());
+      llvm::to_vector<8>(
+          replicate.GetBody().getTerminator()->getResultTypes()));
   for (auto arg : replicate.GetBody().getArguments()) {
-    if (replicate.IsReplicatedBlockArgument(arg)) {
-      arg.replaceAllUsesWith(
-          new_replicate.GetBody().getArgument(arg.getArgNumber()));
-    } else {
-      // There is a new added replicated state variable between replicated args
-      // and packed args.
-      arg.replaceAllUsesWith(
-          new_replicate.GetBody().getArgument(arg.getArgNumber() + 1));
-    }
+    arg.replaceAllUsesWith(
+        new_replicate.GetBody().getArgument(arg.getArgNumber()));
   }
   for (auto& op : llvm::make_early_inc_range(replicate.GetBody())) {
     op.moveBefore(&new_replicate.GetBody(), new_replicate.GetBody().end());
@@ -329,21 +279,78 @@ tf_device::ReplicateOp AddInputsToReplicateOp(
   return new_replicate;
 }
 
+// Adds the per-device state variables to the while-loop's inputs/outputs.
+TF::WhileOp AddStateVarsToWhileOp(TF::WhileOp while_op, FuncOp body,
+                                  FuncOp cond,
+                                  ArrayRef<TF::VarHandleOp> state_vars) {
+  auto body_return = llvm::cast<ReturnOp>(body.front().back());
+  auto new_body_return_vals = llvm::to_vector<4>(body_return.getOperands());
+  auto new_while_operands = llvm::to_vector<4>(while_op.getOperands());
+  auto append_types = [&](ArrayRef<Type> types) {
+    auto new_types = llvm::to_vector<4>(types);
+    for (auto state_var : state_vars) {
+      new_types.push_back(state_var.resource().getType());
+    }
+    return new_types;
+  };
+  for (auto state_var : state_vars) {
+    body.front().addArgument(state_var.resource().getType());
+    cond.front().addArgument(state_var.resource().getType());
+    auto inner_arg = body.getArgument(body.front().getNumArguments() - 1);
+    new_body_return_vals.push_back(inner_arg);
+    new_while_operands.push_back(state_var.resource());
+  }
+  OpBuilder builder(&body.front());
+  // Update return values.
+  builder.create<ReturnOp>(body_return.getLoc(), new_body_return_vals);
+  body_return.erase();
+
+  body.setType(FunctionType::get(append_types(body.getType().getInputs()),
+                                 append_types(body.getType().getResults()),
+                                 body.getContext()));
+  cond.setType(FunctionType::get(append_types(cond.getType().getInputs()),
+                                 cond.getType().getResults(),
+                                 cond.getContext()));
+  for (int64_t i = 0; i < state_vars.size(); ++i) {
+    int64_t arg_index = body.getNumArguments() - state_vars.size() + i;
+    TF::VarHandleOp state_var = state_vars[i];
+    auto device_attr = state_var.getAttr(kDeviceAttr);
+    if (device_attr) {
+      body.setArgAttr(arg_index, kFuncDeviceAttr, device_attr);
+      cond.setArgAttr(arg_index, kFuncDeviceAttr, device_attr);
+    }
+  }
+  builder.setInsertionPoint(while_op);
+  auto new_while_op = builder.create<TF::WhileOp>(
+      while_op.getLoc(),
+      append_types(llvm::to_vector<4>(while_op.getResultTypes())),
+      new_while_operands, while_op.getAttrs());
+  if (new_while_op.output_shapes().size() != 0) {
+    auto new_output_shapes = llvm::to_vector<4>(new_while_op.output_shapes());
+    // VarHandleOp is a scalar shape resource.
+    tensorflow::TensorShapeProto scalar;
+    scalar.set_unknown_rank(false);
+    for (int64_t i = 0; i < state_vars.size(); ++i) {
+      new_output_shapes.push_back(builder.getStringAttr(
+          tensorflow::mangling_util::MangleShape(scalar)));
+    }
+    new_while_op.setAttr("output_shapes",
+                         builder.getArrayAttr(new_output_shapes));
+  }
+  while_op.replaceAllUsesWith(
+      new_while_op.getResults().take_front(while_op.getNumResults()));
+  while_op.erase();
+  return new_while_op;
+}
+
 // Creates the per-device variables that represent the formatting state of each
 // device.
 llvm::SmallVector<TF::VarHandleOp, 4> CreateStateVars(
-    const llvm::SmallDenseMap<llvm::StringRef, llvm::SmallVector<StringRef, 4>>&
-        devices,
-    Location loc, RankedTensorType key_type, OpBuilder* builder) {
+    ArrayRef<llvm::StringRef> devices, Location loc, RankedTensorType key_type,
+    OpBuilder* builder) {
   llvm::SmallVector<TF::VarHandleOp, 4> state_vars;
-
-  // TODO(b/148913020): Remove this constraint once model parallelism is
-  // supported.
-  const auto& device_list =
-      devices.find(tensorflow::GetDeviceAliasForLogicalCore(0))->getSecond();
-
   // Create the state variable for each device.
-  for (llvm::StringRef device : device_list) {
+  for (llvm::StringRef device : devices) {
     state_vars.push_back(builder->create<TF::VarHandleOp>(
         loc,
         llvm::ArrayRef<Type>{RankedTensorType::get(
@@ -360,81 +367,45 @@ llvm::SmallVector<TF::VarHandleOp, 4> CreateStateVars(
   return state_vars;
 }
 
-// Wraps single op in `tf_device.launch` for explicit device assignment.
-void WrapOpInLaunch(OpBuilder* builder, Location loc, Operation* op,
-                    llvm::StringRef device) {
-  OpBuilder::InsertPoint insert_point = builder->saveInsertionPoint();
-
-  auto launch = builder->create<tf_device::LaunchOp>(
-      loc, builder->getStringAttr(device), op->getResultTypes());
-  launch.body().push_back(new Block);
-
-  builder->setInsertionPointToEnd(&launch.GetBody());
-  builder->create<tf_device::ReturnOp>(loc, op->getResults());
-
-  // Move op inside launch.
-  op->moveBefore(launch.GetBody().getTerminator());
-
-  builder->restoreInsertionPoint(insert_point);
-}
-
-// Performs the transformation for a replicate op inside a while loop.
-void HandleReplicateOp(TF::WhileRegionOp while_op,
-                       tf_device::ReplicateOp replicate) {
-  int64_t num_replicas = replicate.n();
+// Performs the transformation for a replciate op inside a while loop.
+void HandleReplicateOp(TF::WhileOp while_op, tf_device::ReplicateOp replicate,
+                       MLIRContext* context) {
+  int64_t num_replicas = replicate.n().getLimitedValue();
   if (num_replicas == 1) return;
-  tf_device::LaunchOp execute_launch;
-  for (auto execute_launch_op :
-       replicate.GetBody().getOps<tf_device::LaunchOp>()) {
-    if (!execute_launch_op.WrapsSingleOp() ||
-        !llvm::isa<TF::TPUExecuteAndUpdateVariablesOp>(
-            execute_launch_op.GetBody().front()))
-      continue;
-
-    if (execute_launch == nullptr) {
-      execute_launch = execute_launch_op;
+  TF::TPUExecuteAndUpdateVariablesOp execute;
+  for (auto execute_op :
+       replicate.GetBody().getOps<TF::TPUExecuteAndUpdateVariablesOp>()) {
+    if (execute == nullptr) {
+      execute = execute_op;
     } else {
       // We only support one execute op inside replicate.
-      execute_launch = nullptr;
+      execute = nullptr;
       break;
     }
   }
-  if (!execute_launch) return;
-  auto execute = llvm::cast<TF::TPUExecuteAndUpdateVariablesOp>(
-      execute_launch.GetBody().front());
+  if (!execute) return;
   auto compile =
       SkipIdentity(execute.key(), /*allow_other_use=*/true).getDefiningOp();
   if (!compile) return;
-  auto compile_launch = llvm::dyn_cast<tf_device::LaunchOp>(compile);
-  if (!compile_launch || !compile_launch.WrapsSingleOp() ||
-      !llvm::isa<TF::_TPUCompileMlirOp>(compile_launch.GetBody().front()))
-    return;
+
+  auto module = while_op.getParentOfType<ModuleOp>();
+  auto body = llvm::cast<FuncOp>(module.lookupSymbol(while_op.body()));
+  auto cond = llvm::cast<FuncOp>(module.lookupSymbol(while_op.cond()));
 
   // Analyze the formattable inputs.
   auto execute_arg_to_outer_args =
       AnnotateCompileOpAndGetExecuteArgToWhileArgsMapping(
-          while_op, replicate, execute, compile_launch);
+          while_op, replicate, execute, compile, body, cond);
   if (execute_arg_to_outer_args.empty()) return;
 
   // Extract the replicated devices.
   auto devices_attr = replicate.devices();
   if (!devices_attr) return;
-
-  auto device_map = devices_attr.getValue();
-  llvm::SmallDenseMap<llvm::StringRef, llvm::SmallVector<StringRef, 4>> devices;
-  devices.reserve(device_map.size());
-
-  for (auto it : device_map) {
-    auto device_alias = it.first.strref();
-    auto device_list = it.second.cast<ArrayAttr>();
-    llvm::SmallVector<StringRef, 4> device_list_for_alias;
-    device_list_for_alias.reserve(device_list.size());
-
-    for (auto device : device_list)
-      device_list_for_alias.emplace_back(device.cast<StringAttr>().getValue());
-
-    devices.insert({device_alias, device_list_for_alias});
+  llvm::SmallVector<llvm::StringRef, 4> devices;
+  for (auto dev : *devices_attr) {
+    devices.push_back(dev.cast<StringAttr>().getValue());
   }
+  assert(num_replicas == devices.size());
 
   OpBuilder builder(replicate);
   builder.setInsertionPoint(while_op);
@@ -444,86 +415,80 @@ void HandleReplicateOp(TF::WhileRegionOp while_op,
       RankedTensorType::get({2}, TF::StringType::get(builder.getContext()));
   auto state_vars =
       CreateStateVars(devices, while_op.getLoc(), key_type, &builder);
-  replicate = AddInputsToReplicateOp(replicate, state_vars, devices);
+  while_op = AddStateVarsToWhileOp(while_op, body, cond, state_vars);
+  // Add the new while loop inputs to the replicate op inside the body.
+  int64_t new_while_operand_count = while_op.getNumOperands();
+  llvm::SmallVector<Value, 4> inner_state_vars;
+  for (int64_t i = new_while_operand_count - num_replicas;
+       i < new_while_operand_count; ++i) {
+    inner_state_vars.push_back(body.front().getArgument(i));
+  }
+  replicate = AddInputsToReplicateOp(replicate, inner_state_vars, devices);
+
   // Build the reformat according to the compilation. Build it inside
   // `replicate`.
   llvm::SmallVector<Value, 8> reformat_operands;
   for (const auto& entry : execute_arg_to_outer_args) {
     reformat_operands.push_back(execute.args()[entry.first]);
   }
-  reformat_operands.push_back(compile_launch.getResult(1));
+  reformat_operands.push_back(compile->getResult(1));
   reformat_operands.push_back(replicate.GetBody().getArgument(
-      replicate.GetNumReplicatedBlockArguments() - 1));
-  builder.setInsertionPoint(execute_launch);
-  auto reformat_op = builder.create<TF::TPUReshardVariablesOp>(
-      execute_launch.getLoc(), llvm::ArrayRef<Type>{}, reformat_operands);
-  WrapOpInLaunch(&builder, execute_launch.getLoc(), reformat_op,
-                 execute_launch.device());
+      replicate.GetBody().getNumArguments() - 1));
+  builder.setInsertionPoint(execute);
+  builder.create<TF::TPUReshardVariablesOp>(
+      execute.getLoc(), llvm::ArrayRef<Type>{}, reformat_operands,
+      llvm::ArrayRef<NamedAttribute>{});
 
   // Build the replicated unformat op after the loop. First prepare building the
   // replicate op.
-  llvm::SmallVector<std::pair<ValueRange, Type>, 8> unformat_replicate_operands;
-  llvm::SmallVector<Value, 8> unformat_packed_operands;
+  llvm::SmallVector<std::pair<llvm::ArrayRef<Value>, Type>, 8>
+      unformat_replicate_operands;
   for (const auto& entry : execute_arg_to_outer_args) {
-    if (entry.second.size() > 1) {
-      unformat_replicate_operands.emplace_back(entry.second,
-                                               entry.second.front().getType());
-    } else {
-      unformat_packed_operands.emplace_back(entry.second.front());
-    }
+    unformat_replicate_operands.emplace_back(entry.second,
+                                             entry.second.front().getType());
   }
   llvm::SmallVector<Value, 4> state_var_vals(state_vars.size());
   for (const auto& entry : llvm::enumerate(state_vars)) {
     state_var_vals[entry.index()] = entry.value().resource();
   }
-  // Add the replicated state var to the end of the replicate operands.
   unformat_replicate_operands.emplace_back(state_var_vals,
                                            state_var_vals.front().getType());
   // Build a constant default key to specify that the unformatting should
   // transform the variables to the original format.
   builder.setInsertionPointAfter(while_op);
-  tensorflow::Tensor default_key_tensor(tensorflow::DT_STRING, {3});
+  tensorflow::Tensor default_key_tensor(tensorflow::DT_STRING, {2});
   default_key_tensor.vec<tensorflow::tstring>()(0) = kDefaultShardingValue;
   default_key_tensor.vec<tensorflow::tstring>()(1) = kDefaultShardingValue;
-  default_key_tensor.vec<tensorflow::tstring>()(2) = kDefaultShardingValue;
   auto default_state_key = builder.create<TF::ConstOp>(
       while_op.getLoc(),
       tensorflow::ConvertTensor(default_key_tensor, &builder).ValueOrDie());
   // With all replicated inputs, now build the replicate op.
   auto unformat_replicate = builder.create<tf_device::ReplicateOp>(
       while_op.getLoc(), num_replicas, devices, unformat_replicate_operands,
-      unformat_packed_operands, TypeRange{});
+      ArrayRef<Type>{});
   // Then build the unformat op in the replicate op.
   builder.setInsertionPointToEnd(&unformat_replicate.GetBody());
   llvm::SmallVector<Value, 8> unformat_operands;
-  // Add the replicated state var (the last replicated operand of the
-  // ReplicateOp) as the last operand of TPUReshardVariablesOp.
-  BlockArgument state = unformat_replicate.GetReplicatedBlockArguments().back();
-  auto replicated_block_args =
-      unformat_replicate.GetReplicatedBlockArguments().drop_back(1);
-  auto packed_block_args = unformat_replicate.GetPackedBlockArguments();
-  unformat_operands.append(replicated_block_args.begin(),
-                           replicated_block_args.end());
-  unformat_operands.append(packed_block_args.begin(), packed_block_args.end());
-  unformat_operands.push_back(state);
-
+  for (auto arg : unformat_replicate.GetBody().getArguments()) {
+    unformat_operands.push_back(arg);
+  }
   // Insert the default key as the second last operand.
   unformat_operands.insert(
       unformat_operands.begin() + unformat_operands.size() - 1,
       default_state_key.getResult());
   // Unformat op.
-  auto unformat_op = builder.create<TF::TPUReshardVariablesOp>(
-      while_op.getLoc(), llvm::ArrayRef<Type>{}, unformat_operands);
-  WrapOpInLaunch(&builder, execute_launch.getLoc(), unformat_op,
-                 execute_launch.device());
+  builder.create<TF::TPUReshardVariablesOp>(
+      while_op.getLoc(), llvm::ArrayRef<Type>{}, unformat_operands,
+      llvm::ArrayRef<NamedAttribute>{});
   builder.create<tf_device::ReturnOp>(while_op.getLoc(), ArrayRef<Value>{});
 }
 
-void TPUVariableRuntimeReformattingPass::runOnOperation() {
-  auto module = getOperation();
-  module.walk([&](TF::WhileRegionOp while_op) {
+void TPUVariableRuntimeReformattingPass::runOnModule() {
+  auto module = getModule();
+  module.walk([&](TF::WhileOp while_op) {
+    auto body = llvm::cast<FuncOp>(module.lookupSymbol(while_op.body()));
     tf_device::ReplicateOp replicate;
-    while_op.body().walk([&](tf_device::ReplicateOp replicate_op) {
+    body.walk([&](tf_device::ReplicateOp replicate_op) {
       if (replicate == nullptr) {
         replicate = replicate_op;
         return WalkResult::advance();
@@ -532,17 +497,13 @@ void TPUVariableRuntimeReformattingPass::runOnOperation() {
       replicate = nullptr;
       return WalkResult::interrupt();
     });
-    // Model parallelism is not supported, and can be detected when a
-    // `tf_device.parallel_execute` op in the `tf_device.replicate` is present.
-    if (replicate &&
-        replicate.GetBody().getOps<tf_device::ParallelExecuteOp>().empty())
-      HandleReplicateOp(while_op, replicate);
+    if (replicate) HandleReplicateOp(while_op, replicate, &getContext());
   });
 }
 
 }  // namespace
 
-std::unique_ptr<OperationPass<ModuleOp>> CreateTPUVariableReformattingPass() {
+std::unique_ptr<OpPassBase<ModuleOp>> CreateTPUVariableReformattingPass() {
   return std::make_unique<TPUVariableRuntimeReformattingPass>();
 }
 

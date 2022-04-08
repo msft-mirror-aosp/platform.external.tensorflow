@@ -18,8 +18,8 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import os
 import random
+import os
 import sys
 import threading
 import time
@@ -34,7 +34,6 @@ from tensorflow.core.lib.core import error_codes_pb2
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import session
 from tensorflow.python.eager import context
-from tensorflow.python.eager import def_function
 from tensorflow.python.framework import config
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import device as framework_device_lib
@@ -67,13 +66,6 @@ try:
   import attr  # pylint:disable=g-import-not-at-top
 except ImportError:
   attr = None
-
-try:
-  from frozendict import frozendict  # pylint:disable=g-import-not-at-top
-except ImportError:
-  frozendict = dict  # pylint:disable=invalid-name
-
-defaultdict = collections.defaultdict  # pylint:disable=invalid-name
 
 
 class SessionTest(test_util.TensorFlowTestCase):
@@ -122,7 +114,7 @@ class SessionTest(test_util.TensorFlowTestCase):
             'CPU': 2, 'GPU': 0
         })) as sess:
       inp = constant_op.constant(10.0, name='W1')
-      self.assertAllEqual(inp, 10.0)
+      self.assertAllEqual(inp.eval(), 10.0)
 
       num_cpu_devices = 0
       num_gpu_devices = 0
@@ -140,7 +132,7 @@ class SessionTest(test_util.TensorFlowTestCase):
     with session.Session(
         config=config_pb2.ConfigProto(use_per_session_threads=True)):
       inp = constant_op.constant(10.0, name='W1')
-      self.assertAllEqual(inp, 10.0)
+      self.assertAllEqual(inp.eval(), 10.0)
 
   def testSessionInterOpThreadPool(self):
     config_pb = config_pb2.ConfigProto()
@@ -229,13 +221,13 @@ class SessionTest(test_util.TensorFlowTestCase):
       res = sess.run(a)
       self.assertEqual(42.0, res)
       res = sess.run(a.op)  # An op, not a tensor.
-      self.assertIsNone(res)
+      self.assertEqual(None, res)
       tensor_runner = sess.make_callable(a)
       res = tensor_runner()
       self.assertEqual(42.0, res)
       op_runner = sess.make_callable(a.op)
       res = op_runner()
-      self.assertIsNone(res)
+      self.assertEqual(None, res)
 
   def testFetchSingletonByName(self):
     with session.Session() as sess:
@@ -243,7 +235,7 @@ class SessionTest(test_util.TensorFlowTestCase):
       res = sess.run(a.name)
       self.assertEqual(42.0, res)
       res = sess.run(a.op)  # An op, not a tensor.
-      self.assertIsNone(res)
+      self.assertEqual(None, res)
 
   def testFetchList(self):
     with session.Session() as sess:
@@ -253,11 +245,11 @@ class SessionTest(test_util.TensorFlowTestCase):
       v = variables.Variable([54.0])
       assign = v.assign([63.0])
       res = sess.run([a, b, c, a.name, assign.op])
-      self.assertIsInstance(res, list)
+      self.assertTrue(isinstance(res, list))
       self.assertEqual([42.0, None, 44.0, 42.0, None], res)
       list_runner = sess.make_callable([a, b, c, a.name, assign.op])
       res = list_runner()
-      self.assertIsInstance(res, list)
+      self.assertTrue(isinstance(res, list))
       self.assertEqual([42.0, None, 44.0, 42.0, None], res)
 
   def testFetchTuple(self):
@@ -266,11 +258,11 @@ class SessionTest(test_util.TensorFlowTestCase):
       b = control_flow_ops.no_op()  # An op, not a tensor.
       c = constant_op.constant(44.0)
       res = sess.run((a, b, c, a.name))
-      self.assertIsInstance(res, tuple)
+      self.assertTrue(isinstance(res, tuple))
       self.assertEqual((42.0, None, 44.0, 42.0), res)
       tuple_runner = sess.make_callable((a, b, c, a.name))
       res = tuple_runner()
-      self.assertIsInstance(res, tuple)
+      self.assertTrue(isinstance(res, tuple))
       self.assertEqual((42.0, None, 44.0, 42.0), res)
 
   def testFetchNamedTuple(self):
@@ -282,15 +274,15 @@ class SessionTest(test_util.TensorFlowTestCase):
       b = control_flow_ops.no_op()  # An op, not a tensor.
       c = constant_op.constant(44.0)
       res = sess.run(ABC(a, b, c))
-      self.assertIsInstance(res, ABC)
+      self.assertTrue(isinstance(res, ABC))
       self.assertEqual(42.0, res.a)
-      self.assertIsNone(res.b)
+      self.assertEqual(None, res.b)
       self.assertEqual(44.0, res.c)
       namedtuple_runner = sess.make_callable(ABC(a, b, c))
       res = namedtuple_runner()
-      self.assertIsInstance(res, ABC)
+      self.assertTrue(isinstance(res, ABC))
       self.assertEqual(42.0, res.a)
-      self.assertIsNone(res.b)
+      self.assertEqual(None, res.b)
       self.assertEqual(44.0, res.c)
 
   def testFetchDict(self):
@@ -299,9 +291,9 @@ class SessionTest(test_util.TensorFlowTestCase):
       b = control_flow_ops.no_op()  # An op, not a tensor.
       c = constant_op.constant(44.0)
       res = sess.run({'a': a, 'b': b, 'c': c})
-      self.assertIsInstance(res, dict)
+      self.assertTrue(isinstance(res, dict))
       self.assertEqual(42.0, res['a'])
-      self.assertIsNone(res['b'])
+      self.assertEqual(None, res['b'])
       self.assertEqual(44.0, res['c'])
 
   def testFetchOrderedDict(self):
@@ -310,10 +302,10 @@ class SessionTest(test_util.TensorFlowTestCase):
       b = control_flow_ops.no_op()  # An op, not a tensor.
       c = constant_op.constant(44.0)
       res = sess.run(collections.OrderedDict([(3, a), (2, b), (1, c)]))
-      self.assertIsInstance(res, collections.OrderedDict)
+      self.assertTrue(isinstance(res, collections.OrderedDict))
       self.assertEqual([3, 2, 1], list(res.keys()))
       self.assertEqual(42.0, res[3])
-      self.assertIsNone(res[2])
+      self.assertEqual(None, res[2])
       self.assertEqual(44.0, res[1])
 
   @test_util.run_v1_only('b/120545219')
@@ -400,23 +392,23 @@ class SessionTest(test_util.TensorFlowTestCase):
       a = constant_op.constant(a_val)
 
       res = sess.run([[], tuple(), {}])
-      self.assertIsInstance(res, list)
+      self.assertTrue(isinstance(res, list))
       self.assertEqual(3, len(res))
-      self.assertIsInstance(res[0], list)
+      self.assertTrue(isinstance(res[0], list))
       self.assertEqual(0, len(res[0]))
-      self.assertIsInstance(res[1], tuple)
+      self.assertTrue(isinstance(res[1], tuple))
       self.assertEqual(0, len(res[1]))
-      self.assertIsInstance(res[2], dict)
+      self.assertTrue(isinstance(res[2], dict))
       self.assertEqual(0, len(res[2]))
 
       res = sess.run([[], tuple(), {}, a])
-      self.assertIsInstance(res, list)
+      self.assertTrue(isinstance(res, list))
       self.assertEqual(4, len(res))
-      self.assertIsInstance(res[0], list)
+      self.assertTrue(isinstance(res[0], list))
       self.assertEqual(0, len(res[0]))
-      self.assertIsInstance(res[1], tuple)
+      self.assertTrue(isinstance(res[1], tuple))
       self.assertEqual(0, len(res[1]))
-      self.assertIsInstance(res[2], dict)
+      self.assertTrue(isinstance(res[2], dict))
       self.assertEqual(0, len(res[2]))
       self.assertEqual(a_val, res[3])
 
@@ -424,7 +416,7 @@ class SessionTest(test_util.TensorFlowTestCase):
     with session.Session() as sess:
       # pylint: disable=invalid-name
       ABC = collections.namedtuple('ABC', ['a', 'b', 'c'])
-      DEFGHI = collections.namedtuple('DEFGHI', ['d', 'e', 'f', 'g', 'h', 'i'])
+      DEFG = collections.namedtuple('DEFG', ['d', 'e', 'f', 'g'])
       # pylint: enable=invalid-name
       a_val = 42.0
       b_val = None
@@ -432,141 +424,124 @@ class SessionTest(test_util.TensorFlowTestCase):
       a = constant_op.constant(a_val)
       b = control_flow_ops.no_op()  # An op, not a tensor.
       c = constant_op.constant(c_val)
-      test_dct = {'a': a.name, 'c': c, 'b': b}
-      test_dct_types = [dict, frozendict, defaultdict]
-      # List of lists, tuples, namedtuple, dict, frozendict, and defaultdict
-      res = sess.run([
-          [a, b, c],
-          (a, b, c),
-          ABC(a=a, b=b, c=c),
-          dict(test_dct),
-          frozendict(test_dct),
-          defaultdict(str, test_dct),
-      ])
-      self.assertIsInstance(res, list)
-      self.assertEqual(6, len(res))
-      self.assertIsInstance(res[0], list)
+      # List of lists, tuples, namedtuple, and dict
+      res = sess.run([[a, b, c], (a, b, c),
+                      ABC(a=a, b=b, c=c), {
+                          'a': a.name,
+                          'c': c,
+                          'b': b
+                      }])
+      self.assertTrue(isinstance(res, list))
+      self.assertEqual(4, len(res))
+      self.assertTrue(isinstance(res[0], list))
       self.assertEqual(3, len(res[0]))
       self.assertEqual(a_val, res[0][0])
       self.assertEqual(b_val, res[0][1])
       self.assertEqual(c_val, res[0][2])
-      self.assertIsInstance(res[1], tuple)
+      self.assertTrue(isinstance(res[1], tuple))
       self.assertEqual(3, len(res[1]))
       self.assertEqual(a_val, res[1][0])
       self.assertEqual(b_val, res[1][1])
       self.assertEqual(c_val, res[1][2])
-      self.assertIsInstance(res[2], ABC)
+      self.assertTrue(isinstance(res[2], ABC))
       self.assertEqual(a_val, res[2].a)
       self.assertEqual(b_val, res[2].b)
       self.assertEqual(c_val, res[2].c)
-      for expected_type, r in zip(test_dct_types, res[3:]):
-        self.assertIsInstance(r, expected_type)
-        self.assertEqual(3, len(r))
-        self.assertEqual(a_val, r['a'])
-        self.assertEqual(b_val, r['b'])
-        self.assertEqual(c_val, r['c'])
-      self.assertEqual(res[5].default_factory, str)
-      # Tuple of lists, tuples, namedtuple, dict, frozendict, and defaultdict
-      res = sess.run(([a, b, c], (a.name, b, c), ABC(a=a, b=b,
-                                                     c=c), dict(test_dct),
-                      frozendict(test_dct), defaultdict(str, test_dct)))
-      self.assertIsInstance(res, tuple)
-      self.assertEqual(6, len(res))
-      self.assertIsInstance(res[0], list)
+      self.assertTrue(isinstance(res[3], dict))
+      self.assertEqual(3, len(res[3]))
+      self.assertEqual(a_val, res[3]['a'])
+      self.assertEqual(b_val, res[3]['b'])
+      self.assertEqual(c_val, res[3]['c'])
+      # Tuple of lists, tuples, namedtuple, and dict
+      res = sess.run(([a, b, c], (a.name, b, c), ABC(a=a, b=b, c=c), {
+          'a': a,
+          'c': c,
+          'b': b
+      }))
+      self.assertTrue(isinstance(res, tuple))
+      self.assertEqual(4, len(res))
+      self.assertTrue(isinstance(res[0], list))
       self.assertEqual(3, len(res[0]))
       self.assertEqual(a_val, res[0][0])
       self.assertEqual(b_val, res[0][1])
       self.assertEqual(c_val, res[0][2])
-      self.assertIsInstance(res[1], tuple)
+      self.assertTrue(isinstance(res[1], tuple))
       self.assertEqual(3, len(res[1]))
       self.assertEqual(a_val, res[1][0])
       self.assertEqual(b_val, res[1][1])
       self.assertEqual(c_val, res[1][2])
-      self.assertIsInstance(res[2], ABC)
+      self.assertTrue(isinstance(res[2], ABC))
       self.assertEqual(a_val, res[2].a)
       self.assertEqual(b_val, res[2].b)
       self.assertEqual(c_val, res[2].c)
-      for expected_type, r in zip(test_dct_types, res[3:]):
-        self.assertIsInstance(r, expected_type)
-        self.assertEqual(3, len(r))
-        self.assertEqual(a_val, r['a'])
-        self.assertEqual(b_val, r['b'])
-        self.assertEqual(c_val, r['c'])
-      self.assertEqual(res[5].default_factory, str)
-
-      # Namedtuple of lists, tuples, namedtuples, dict, frozendict, defaultdict
+      self.assertTrue(isinstance(res[3], dict))
+      self.assertEqual(3, len(res[3]))
+      self.assertEqual(a_val, res[3]['a'])
+      self.assertEqual(b_val, res[3]['b'])
+      self.assertEqual(c_val, res[3]['c'])
+      # Namedtuple of lists, tuples, namedtuples, and dict
       res = sess.run(
-          DEFGHI(
+          DEFG(
               d=[a, b, c],
               e=(a, b, c),
               f=ABC(a=a.name, b=b, c=c),
-              g=dict(test_dct),
-              h=frozendict(test_dct),
-              i=defaultdict(str, test_dct)))
-      self.assertIsInstance(res, DEFGHI)
-      self.assertIsInstance(res.d, list)
+              g={
+                  'a': a,
+                  'c': c,
+                  'b': b
+              }))
+      self.assertTrue(isinstance(res, DEFG))
+      self.assertTrue(isinstance(res.d, list))
       self.assertEqual(3, len(res.d))
       self.assertEqual(a_val, res.d[0])
       self.assertEqual(b_val, res.d[1])
       self.assertEqual(c_val, res.d[2])
-      self.assertIsInstance(res.e, tuple)
+      self.assertTrue(isinstance(res.e, tuple))
       self.assertEqual(3, len(res.e))
       self.assertEqual(a_val, res.e[0])
       self.assertEqual(b_val, res.e[1])
       self.assertEqual(c_val, res.e[2])
-      self.assertIsInstance(res.f, ABC)
+      self.assertTrue(isinstance(res.f, ABC))
       self.assertEqual(a_val, res.f.a)
       self.assertEqual(b_val, res.f.b)
       self.assertEqual(c_val, res.f.c)
-      self.assertIsInstance(res.g, dict)
+      self.assertTrue(isinstance(res.g, dict))
       self.assertEqual(3, len(res.g))
       self.assertEqual(a_val, res.g['a'])
       self.assertEqual(b_val, res.g['b'])
       self.assertEqual(c_val, res.g['c'])
-      self.assertIsInstance(res.h, frozendict)
-      self.assertEqual(3, len(res.h))
-      self.assertEqual(a_val, res.h['a'])
-      self.assertEqual(b_val, res.h['b'])
-      self.assertEqual(c_val, res.h['c'])
-      self.assertIsInstance(res.i, defaultdict)
-      self.assertEqual(3, len(res.i))
-      self.assertEqual(a_val, res.i['a'])
-      self.assertEqual(b_val, res.i['b'])
-      self.assertEqual(c_val, res.i['c'])
-      self.assertEqual(res.i.default_factory, str)
-      # Dict of lists, tuples, namedtuples, dict, frozendict, defaultdict
+      # Dict of lists, tuples, namedtuples, and dict
       res = sess.run({
           'd': [a, b, c],
           'e': (a, b, c),
           'f': ABC(a=a, b=b, c=c),
-          'g': dict(test_dct),
-          'h': frozendict(test_dct),
-          'i': defaultdict(str, test_dct),
+          'g': {
+              'a': a.name,
+              'c': c,
+              'b': b
+          }
       })
-      self.assertIsInstance(res, dict)
-      self.assertEqual(6, len(res))
-      self.assertIsInstance(res['d'], list)
+      self.assertTrue(isinstance(res, dict))
+      self.assertEqual(4, len(res))
+      self.assertTrue(isinstance(res['d'], list))
       self.assertEqual(3, len(res['d']))
       self.assertEqual(a_val, res['d'][0])
       self.assertEqual(b_val, res['d'][1])
       self.assertEqual(c_val, res['d'][2])
-      self.assertIsInstance(res['e'], tuple)
+      self.assertTrue(isinstance(res['e'], tuple))
       self.assertEqual(3, len(res['e']))
       self.assertEqual(a_val, res['e'][0])
       self.assertEqual(b_val, res['e'][1])
       self.assertEqual(c_val, res['e'][2])
-      self.assertIsInstance(res['f'], ABC)
+      self.assertTrue(isinstance(res['f'], ABC))
       self.assertEqual(a_val, res['f'].a)
       self.assertEqual(b_val, res['f'].b)
       self.assertEqual(c_val, res['f'].c)
-      for expected_type, r_key in zip(test_dct_types, ('g', 'h', 'i')):
-        r = res[r_key]
-        self.assertIsInstance(r, expected_type)
-        self.assertEqual(3, len(r))
-        self.assertEqual(a_val, r['a'])
-        self.assertEqual(b_val, r['b'])
-        self.assertEqual(c_val, r['c'])
-      self.assertEqual(res['i'].default_factory, str)
+      self.assertTrue(isinstance(res['g'], dict))
+      self.assertEqual(3, len(res['g']))
+      self.assertEqual(a_val, res['g']['a'])
+      self.assertEqual(b_val, res['g']['b'])
+      self.assertEqual(c_val, res['g']['c'])
 
   def testFetchTensorObject(self):
     with session.Session() as s:
@@ -833,7 +808,7 @@ class SessionTest(test_util.TensorFlowTestCase):
       sp = array_ops.sparse_placeholder(
           dtype=np.float32, shape=shape, name='placeholder1')
       self.assertAllEqual(sp.dense_shape.eval(session=s), shape)
-      self.assertAllEqual(tensor_util.constant_value(sp.shape), shape)
+      self.assertAllEqual(tensor_util.constant_value(sp.dense_shape), shape)
       sp_indices = array_ops.identity(sp.indices)
       sp_values = array_ops.identity(sp.values)
       sp_shape = array_ops.identity(sp.dense_shape)
@@ -1259,11 +1234,11 @@ class SessionTest(test_util.TensorFlowTestCase):
       self.assertEqual(len(sess.graph_def.node), 1)
       d = constant_op.constant(6.0, name='d')
       self.assertEqual(len(sess.graph_def.node), 2)
-      self.assertAllEqual(c, 5.0)
-      self.assertAllEqual(d, 6.0)
+      self.assertAllEqual(c.eval(), 5.0)
+      self.assertAllEqual(d.eval(), 6.0)
       e = constant_op.constant(7.0, name='e')
       self.assertEqual(len(sess.graph_def.node), 3)
-      self.assertAllEqual(e, 7.0)
+      self.assertAllEqual(e.eval(), 7.0)
 
   def testUseAfterClose(self):
     with session.Session() as sess:
@@ -1293,17 +1268,17 @@ class SessionTest(test_util.TensorFlowTestCase):
 
   def testUseEmptyGraph(self):
     with session.Session() as sess:
-      with self.assertRaisesRegex(RuntimeError, 'The Session graph is empty.'):
+      with self.assertRaisesRegexp(RuntimeError, 'The Session graph is empty.'):
         sess.run([])
-      with self.assertRaisesRegex(RuntimeError, 'The Session graph is empty.'):
+      with self.assertRaisesRegexp(RuntimeError, 'The Session graph is empty.'):
         sess.run(())
-      with self.assertRaisesRegex(RuntimeError, 'The Session graph is empty.'):
+      with self.assertRaisesRegexp(RuntimeError, 'The Session graph is empty.'):
         sess.run({})
 
   @test_util.run_v1_only('b/120545219')
   def testNotEntered(self):
     # pylint: disable=protected-access
-    self.assertIsNone(ops._default_session_stack.get_default())
+    self.assertEqual(ops._default_session_stack.get_default(), None)
     # pylint: enable=protected-access
     with ops.device('/cpu:0'):
       sess = session.Session()
@@ -1323,10 +1298,10 @@ class SessionTest(test_util.TensorFlowTestCase):
       a = constant_op.constant(1.0, shape=[1, 2])
       b = constant_op.constant(2.0, shape=[2, 3])
       c = math_ops.matmul(a, b)
-      self.assertAllEqual([[4.0, 4.0, 4.0]], c)
+      self.assertAllEqual([[4.0, 4.0, 4.0]], c.eval())
       d = constant_op.constant([1.0, 2.0, 3.0], shape=[3, 1])
       e = math_ops.matmul(c, d)
-      self.assertAllEqual([[24.0]], e)
+      self.assertAllEqual([[24.0]], e.eval())
       sess.close()
 
   @test_util.run_v1_only('b/120545219')
@@ -1350,10 +1325,10 @@ class SessionTest(test_util.TensorFlowTestCase):
     with warnings.catch_warnings(record=True) as w:
       sess2 = session.InteractiveSession()
     self.assertEqual(1, len(w))
-    self.assertIn('An interactive session is already active. This can cause '
-                  'out-of-memory errors in some cases. You must explicitly '
-                  'call `InteractiveSession.close()` to release resources '
-                  'held by the other session(s).', str(w[0].message))
+    self.assertTrue('An interactive session is already active. This can cause '
+                    'out-of-memory errors in some cases. You must explicitly '
+                    'call `InteractiveSession.close()` to release resources '
+                    'held by the other session(s).' in str(w[0].message))
     sess2.close()
     sess.close()
 
@@ -1540,11 +1515,11 @@ class SessionTest(test_util.TensorFlowTestCase):
       feed_t = array_ops.placeholder(dtype=dtypes.float32)
       out_t = array_ops.identity(feed_t)
       feed_val = constant_op.constant(5.0)
-      with self.assertRaisesRegex(TypeError, 'cannot be a tf.Tensor object'):
+      with self.assertRaisesRegexp(TypeError, 'cannot be a tf.Tensor object'):
         sess.run(out_t, feed_dict={feed_t: feed_val})
-      with self.assertRaisesRegex(TypeError, 'cannot be a tf.Tensor object'):
+      with self.assertRaisesRegexp(TypeError, 'cannot be a tf.Tensor object'):
         out_t.eval(feed_dict={feed_t: feed_val})
-      with self.assertRaisesRegex(TypeError, 'cannot be a tf.Tensor object'):
+      with self.assertRaisesRegexp(TypeError, 'cannot be a tf.Tensor object'):
         out_t.op.run(feed_dict={feed_t: feed_val})
 
   def testFeedPrecisionLossError(self):
@@ -1556,11 +1531,11 @@ class SessionTest(test_util.TensorFlowTestCase):
 
       out_t = constant_op.constant(1.0)
 
-      with self.assertRaisesRegex(TypeError,
-                                  'is not compatible with Tensor type'):
+      with self.assertRaisesRegexp(TypeError,
+                                   'is not compatible with Tensor type'):
         sess.run(out_t, feed_dict={feed_int_implicit_int32: largest_int64})
-      with self.assertRaisesRegex(TypeError,
-                                  'is not compatible with Tensor type'):
+      with self.assertRaisesRegexp(TypeError,
+                                   'is not compatible with Tensor type'):
         sess.run(out_t, feed_dict={feed_int_explicit_int32: largest_int64})
 
   def testStringFetch(self):
@@ -1573,7 +1548,7 @@ class SessionTest(test_util.TensorFlowTestCase):
             [compat.as_bytes(str(i)) for i in xrange(size)],
             dtype=np.object).reshape(shape) if size > 0 else []
         c = constant_op.constant(c_list)
-        self.assertAllEqual(c, c_list)
+        self.assertAllEqual(c.eval(), c_list)
 
   def testStringFeed(self):
     with session.Session() as sess:
@@ -1622,7 +1597,7 @@ class SessionTest(test_util.TensorFlowTestCase):
         self.assertEqual(c_list[i], out[i].decode('utf-8'))
 
   def testInvalidTargetFails(self):
-    with self.assertRaisesRegex(
+    with self.assertRaisesRegexp(
         errors.NotFoundError,
         'No session factory registered for the given session options'):
       session.Session('INVALID_TARGET')
@@ -1634,10 +1609,10 @@ class SessionTest(test_util.TensorFlowTestCase):
       e = constant_op.constant(44.0, name=b'e')
       f = constant_op.constant(45.0, name=r'f')
 
-      self.assertIsInstance(c.name, six.text_type)
-      self.assertIsInstance(d.name, six.text_type)
-      self.assertIsInstance(e.name, six.text_type)
-      self.assertIsInstance(f.name, six.text_type)
+      self.assertTrue(isinstance(c.name, six.text_type))
+      self.assertTrue(isinstance(d.name, six.text_type))
+      self.assertTrue(isinstance(e.name, six.text_type))
+      self.assertTrue(isinstance(f.name, six.text_type))
 
       self.assertEqual(42.0, sess.run('c:0'))
       self.assertEqual(42.0, sess.run(u'c:0'))
@@ -1686,7 +1661,7 @@ class SessionTest(test_util.TensorFlowTestCase):
   def testFeedDictKeyException(self):
     with session.Session() as sess:
       a = constant_op.constant(1.0, dtypes.float32, name='a')
-      with self.assertRaisesRegex(TypeError, 'Cannot interpret feed_dict'):
+      with self.assertRaisesRegexp(TypeError, 'Cannot interpret feed_dict'):
         sess.run(a, feed_dict={'a': [2.0]})
 
   def testPerStepTrace(self):
@@ -1697,10 +1672,10 @@ class SessionTest(test_util.TensorFlowTestCase):
     with ops.device('/cpu:0'):
       with session.Session() as sess:
         sess.run(constant_op.constant(1.0))
-        self.assertFalse(run_metadata.HasField('step_stats'))
+        self.assertTrue(not run_metadata.HasField('step_stats'))
 
         sess.run(constant_op.constant(1.0), run_metadata=run_metadata)
-        self.assertFalse(run_metadata.HasField('step_stats'))
+        self.assertTrue(not run_metadata.HasField('step_stats'))
 
         sess.run(
             constant_op.constant(1.0),
@@ -1721,11 +1696,11 @@ class SessionTest(test_util.TensorFlowTestCase):
         sess.run(constant_op.constant(1.0), options=None, run_metadata=None)
         sess.run(
             constant_op.constant(1.0), options=None, run_metadata=run_metadata)
-        self.assertFalse(run_metadata.HasField('step_stats'))
+        self.assertTrue(not run_metadata.HasField('step_stats'))
 
         sess.run(
             constant_op.constant(1.0), options=run_options, run_metadata=None)
-        self.assertFalse(run_metadata.HasField('step_stats'))
+        self.assertTrue(not run_metadata.HasField('step_stats'))
 
         sess.run(
             constant_op.constant(1.0),
@@ -1741,10 +1716,10 @@ class SessionTest(test_util.TensorFlowTestCase):
       new_shape = constant_op.constant([2, 2])
       reshaped_tensor = array_ops.reshape(some_tensor, new_shape)
 
-      with self.assertRaisesRegex(ValueError, 'Cannot feed value of shape'):
+      with self.assertRaisesRegexp(ValueError, 'Cannot feed value of shape'):
         sess.run(reshaped_tensor, feed_dict={some_tensor: [1.0, 2.0, 3.0]})
 
-      with self.assertRaisesRegex(
+      with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           'Input to reshape is a tensor with 4 values, '
           'but the requested shape has 21'):
@@ -1754,9 +1729,9 @@ class SessionTest(test_util.TensorFlowTestCase):
     with ops.Graph().as_default(), ops.device('/cpu:0'):
       a = constant_op.constant([[1, 2]])
       sess = session.Session()
-      self.assertNotIn('_output_shapes', sess.graph_def.node[0].attr)
+      self.assertFalse('_output_shapes' in sess.graph_def.node[0].attr)
       # Avoid lint error regarding 'unused' var a.
-      self.assertEqual(a, a)
+      self.assertTrue(a == a)
 
   def testInferShapesTrue(self):
     config_pb = config_pb2.ConfigProto(
@@ -1764,9 +1739,9 @@ class SessionTest(test_util.TensorFlowTestCase):
     with ops.Graph().as_default(), ops.device('/cpu:0'):
       a = constant_op.constant([[1, 2]])
       sess = session.Session(config=config_pb)
-      self.assertIn('_output_shapes', sess.graph_def.node[0].attr)
+      self.assertTrue('_output_shapes' in sess.graph_def.node[0].attr)
       # Avoid lint error regarding 'unused' var a.
-      self.assertEqual(a, a)
+      self.assertTrue(a == a)
 
   def testBuildCostModel(self):
     run_options = config_pb2.RunOptions()
@@ -1818,7 +1793,7 @@ class SessionTest(test_util.TensorFlowTestCase):
     sess2_controller = sess2.as_default()
     sess2_controller.__enter__()
 
-    with self.assertRaisesRegex(AssertionError, 'Nesting violated'):
+    with self.assertRaisesRegexp(AssertionError, 'Nesting violated'):
       sess1_controller.__exit__(None, None, None)
 
     ops._default_session_stack.reset()
@@ -1842,17 +1817,17 @@ class SessionTest(test_util.TensorFlowTestCase):
 
   def testReentry(self):
     sess = session.Session()
-    with self.assertRaisesRegex(RuntimeError, 'not re-entrant'):
+    with self.assertRaisesRegexp(RuntimeError, 'not re-entrant'):
       with sess:
         with sess:
           pass
 
   def testInvalidArgument(self):
-    with self.assertRaisesRegex(TypeError, 'target must be a string'):
+    with self.assertRaisesRegexp(TypeError, 'target must be a string'):
       session.Session(37)
-    with self.assertRaisesRegex(TypeError, 'config must be a tf.ConfigProto'):
+    with self.assertRaisesRegexp(TypeError, 'config must be a tf.ConfigProto'):
       session.Session(config=37)
-    with self.assertRaisesRegex(TypeError, 'graph must be a tf.Graph'):
+    with self.assertRaisesRegexp(TypeError, 'graph must be a tf.Graph'):
       session.Session(graph=37)
 
   @test_util.run_v1_only('b/120545219')
@@ -1936,15 +1911,12 @@ class SessionTest(test_util.TensorFlowTestCase):
       def __str__(self):
         return self._output
 
-    context.set_log_device_placement(True)
     if context.executing_eagerly():
+      context.set_log_device_placement(True)
       with CaptureStderr() as log:
         a = constant_op.constant(1)
         b = constant_op.constant(2)
         c = a + b
-        # Ensure if the same kernel with the same arguments is executed then its
-        # execution is logged.
-        d = a + b
     else:
       # Passing the config to the server, but not the session should still
       # result in logging device placement.
@@ -1953,32 +1925,12 @@ class SessionTest(test_util.TensorFlowTestCase):
       a = constant_op.constant(1)
       b = constant_op.constant(2)
       c = a + b
-      d = a + b
       with session.Session(server.target) as sess:
         with CaptureStderr() as log:
-          c, d = sess.run([c, d])
+          sess.run(c)
 
-    self.assertEqual(c, 3)
-    self.assertEqual(d, 3)
     # Ensure that we did log device placement.
-    add_executions = [l for l in str(log).splitlines() if 'AddV2' in l]
-    self.assertEqual(len(add_executions), 2)
-
-    @def_function.function
-    def fn(a, b):
-      c = a + b
-      # These two AddV2 cannot use the same argument in tf.function since an
-      # optimization pass will remove duplicate ops and only run it once.
-      d = a + c
-      return c, d
-
-    with CaptureStderr() as log:
-      c, d = self.evaluate(fn(constant_op.constant(1), constant_op.constant(2)))
-    self.assertEqual(c, 3)
-    self.assertEqual(d, 4)
-    # Ensure that we did log device placement.
-    add_executions = [l for l in str(log).splitlines() if 'AddV2' in l]
-    self.assertEqual(len(add_executions), 2)
+    self.assertTrue('/replica:0/task:0/device:CPU:0' in str(log), str(log))
 
   @test_util.run_v1_only('b/120545219')
   def testLocalMasterSessionTimeout(self):
@@ -2085,7 +2037,7 @@ class SessionTest(test_util.TensorFlowTestCase):
   def testAutoConvertAndCheckData(self):
     with self.cached_session() as sess:
       a = array_ops.placeholder(dtype=dtypes.string)
-      with self.assertRaisesRegex(
+      with self.assertRaisesRegexp(
           TypeError, r'Type of feed value 1 with type <(\w+) \'int\'> is not'):
         sess.run(a, feed_dict={a: 1})
 

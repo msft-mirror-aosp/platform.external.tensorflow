@@ -20,19 +20,18 @@ from __future__ import print_function
 
 import collections
 import re
-from absl import logging
 
 from tensorflow.core.framework import function_pb2
-from tensorflow.core.protobuf import saved_object_graph_pb2
+from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager import function as function_lib
 from tensorflow.python.framework import func_graph as func_graph_lib
 from tensorflow.python.framework import function_def_to_graph as function_def_lib
-from tensorflow.python.framework import op_def_registry
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.framework import type_spec
 from tensorflow.python.ops import resource_variable_ops
+from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.saved_model import nested_structure_coder
 from tensorflow.python.util import compat
 from tensorflow.python.util import nest
@@ -44,8 +43,6 @@ def _is_tensor(t):
   return isinstance(t, (ops.Tensor, resource_variable_ops.BaseResourceVariable))
 
 
-# TODO(edloper): Update this to just use ConcreteFunction.__call__ with the
-# structured signature.
 def _call_concrete_function(function, inputs):
   """Calls a restored Function with structured inputs.
 
@@ -81,7 +78,7 @@ def _call_concrete_function(function, inputs):
 def _try_convert_to_tensor_spec(arg, dtype_hint):
   """Returns None or TensorSpec obtained if `arg` is converted to tensor."""
   try:
-    # Note: try conversion in a FuncGraph to avoid polluting current context.
+    # Note: try conversion in a FuncGraph to avoid poluting current context.
     with func_graph_lib.FuncGraph(name="guess_conversion").as_default():
       result = ops.convert_to_tensor(arg, dtype_hint=dtype_hint)
       return tensor_spec.TensorSpec(shape=result.shape, dtype=result.dtype)
@@ -96,6 +93,16 @@ def _concrete_function_callable_with(function, inputs, allow_conversion):
     flatten_inputs = nest.flatten_up_to(expected_structure, inputs)
   except (TypeError, ValueError):
     return False
+  try:
+    # Verify that no input elements were dropped during flattening.
+    repacked = nest.pack_sequence_as(expected_structure, flatten_inputs)
+    # TODO(b/129422719): Namedtuple subclasses re-created through
+    # saved_model.load don't compare equal in type to the original in
+    # assert_same_structure. Fix that and we can take out check_types=False
+    # here.
+    nest.assert_same_structure(inputs, repacked, check_types=False)
+  except (TypeError, ValueError):
+    return False
 
   for arg, expected in zip(flatten_inputs, nest.flatten(expected_structure)):
     if isinstance(expected, tensor_spec.TensorSpec):
@@ -108,14 +115,10 @@ def _concrete_function_callable_with(function, inputs, allow_conversion):
       if not expected.shape.is_compatible_with(arg.shape):
         return False
     elif isinstance(expected, type_spec.TypeSpec):
-      if not expected.is_compatible_with(arg):
-        return False
-    elif _is_tensor(arg):
-      if id(arg) != id(expected):
-        return False
-    else:
-      if arg != expected:
-        return False
+      return expected.is_compatible_with(arg)
+    elif (_is_tensor(arg) and
+          id(arg) != id(expected)) or (not _is_tensor(arg) and arg != expected):
+      return False
   return True
 
 
@@ -142,18 +145,11 @@ def _deserialize_function_spec_as_nonmethod(function_spec_proto, coder):
       kwonlydefaults=typeless_fullargspec.kwonlydefaults,
       annotations=typeless_fullargspec.annotations)
   input_signature = coder.decode_proto(function_spec_proto.input_signature)
-
-  # See `tf.function` and the JitCompile proto for details.
-  jit_compile = {
-      saved_object_graph_pb2.FunctionSpec.JitCompile.DEFAULT: None,
-      saved_object_graph_pb2.FunctionSpec.JitCompile.ON: True,
-      saved_object_graph_pb2.FunctionSpec.JitCompile.OFF: False,
-  }.get(function_spec_proto.jit_compile)
-
   return function_lib.FunctionSpec(fullargspec=fullargspec,
                                    is_method=False,
-                                   input_signature=input_signature,
-                                   jit_compile=jit_compile)
+                                   args_to_prepend=[],
+                                   kwargs_to_include={},
+                                   input_signature=input_signature)
 
 
 # TODO(allenl): The fact that we can't derive ConcreteFunction calling
@@ -163,6 +159,8 @@ def _deserialize_function_spec_as_nonmethod(function_spec_proto, coder):
 def setup_bare_concrete_function(saved_bare_concrete_function,
                                  concrete_functions):
   """Makes a restored bare concrete function callable."""
+  # Bare concrete functions accept only flat lists of Tensors with unique
+  # names.
   concrete_function = concrete_functions[
       saved_bare_concrete_function.concrete_function_name]
   # pylint: disable=protected-access
@@ -170,12 +168,6 @@ def setup_bare_concrete_function(saved_bare_concrete_function,
       saved_bare_concrete_function.argument_keywords)
   concrete_function._num_positional_args = (
       saved_bare_concrete_function.allowed_positional_arguments)
-  if saved_bare_concrete_function.HasField("function_spec"):
-    coder = nested_structure_coder.StructureCoder()
-    function_spec = _deserialize_function_spec_as_nonmethod(
-        saved_bare_concrete_function.function_spec,
-        coder)
-    concrete_function._set_function_spec(function_spec)
   # pylint: enable=protected-access
   concrete_function.add_to_graph()
   return concrete_function
@@ -190,28 +182,9 @@ class RestoredFunction(def_function.Function):
   def __init__(self, python_function, name, function_spec, concrete_functions):
     # TODO(mdan): We may enable autograph once exceptions are supported.
     super(RestoredFunction, self).__init__(
-        python_function, name, autograph=False,
-        jit_compile=function_spec.jit_compile)
+        python_function, name, autograph=False)
     self.concrete_functions = concrete_functions
     self._function_spec = function_spec
-
-    # Prevent RestoredFunction from spamming users with frequent tracing
-    # warnings.
-    self._omit_frequent_tracing_warning = True
-
-  @property
-  def _run_functions_eagerly(self):
-    # We do not have access to the original python function, and thus, we
-    # cannot meaningfully do anything but call our concrete function graphs
-    # under the hood.
-    #
-    # Attempting to call our bespoke python function (i.e.
-    # `restored_function_body`) will work so long as the user passes in all
-    # required and optional arguments. If an optional argument is missing,
-    # however, the call will break. For this reason, we instead skip the
-    # eager call path altogether if a user has enabled eager function execution
-    # via `tf.config.run_functions_eagerly`.
-    return False
 
   def _list_all_concrete_functions_for_serialization(self):
     return self.concrete_functions
@@ -228,8 +201,6 @@ def recreate_function(saved_function, concrete_functions):
   Args:
     saved_function: `SavedFunction` proto.
     concrete_functions: map from function name to `ConcreteFunction`.
-      As a side effect of this function, the `FunctionSpec` from
-      `saved_function` is added to each `ConcreteFunction` in this map.
 
   Returns:
     A `Function`.
@@ -238,6 +209,7 @@ def recreate_function(saved_function, concrete_functions):
   # instead of creating a new `Function` backed by a Python layer to
   # glue things together. Current approach is nesting functions deeper for each
   # serialization cycle.
+
   coder = nested_structure_coder.StructureCoder()
 
   # Note: handling method functions is tricky since make_decorator does not
@@ -254,9 +226,7 @@ def recreate_function(saved_function, concrete_functions):
       coder)
 
   def restored_function_body(*args, **kwargs):
-    """Calls a restored function or raises an error if no matching function."""
-    if not saved_function.concrete_functions:
-      raise ValueError("Found zero restored functions for caller function.")
+    """Calls a restored function."""
     # This is the format of function.graph.structured_input_signature. At this
     # point, the args and kwargs have already been canonicalized.
     inputs = (args, kwargs)
@@ -294,9 +264,6 @@ def recreate_function(saved_function, concrete_functions):
   for concrete_function_name in saved_function.concrete_functions:
     concrete_function_objects.append(concrete_functions[concrete_function_name])
 
-  for cf in concrete_function_objects:
-    cf._set_function_spec(function_spec)  # pylint: disable=protected-access
-
   restored_function = RestoredFunction(
       restored_function_body,
       restored_function_body.__name__,
@@ -331,19 +298,6 @@ def load_function_def_library(library, load_shared_name_suffix=None):
   functions = {}
   renamed_functions = {}
 
-  # Our graph building code currently requires functions to be registered with
-  # some tf.Graph in order to import functions using the
-  # op-name-is-function-name calling convention. To avoid leaking memory into
-  # the global default graph when executing eagerly, we create a temporary
-  # Graph.
-  #
-  # TODO(allenl): Make this Graph creation unnecessary when executing eagerly by
-  # fixing function_def_to_graph_def.
-  if ops.executing_eagerly_outside_functions():
-    graph = ops.Graph()
-  else:
-    graph = ops.get_default_graph()
-
   if load_shared_name_suffix is None:
     load_shared_name_suffix = "_load_{}".format(ops.uid())
   for fdef in _sort_function_defs(library, library_function_names):
@@ -354,28 +308,18 @@ def load_function_def_library(library, load_shared_name_suffix=None):
     # extra function definitions are a no-op since they already imported as a
     # function before and passed in explicitly (due to the topologic sort
     # import).
-    with graph.as_default():
-      func_graph = function_def_lib.function_def_to_graph(copy)
+    func_graph = function_def_lib.function_def_to_graph(copy)
     _restore_gradient_functions(func_graph, renamed_functions)
 
     for dep in _list_function_deps(fdef, library_function_names):
       functions[dep].add_to_graph(func_graph)
-
-    # We do not initialize the new ConcreteFunction's function_spec and/or
-    # arg_keywords here (which are used to parse the structured and flat
-    # signatures, respectively). ConcreteFunction that are part of a saved
-    # function is set up later by recreate_function(); and bare ConcreteFunction
-    # is set up by by setup_bare_concrete_function().
     func = function_lib.ConcreteFunction(func_graph)
-    func.add_to_graph(graph)
+    func.add_to_graph()
+    if context.executing_eagerly():
+      func.add_to_graph(ops.get_default_graph())
 
     functions[fdef.signature.name] = func
     renamed_functions[func.name] = func
-    if any(op.type == "TRTEngineOp" for op in func_graph.get_operations()):
-      # TODO(b/150708051): Remove this hack once TensorRT SavedModel integration
-      # is fixed. Currently it's leaking memory to maintain bug compatibility
-      # with previous behavior.
-      func.add_to_graph(ops.get_default_graph())
 
   return functions
 
@@ -425,22 +369,18 @@ def _sort_function_defs(library, library_function_names):
   return [reverse[x] for x in output]
 
 
-def _check_op_has_custom_gradients(node_def):
-  """Returns True if op has custom gradients."""
-  return ("_gradient_op_type" in node_def.attr and
-          node_def.op not in ["StatefulPartitionedCall", "PartitionedCall"])
-
-
-def fix_node_def(node_def, functions, shared_name_suffix):
+def fix_node_def(node_def, functions, shared_name_suffix, debug_name):
   """Replace functions calls and shared names in `node_def`."""
+  if ("_gradient_op_type" in node_def.attr and
+      node_def.op not in ["StatefulPartitionedCall", "PartitionedCall"]):
+    logging.warning(
+        "Importing a function (%s) with ops with custom gradients. Will likely "
+        "fail if a gradient is requested.", debug_name)
   if node_def.op in functions:
     node_def.op = functions[node_def.op].name
   for _, attr_value in node_def.attr.items():
-    if attr_value.WhichOneof("value") == "func":
+    if attr_value.func.name:
       attr_value.func.name = functions[attr_value.func.name].name
-    elif attr_value.WhichOneof("value") == "list":
-      for fn in attr_value.list.func:
-        fn.name = functions[fn.name].name
 
   # Fix old table creation bug.
   if node_def.op == "HashTableV2":
@@ -454,21 +394,14 @@ def fix_node_def(node_def, functions, shared_name_suffix):
   # TODO(b/124205571): Avoid accidental sharing and destruction of restored
   # resources. For now uniquify "shared_name" when loading functions to avoid
   # sharing.
-  # TODO: Add regression test for b/150826922.
-  op_def = op_def_registry.get(node_def.op)
-  if op_def:
-    attr = next((a for a in op_def.attr if a.name == "shared_name"), None)
-    if attr:
-      shared_name = None
-      if "shared_name" in node_def.attr and node_def.attr["shared_name"].s:
-        shared_name = node_def.attr["shared_name"].s
-      elif attr.default_value.s:
-        shared_name = compat.as_bytes(attr.default_value.s)
-      if not shared_name:
-        shared_name = compat.as_bytes(node_def.name)
-
+  if "shared_name" in node_def.attr:
+    if node_def.attr["shared_name"].s:
+      node_def.attr["shared_name"].s += compat.as_bytes(shared_name_suffix)
+    else:
+      # Blank shared_name attributes would use the node name, so we'll start
+      # with that when uniquifying.
       node_def.attr["shared_name"].s = (
-          shared_name + compat.as_bytes(shared_name_suffix))
+          compat.as_bytes(node_def.name) + compat.as_bytes(shared_name_suffix))
 
 
 def _fix_fdef(orig_fdef, functions, shared_name_suffix):
@@ -490,16 +423,8 @@ def _fix_fdef(orig_fdef, functions, shared_name_suffix):
   """
   fdef = function_pb2.FunctionDef()
   fdef.CopyFrom(orig_fdef)
-  contains_custom_gradients = False
-
   for node_def in fdef.node_def:
-    fix_node_def(node_def, functions, shared_name_suffix)
-    if not contains_custom_gradients:
-      contains_custom_gradients = _check_op_has_custom_gradients(node_def)
-  if contains_custom_gradients:
-    logging.warning(
-        "Importing a function (%s) with ops with custom gradients. Will likely "
-        "fail if a gradient is requested.", fdef.signature.name)
+    fix_node_def(node_def, functions, shared_name_suffix, fdef.signature.name)
 
   fdef.signature.name = _clean_function_name(fdef.signature.name)
   return fdef
@@ -518,22 +443,18 @@ def _list_function_deps(fdef, library_function_names):
       for _, attr_value in node_def.attr.items():
         if attr_value.WhichOneof("value") == "func":
           deps.add(attr_value.func.name)
-        elif attr_value.WhichOneof("value") == "list":
-          for fn in attr_value.list.func:
-            deps.add(fn.name)
-
   return deps
 
 
-_FUNCTION_WRAPPER_NAME_REGEX = r"^%s(.*)_\d+$" % (function_lib._INFERENCE_PREFIX
-                                                 )  # pylint:disable=protected-access
+_FUNCTION_WARPPER_NAME_REGEX = r"^%s(.*)_\d+$" % (
+    function_lib._INFERENCE_PREFIX)  # pylint:disable=protected-access
 
 
 def _clean_function_name(name):
   """Vanity function to keep the function names comprehensible."""
   # Note: each time a function is wrapped into `function_lib.ConcreteFunction`
   # its name becomes "__inference_<orig>_xyz".
-  match = re.search(_FUNCTION_WRAPPER_NAME_REGEX, name)
+  match = re.search(_FUNCTION_WARPPER_NAME_REGEX, name)
   if match:
     return match.group(1)
   else:

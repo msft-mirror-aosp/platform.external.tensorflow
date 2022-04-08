@@ -248,8 +248,9 @@ void QuantizedConcatTest::TestSecondDim8Bit(float first_min, float first_max,
 // If <same_limits> is true, then both concatenated dimensions have the same
 // quantized range; otherwise, they are set to different values.
 template <typename T>
-static void ConcatHelper(::testing::benchmark::State& state,
-                         int concat_dimension, bool same_limits, int dim2) {
+static void ConcatHelper(int iters, int concat_dimension, bool same_limits,
+                         int dim2) {
+  testing::StopTiming();
   Graph* g = new Graph(OpRegistry::Global());
 
   DataType dt = DataTypeToEnum<T>::v();
@@ -277,111 +278,61 @@ static void ConcatHelper(::testing::benchmark::State& state,
                   .Attr("T", dt)
                   .Finalize(g, &node));
 
-  test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);
-  state.SetBytesProcessed(static_cast<int64>(state.iterations()) *
+  testing::BytesProcessed(static_cast<int64>(iters) *
                           ((kDim1 * dim2) + (kDim1 * dim2)) * sizeof(T));
+  testing::StartTiming();
+  test::Benchmark("cpu", g).Run(iters);
+  testing::UseRealTime();
 }
 
-static void BM_QConcatDim0SameLimitQInt32(::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 0 /* concat_dimension */, true /* same_limits */,
+static void BM_QConcatDim0SameLimitQInt32(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 0 /* concat_dimension */, true /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim1SameLimitQInt32(::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 1 /* concat_dimension */, true /* same_limits */,
+static void BM_QConcatDim1SameLimitQInt32(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 1 /* concat_dimension */, true /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim0DifferLimitQInt32(
-    ::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 0 /* concat_dimension */, false /* same_limits */,
+static void BM_QConcatDim0DifferLimitQInt32(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 0 /* concat_dimension */, false /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim1DifferLimitQInt32(
-    ::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 1 /* concat_dimension */, false /* same_limits */,
+static void BM_QConcatDim1DifferLimitQInt32(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 1 /* concat_dimension */, false /* same_limits */,
                        dim2);
 }
 
-BENCHMARK(BM_QConcatDim0SameLimitQInt32)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim1SameLimitQInt32)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim0DifferLimitQInt32)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim1DifferLimitQInt32)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
+BENCHMARK(BM_QConcatDim0SameLimitQInt32)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim1SameLimitQInt32)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim0DifferLimitQInt32)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim1DifferLimitQInt32)->Arg(1000)->Arg(20000)->Arg(100000);
 
-static void BM_QConcatDim0SameLimitQUint8(::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 0 /* concat_dimension */, true /* same_limits */,
+static void BM_QConcatDim0SameLimitQUint8(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 0 /* concat_dimension */, true /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim1SameLimitQUint8(::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 1 /* concat_dimension */, true /* same_limits */,
+static void BM_QConcatDim1SameLimitQUint8(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 1 /* concat_dimension */, true /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim0DifferLimitQUint8(
-    ::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 0 /* concat_dimension */, false /* same_limits */,
+static void BM_QConcatDim0DifferLimitQUint8(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 0 /* concat_dimension */, false /* same_limits */,
                        dim2);
 }
 
-static void BM_QConcatDim1DifferLimitQUint8(
-    ::testing::benchmark::State& state) {
-  const int dim2 = state.range(0);
-
-  ConcatHelper<qint32>(state, 1 /* concat_dimension */, false /* same_limits */,
+static void BM_QConcatDim1DifferLimitQUint8(int iters, int dim2) {
+  ConcatHelper<qint32>(iters, 1 /* concat_dimension */, false /* same_limits */,
                        dim2);
 }
 
-BENCHMARK(BM_QConcatDim0SameLimitQUint8)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim1SameLimitQUint8)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim0DifferLimitQUint8)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
-BENCHMARK(BM_QConcatDim1DifferLimitQUint8)
-    ->UseRealTime()
-    ->Arg(1000)
-    ->Arg(20000)
-    ->Arg(100000);
+BENCHMARK(BM_QConcatDim0SameLimitQUint8)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim1SameLimitQUint8)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim0DifferLimitQUint8)->Arg(1000)->Arg(20000)->Arg(100000);
+BENCHMARK(BM_QConcatDim1DifferLimitQUint8)->Arg(1000)->Arg(20000)->Arg(100000);
 
 }  // namespace tensorflow

@@ -447,9 +447,8 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -498,9 +497,8 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -567,9 +565,8 @@ ENTRY %entrycomp (p: f32[2,1]) -> (f32[2], f32[2]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -636,9 +633,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -679,9 +675,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -761,9 +756,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -815,9 +809,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -898,9 +891,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/2,
                          /*spmd_partition=*/false);
   auto changed = combiner.Run(module.get()).ValueOrDie();
@@ -937,9 +929,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/2,
                          /*spmd_partition=*/true);
   auto changed = combiner.Run(module.get()).ValueOrDie();
@@ -996,9 +987,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1072,9 +1062,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1121,9 +1110,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1192,9 +1180,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1237,9 +1224,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1326,9 +1312,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1378,9 +1363,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1468,9 +1452,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1519,9 +1502,8 @@ ENTRY %entrycomp (p: f32[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   auto crs_before =
       module->entry_computation()->root_instruction()->operands()[0];
   auto replica_groups_before = crs_before->replica_groups();
@@ -1597,9 +1579,8 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/1));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/1,
                          /*spmd_partition=*/false);
   auto changed = combiner.Run(module.get()).ValueOrDie();
@@ -1635,9 +1616,8 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/1));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/1,
                          /*spmd_partition=*/true);
   auto changed = combiner.Run(module.get()).ValueOrDie();
@@ -1711,9 +1691,8 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[], f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
   ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/2,
                          /*spmd_partition=*/false);
   auto changed = combiner.Run(module.get()).ValueOrDie();
@@ -1732,74 +1711,7 @@ HloModule foobar
 
 ENTRY %entrycomp (p: bf16[]) -> (f32[]) {
   %p = bf16[] parameter(0)
-  %all-reduce.0 = f32[] all-reduce(%p), channel_id=1, replica_groups={{0},{1}},
-    to_apply=%sum.f32
-  %all-reduce.2 = f32[] all-reduce(%all-reduce.0), replica_groups={{0},{1}},
-    to_apply=%sum.f32
-  ROOT %tuple = (f32[]) tuple(%all-reduce.2)
-}
-)";
-
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
-  ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/2,
-                         /*spmd_partition=*/true);
-  auto changed = combiner.Run(module.get()).ValueOrDie();
-  EXPECT_FALSE(changed);
-}
-
-TEST_F(ArCrsCombinerTest, ReplaceReplicatedAllReduceSPMD) {
-  const char* module_str = R"(
-HloModule foobar
-
-%sum.f32 (x: f32[], y: f32[]) -> f32[] {
-  %x = f32[] parameter(0)
-  %y = f32[] parameter(1)
-  ROOT %add = f32[] add(%x, %y)
-}
-
-ENTRY %entrycomp (p: f32[2,4]) -> f32[2,4] {
-  %p = f32[2,4] parameter(0), sharding={replicated}
-  ROOT %all-reduce = f32[2,4] all-reduce(%p), to_apply=%sum.f32,
-    replica_groups={{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}}
-}
-)";
-
-  // Replacing replicated all-reduce is only triggered when there are enough
-  // replicas (currently > num_partitions * 8).
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/32));
-  ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/32,
-                         /*spmd_partition=*/true);
-  auto changed = combiner.Run(module.get()).ValueOrDie();
-  EXPECT_TRUE(changed);
-
-  auto root = module->entry_computation()->root_instruction();
-  EXPECT_THAT(root, op::Divide(op::AllReduce(op::Parameter()),
-                               op::Broadcast(op::Constant())));
-
-  auto ar = root->operand(0);
-  auto divisor = root->operand(1)->operand(0);
-  EXPECT_TRUE(ar->channel_id());
-  EXPECT_TRUE(divisor->literal().IsAllFloat(2));
-}
-
-TEST_F(ArCrsCombinerTest, AllReduceWithGlobalIdReplicaGroups) {
-  const char* module_str = R"(
-HloModule foobar
-
-%sum.f32 (x: f32[], y: f32[]) -> f32[] {
-  %x = f32[] parameter(0)
-  %y = f32[] parameter(1)
-  ROOT %add = f32[] add(%x, %y)
-}
-
-ENTRY %entrycomp (p: bf16[]) -> (f32[]) {
-  %p = bf16[] parameter(0)
-  %all-reduce.0 = f32[] all-reduce(%p), channel_id=1,
-    replica_groups={{0,1,2,3},{4,5,6,7}}, use_global_device_ids=true,
+  %all-reduce.0 = f32[] all-reduce(%p), channel_id=1, replica_groups={{0,1}},
     to_apply=%sum.f32
   %all-reduce.2 = f32[] all-reduce(%all-reduce.0), replica_groups={{0,1}},
     to_apply=%sum.f32
@@ -1807,13 +1719,12 @@ ENTRY %entrycomp (p: bf16[]) -> (f32[]) {
 }
 )";
 
-  TF_ASSERT_OK_AND_ASSIGN(
-      std::unique_ptr<HloModule> module,
-      ParseAndReturnVerifiedModule(module_str, /*replica_count=*/2));
-  ArCrsCombiner combiner(/*num_spatial_partitions=*/4, /*num_replicas=*/2,
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> module,
+                          ParseAndReturnVerifiedModule(module_str));
+  ArCrsCombiner combiner(/*num_spatial_partitions=*/2, /*num_replicas=*/2,
                          /*spmd_partition=*/true);
   auto changed = combiner.Run(module.get()).ValueOrDie();
-  EXPECT_TRUE(changed);
+  EXPECT_FALSE(changed);
 }
 
 }  // namespace

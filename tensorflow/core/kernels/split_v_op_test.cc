@@ -73,40 +73,43 @@ static Graph* MakeGraph(int split_dim, const std::vector<int64>& size_splits,
 }
 
 #define BM_SPLITV_1D(num_split, total_size)                                  \
-  static void BM_SplitV_1d_##num_split##_##total_size(                       \
-      ::testing::benchmark::State& state) {                                  \
+  static void BM_SplitV_1d_##num_split##_##total_size(int iters) {           \
+    testing::StopTiming();                                                   \
+    testing::ItemsProcessed(static_cast<int64>(iters) * total_size);         \
     auto label =                                                             \
         strings::Printf("1-D %d chunks totaling %d", num_split, total_size); \
-    state.SetLabel(label);                                                   \
+    testing::SetLabel(label);                                                \
+    testing::UseRealTime();                                                  \
     auto g = MakeGraph(/* split_dim = */ 0,                                  \
                        GenerateRandomIntsWithSum(total_size, num_split),     \
                        {total_size});                                        \
-    test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);       \
-    state.SetItemsProcessed(static_cast<int64>(state.iterations()) *         \
-                            total_size);                                     \
+    testing::StartTiming();                                                  \
+    test::Benchmark("cpu", g).Run(iters);                                    \
   }                                                                          \
-  BENCHMARK(BM_SplitV_1d_##num_split##_##total_size)->UseRealTime();
+  BENCHMARK(BM_SplitV_1d_##num_split##_##total_size);
 
 #define BM_SPLITV_2D(split_dim, num_split, total_size0, total_size1)          \
   static void                                                                 \
       BM_SplitV_2d_##split_dim##_##num_split##_##total_size0##_##total_size1( \
-          ::testing::benchmark::State& state) {                               \
+          int iters) {                                                        \
+    testing::StopTiming();                                                    \
     std::vector<int64> total_size_vec{total_size0, total_size1};              \
+    testing::ItemsProcessed(static_cast<int64>(iters) * total_size0 *         \
+                            total_size1);                                     \
     auto label =                                                              \
         strings::Printf("2-D %d chunks in dim %d totaling (%d * %d)",         \
                         num_split, split_dim, total_size0, total_size1);      \
-    state.SetLabel(label);                                                    \
+    testing::SetLabel(label);                                                 \
+    testing::UseRealTime();                                                   \
     auto g = MakeGraph(                                                       \
         split_dim,                                                            \
         GenerateRandomIntsWithSum(total_size_vec[split_dim], num_split),      \
         {total_size0, total_size1});                                          \
-    test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);        \
-    state.SetItemsProcessed(static_cast<int64>(state.iterations()) *          \
-                            total_size0 * total_size1);                       \
+    testing::StartTiming();                                                   \
+    test::Benchmark("cpu", g).Run(iters);                                     \
   }                                                                           \
   BENCHMARK(                                                                  \
-      BM_SplitV_2d_##split_dim##_##num_split##_##total_size0##_##total_size1) \
-      ->UseRealTime();
+      BM_SplitV_2d_##split_dim##_##num_split##_##total_size0##_##total_size1);
 
 BM_SPLITV_1D(5, 20);
 BM_SPLITV_1D(262144, 1000000);

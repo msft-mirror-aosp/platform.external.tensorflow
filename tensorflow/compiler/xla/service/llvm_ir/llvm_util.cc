@@ -22,7 +22,6 @@ limitations under the License.
 #include "absl/base/casts.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/GlobalVariable.h"
@@ -31,7 +30,6 @@ limitations under the License.
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Utils/Cloning.h"
-#include "tensorflow/compiler/xla/debug_options_flags.h"
 #include "tensorflow/compiler/xla/layout_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/service/cpu/cpu_options.h"
@@ -83,39 +81,36 @@ string DumpModuleToString(const llvm::Module& module) {
 
 llvm::CallInst* EmitCallToIntrinsic(
     llvm::Intrinsic::ID intrinsic_id, absl::Span<llvm::Value* const> operands,
-    absl::Span<llvm::Type* const> overloaded_types, llvm::IRBuilder<>* b,
-    absl::string_view name) {
+    absl::Span<llvm::Type* const> overloaded_types, llvm::IRBuilder<>* b) {
   llvm::Module* module = ModuleFromIRBuilder(b);
   llvm::Function* intrinsic = llvm::Intrinsic::getDeclaration(
       module, intrinsic_id, AsArrayRef(overloaded_types));
-  return b->CreateCall(intrinsic, AsArrayRef(operands), name.data());
+  return b->CreateCall(intrinsic, AsArrayRef(operands));
 }
 
 llvm::Value* EmitFloatMax(llvm::Value* lhs_value, llvm::Value* rhs_value,
-                          llvm::IRBuilder<>* b, bool enable_fast_min_max,
-                          absl::string_view name) {
-  if (b->getFastMathFlags().noNaNs() || enable_fast_min_max) {
+                          llvm::IRBuilder<>* b) {
+  if (b->getFastMathFlags().noNaNs()) {
     auto cmp = b->CreateFCmpUGE(lhs_value, rhs_value);
-    return b->CreateSelect(cmp, lhs_value, rhs_value, name.data());
+    return b->CreateSelect(cmp, lhs_value, rhs_value);
   } else {
     auto cmp_ge = b->CreateFCmpOGE(lhs_value, rhs_value);
     auto lhs_is_nan = b->CreateFCmpUNE(lhs_value, lhs_value);
     auto sel_lhs = b->CreateOr(cmp_ge, lhs_is_nan);
-    return b->CreateSelect(sel_lhs, lhs_value, rhs_value, name.data());
+    return b->CreateSelect(sel_lhs, lhs_value, rhs_value);
   }
 }
 
 llvm::Value* EmitFloatMin(llvm::Value* lhs_value, llvm::Value* rhs_value,
-                          llvm::IRBuilder<>* b, bool enable_fast_min_max,
-                          absl::string_view name) {
-  if (b->getFastMathFlags().noNaNs() || enable_fast_min_max) {
+                          llvm::IRBuilder<>* b) {
+  if (b->getFastMathFlags().noNaNs()) {
     auto cmp = b->CreateFCmpULE(lhs_value, rhs_value);
-    return b->CreateSelect(cmp, lhs_value, rhs_value, name.data());
+    return b->CreateSelect(cmp, lhs_value, rhs_value);
   } else {
     auto cmp_le = b->CreateFCmpOLE(lhs_value, rhs_value);
     auto lhs_is_nan = b->CreateFCmpUNE(lhs_value, lhs_value);
     auto sel_lhs = b->CreateOr(cmp_le, lhs_is_nan);
-    return b->CreateSelect(sel_lhs, lhs_value, rhs_value, name.data());
+    return b->CreateSelect(sel_lhs, lhs_value, rhs_value);
   }
 }
 
@@ -172,8 +167,7 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
     case F64:
       return llvm::Type::getDoubleTy(module->getContext());
     case C64: {
-      auto cplx_t =
-          llvm::StructType::getTypeByName(module->getContext(), "complex64");
+      auto cplx_t = module->getTypeByName("complex64");
       if (cplx_t == nullptr) {
         // C++ standard dictates the memory layout of std::complex is contiguous
         // real followed by imaginary. C++11 section 26.4 [complex.numbers]:
@@ -190,8 +184,7 @@ llvm::Type* PrimitiveTypeToIrType(PrimitiveType element_type,
       return cplx_t;
     }
     case C128: {
-      auto cplx_t =
-          llvm::StructType::getTypeByName(module->getContext(), "complex128");
+      auto cplx_t = module->getTypeByName("complex128");
       if (cplx_t == nullptr) {
         return llvm::StructType::create(
             {llvm::Type::getDoubleTy(module->getContext()),
@@ -294,7 +287,7 @@ llvm::AllocaInst* EmitAllocaAtFunctionEntryWithCount(llvm::Type* type,
   llvm::AllocaInst* alloca =
       b->CreateAlloca(type, element_count, AsStringRef(name));
   if (alignment != 0) {
-    alloca->setAlignment(llvm::Align(alignment));
+    alloca->setAlignment(llvm::MaybeAlign(alignment));
   }
   return alloca;
 }
@@ -354,14 +347,12 @@ LlvmIfData EmitIfThenElse(llvm::Value* condition, absl::string_view name,
 
 llvm::Value* EmitComparison(llvm::CmpInst::Predicate predicate,
                             llvm::Value* lhs_value, llvm::Value* rhs_value,
-                            llvm::IRBuilder<>* b, absl::string_view name) {
+                            llvm::IRBuilder<>* b) {
   llvm::Value* comparison_result;
   if (lhs_value->getType()->isIntegerTy()) {
-    comparison_result =
-        b->CreateICmp(predicate, lhs_value, rhs_value, name.data());
+    comparison_result = b->CreateICmp(predicate, lhs_value, rhs_value);
   } else {
-    comparison_result =
-        b->CreateFCmp(predicate, lhs_value, rhs_value, name.data());
+    comparison_result = b->CreateFCmp(predicate, lhs_value, rhs_value);
   }
   // comparison_result is i1, but the NVPTX codegen incorrectly lowers i1
   // arrays. So we extend it to i8 so that it's addressable.
@@ -422,10 +413,9 @@ llvm::Instruction* AddRangeMetadata(int64 lower, int64 upper,
   return inst;
 }
 
-string IrName(absl::string_view a) {
-  std::string s(a);
-  s.erase(std::remove(s.begin(), s.end(), '%'), s.end());
-  return s;
+string IrName(string a) {
+  a.erase(std::remove(a.begin(), a.end(), '%'), a.end());
+  return a;
 }
 
 string IrName(absl::string_view a, absl::string_view b) {
@@ -581,8 +571,7 @@ static Status CreateAndWriteStringToFile(const string& directory_name,
 }
 
 void DumpIrIfEnabled(const HloModule& hlo_module,
-                     const llvm::Module& llvm_module, bool optimized,
-                     absl::string_view filename_suffix) {
+                     const llvm::Module& llvm_module, bool optimized) {
   const auto& debug_opts = hlo_module.config().debug_options();
   if (!DumpingEnabledForHloModule(hlo_module)) {
     return;
@@ -591,11 +580,8 @@ void DumpIrIfEnabled(const HloModule& hlo_module,
   // XlaJitCompiledCpuFunction::Compile.  Avoid overwriting IR files previously
   // dumped from the same process in such cases.
   string suffix = absl::StrCat("ir-", optimized ? "with" : "no", "-opt");
-  DumpToFileInDirOrStdout(
-      hlo_module, "",
-      absl::StrCat(suffix, filename_suffix.empty() ? "" : ".", filename_suffix,
-                   ".ll"),
-      DumpModuleToString(llvm_module));
+  DumpToFileInDirOrStdout(hlo_module, "", absl::StrCat(suffix, ".ll"),
+                          DumpModuleToString(llvm_module));
 
   // For some models the embedded constants can be huge, so also dump the module
   // with the constants stripped to get IR that is easier to manipulate.  Skip

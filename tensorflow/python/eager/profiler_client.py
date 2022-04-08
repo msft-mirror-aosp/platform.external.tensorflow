@@ -18,11 +18,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.profiler.internal import _pywrap_profiler
-from tensorflow.python.util.deprecation import deprecated
+from tensorflow.python import pywrap_tfe
+from tensorflow.python.client import pywrap_tf_session
+from tensorflow.python.framework import c_api_util
+from tensorflow.python.framework import errors
 
 
-@deprecated('2020-07-01', 'use `tf.profiler.experimental.client.trace`.')
 def start_tracing(service_addr,
                   logdir,
                   duration_ms,
@@ -46,11 +47,12 @@ def start_tracing(service_addr,
   Raises:
     UnavailableError: If no trace event is collected.
   """
-  _pywrap_profiler.trace(service_addr, logdir, worker_list, include_dataset_ops,
-                         duration_ms, num_tracing_attempts, {})
+  if not pywrap_tfe.TFE_ProfilerClientStartTracing(
+      service_addr, logdir, worker_list, include_dataset_ops, duration_ms,
+      num_tracing_attempts):
+    raise errors.UnavailableError(None, None, 'No trace event is collected.')
 
 
-@deprecated('2020-07-01', 'use `tf.profiler.experimental.client.monitor`.')
 def monitor(service_addr,
             duration_ms,
             monitoring_level=1,
@@ -69,5 +71,8 @@ def monitor(service_addr,
   Returns:
     A string of monitoring output.
   """
-  return _pywrap_profiler.monitor(service_addr, duration_ms, monitoring_level,
-                                  display_timestamp)
+  with c_api_util.tf_buffer() as buffer_:
+    pywrap_tfe.TFE_ProfilerClientMonitor(service_addr, duration_ms,
+                                         monitoring_level, display_timestamp,
+                                         buffer_)
+    return pywrap_tf_session.TF_GetBuffer(buffer_)

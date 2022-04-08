@@ -65,7 +65,7 @@ class ZlibOutputBuffer : public WritableFile {
   // To immediately write contents to file call `Flush()`.
   Status Append(StringPiece data) override;
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   Status Append(const absl::Cord& cord) override;
 #endif
 

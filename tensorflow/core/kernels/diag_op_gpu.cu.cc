@@ -76,7 +76,6 @@ template struct DiagFunctor<GPUDevice, int32>;
 template struct DiagFunctor<GPUDevice, int64>;
 template struct DiagFunctor<GPUDevice, complex64>;
 template struct DiagFunctor<GPUDevice, complex128>;
-template struct DiagFunctor<GPUDevice, Eigen::half>;
 
 template <typename T>
 __global__ void DiagPartGpuKernel(const int num_threads, const int64 size,
@@ -114,7 +113,6 @@ template struct DiagPartFunctor<GPUDevice, int32>;
 template struct DiagPartFunctor<GPUDevice, int64>;
 template struct DiagPartFunctor<GPUDevice, complex64>;
 template struct DiagPartFunctor<GPUDevice, complex128>;
-template struct DiagPartFunctor<GPUDevice, Eigen::half>;
 
 }  // end namespace functor
 }  // end namespace tensorflow

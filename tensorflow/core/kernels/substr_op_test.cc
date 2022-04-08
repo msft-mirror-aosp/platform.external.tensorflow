@@ -149,26 +149,27 @@ Graph* SetupSubstrGraph(const Tensor& input, const int32 pos, const int32 len,
   return g;
 }
 
-static void BM_SubstrByte(::testing::benchmark::State& state) {
-  const int batch_size = state.range(0);
-
+void BM_SubstrByte(int iters, int batch_size) {
+  testing::StopTiming();
+  testing::ItemsProcessed(static_cast<int64>(iters));
+  testing::UseRealTime();
   Tensor input = GetTestTensor(batch_size);
   Graph* g = SetupSubstrGraph(input, 3, 30, kByteUnit);
-  test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);
-  state.SetItemsProcessed(state.iterations());
+  testing::StartTiming();
+  test::Benchmark("cpu", g).Run(iters);
 }
 
-static void BM_SubstrUTF8(::testing::benchmark::State& state) {
-  const int batch_size = state.range(0);
-
+void BM_SubstrUTF8(int iters, int batch_size) {
+  testing::StopTiming();
+  testing::ItemsProcessed(static_cast<int64>(iters));
+  testing::UseRealTime();
   Tensor input = GetTestUTF8Tensor(batch_size);
   Graph* g = SetupSubstrGraph(input, 3, 30, kUTF8Unit);
-  test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);
-  state.SetItemsProcessed(state.iterations());
+  testing::StartTiming();
+  test::Benchmark("cpu", g).Run(iters);
 }
 
 BENCHMARK(BM_SubstrByte)
-    ->UseRealTime()
     ->Arg(1)
     ->Arg(8)
     ->Arg(16)
@@ -177,7 +178,6 @@ BENCHMARK(BM_SubstrByte)
     ->Arg(128)
     ->Arg(256);
 BENCHMARK(BM_SubstrUTF8)
-    ->UseRealTime()
     ->Arg(1)
     ->Arg(8)
     ->Arg(16)

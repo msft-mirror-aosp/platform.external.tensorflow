@@ -25,7 +25,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/hlo_execution_profile.h"
 #include "tensorflow/compiler/xla/service/hlo_module.h"
 #include "tensorflow/compiler/xla/service/hlo_module_config.h"
-#include "tensorflow/compiler/xla/service/interpreter/executable_base.h"
 #include "tensorflow/compiler/xla/service/service_executable_run_options.h"
 #include "tensorflow/compiler/xla/service/shaped_buffer.h"
 #include "tensorflow/compiler/xla/statusor.h"
@@ -41,27 +40,26 @@ namespace interpreter {
 
 // Responsible for running a HLO graph through the HloEvaluator and output
 // buffer allocation. Refer to interpreter/README.md for more.
-class InterpreterExecutable : public InterpreterExecutableBase {
+class InterpreterExecutable : public Executable {
  public:
-  InterpreterExecutable(
-      std::unique_ptr<HloModule> hlo_module,
-      std::unique_ptr<HloEvaluator> evaluator,
-      absl::optional<DynamicDimensionInference> dynamic_dymension_inference);
+  InterpreterExecutable(std::unique_ptr<HloModule> hlo_module,
+                        std::unique_ptr<HloEvaluator> evaluator);
+  ~InterpreterExecutable() override;
+
+  StatusOr<ExecutionOutput> ExecuteAsyncOnStream(
+      const ServiceExecutableRunOptions* run_options,
+      std::vector<ShapeTree<MaybeOwningDeviceMemory>> arguments,
+      HloExecutionProfile* hlo_execution_profile) override
+      LOCKS_EXCLUDED(evaluator_lock_);
 
   static int64 ShapeSizeBytes(const Shape& shape);
 
  protected:
-  StatusOr<Literal> Evaluate(const ServiceExecutableRunOptions* run_options,
-                             const HloComputation& computation,
-                             absl::Span<const Literal> arg_literals) override
-      TF_LOCKS_EXCLUDED(evaluator_lock_);
-
   // The interpreter interprets executables with an HloEvaluator.
-  std::unique_ptr<HloEvaluator> evaluator_ TF_PT_GUARDED_BY(evaluator_lock_);
+  std::unique_ptr<HloEvaluator> evaluator_ PT_GUARDED_BY(evaluator_lock_);
   mutable tensorflow::mutex evaluator_lock_;
 
  private:
-  absl::optional<DynamicDimensionInference> dynamic_dimension_inference_;
   TF_DISALLOW_COPY_AND_ASSIGN(InterpreterExecutable);
 };
 

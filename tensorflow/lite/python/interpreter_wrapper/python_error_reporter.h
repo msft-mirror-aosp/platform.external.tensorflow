@@ -21,12 +21,12 @@ limitations under the License.
 #include <sstream>
 #include <string>
 
-#include "tensorflow/lite/stateful_error_reporter.h"
+#include "tensorflow/lite/core/api/error_reporter.h"
 
 namespace tflite {
 namespace interpreter_wrapper {
 
-class PythonErrorReporter : public tflite::StatefulErrorReporter {
+class PythonErrorReporter : public tflite::ErrorReporter {
  public:
   PythonErrorReporter() {}
 
@@ -38,7 +38,7 @@ class PythonErrorReporter : public tflite::StatefulErrorReporter {
   PyObject* exception();
 
   // Gets the last error message and clears the buffer.
-  std::string message() override;
+  std::string message();
 
  private:
   std::stringstream buffer_;

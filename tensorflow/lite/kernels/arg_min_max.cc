@@ -12,19 +12,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/kernels/internal/reference/arg_min_max.h"
-
-#include <stdint.h>
-
-#include <functional>
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
-#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
 
 namespace tflite {
 namespace ops {
@@ -37,13 +31,7 @@ constexpr int kOutputTensor = 0;
 
 TfLiteStatus ResizeOutput(TfLiteContext* context, const TfLiteTensor* input,
                           const TfLiteTensor* axis, TfLiteTensor* output) {
-  int axis_value;
-  // Retrive all 8 bytes when axis type is kTfLiteInt64 to avoid data loss.
-  if (axis->type == kTfLiteInt64) {
-    axis_value = static_cast<int>(*GetTensorData<int64_t>(axis));
-  } else {
-    axis_value = *GetTensorData<int>(axis);
-  }
+  int axis_value = *GetTensorData<int>(axis);
   if (axis_value < 0) {
     axis_value += NumDimensions(input);
   }
@@ -64,19 +52,15 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_EQ(context, NumInputs(node), 2);
   TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
 
-  const TfLiteTensor* input;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
-  const TfLiteTensor* axis;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kAxis, &axis));
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  const TfLiteTensor* axis = GetInput(context, node, kAxis);
   // Make sure the axis is only 1 dimension.
   TF_LITE_ENSURE_EQ(context, NumElements(axis), 1);
   // Make sure the axis is only either int32 or int64.
   TF_LITE_ENSURE(context,
                  axis->type == kTfLiteInt32 || axis->type == kTfLiteInt64);
 
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context,
-                    GetOutputSafe(context, node, kOutputTensor, &output));
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
   auto* params = reinterpret_cast<TfLiteArgMaxParams*>(node->builtin_data);
   switch (params->output_type) {
@@ -129,13 +113,9 @@ std::function<bool(T, T)> GetComparefunction(bool is_arg_max) {
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node, bool is_arg_max) {
-  const TfLiteTensor* input;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
-  const TfLiteTensor* axis;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kAxis, &axis));
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context,
-                    GetOutputSafe(context, node, kOutputTensor, &output));
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  const TfLiteTensor* axis = GetInput(context, node, kAxis);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
   if (IsDynamicTensor(output)) {
     TF_LITE_ENSURE_STATUS(ResizeOutput(context, input, axis, output));
   }

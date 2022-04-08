@@ -19,7 +19,6 @@ limitations under the License.
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/kernels/data/dataset_utils.h"
 #include "tensorflow/core/kernels/data/name_utils.h"
-#include "tensorflow/core/kernels/data/split_utils.h"
 #include "tensorflow/core/util/batch_util.h"
 
 namespace tensorflow {
@@ -58,13 +57,6 @@ class TensorSliceDatasetOp::Dataset : public DatasetBase {
         this, name_utils::IteratorPrefix(kDatasetType, prefix)});
   }
 
-  Status MakeSplitProvider(
-      std::unique_ptr<SplitProvider>* split_provider) const override {
-    *split_provider =
-        absl::make_unique<IndexSplitProvider>(tensors_[0].dim_size(0));
-    return Status::OK();
-  }
-
   const DataTypeVector& output_dtypes() const override { return dtypes_; }
 
   const std::vector<PartialTensorShape>& output_shapes() const override {
@@ -77,10 +69,6 @@ class TensorSliceDatasetOp::Dataset : public DatasetBase {
 
   int64 Cardinality() const override { return tensors_[0].dim_size(0); }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override { return Status::OK(); }
 
  protected:
@@ -92,7 +80,7 @@ class TensorSliceDatasetOp::Dataset : public DatasetBase {
     for (const Tensor& t : tensors_) {
       Node* node;
       if (ctx->serialize_data_tensors()) {
-        TF_RETURN_IF_ERROR(b->AddDatasetOrTensor(ctx, t, &node));
+        TF_RETURN_IF_ERROR(b->AddTensor(t, &node));
       } else {
         TF_RETURN_IF_ERROR(b->AddPlaceholder(t, &node));
         DCHECK_NE(ctx->input_list(), nullptr);
@@ -111,26 +99,24 @@ class TensorSliceDatasetOp::Dataset : public DatasetBase {
   class Iterator : public DatasetIterator<Dataset> {
    public:
     explicit Iterator(const Params& params)
-        : DatasetIterator<Dataset>(params) {}
-
-    Status Initialize(IteratorContext* ctx) override {
-      split_provider_ = ctx->split_provider();
-      if (split_provider_ == nullptr) {
-        split_provider_ = std::make_shared<IndexSplitProvider>(
-            dataset()->tensors_[0].dim_size(0));
-      }
-      return Status::OK();
-    }
+        : DatasetIterator<Dataset>(params),
+          i_(0),
+          n_(params.dataset->tensors_[0].dim_size(0)) {}
 
     Status GetNextInternal(IteratorContext* ctx,
                            std::vector<Tensor>* out_tensors,
                            bool* end_of_sequence) override {
-      Tensor split;
-      TF_RETURN_IF_ERROR(split_provider_->GetNext(&split, end_of_sequence));
-      if (*end_of_sequence) {
-        return Status::OK();
+      int64 index = 0;
+      {
+        mutex_lock l(mu_);
+        if (i_ < n_) {
+          index = i_;
+          ++i_;
+        } else {
+          *end_of_sequence = true;
+          return Status::OK();
+        }
       }
-      int64 index = split.scalar<int64>()();
       out_tensors->clear();
       out_tensors->reserve(dataset()->tensors_.size());
       for (size_t i = 0; i < dataset()->tensors_.size(); ++i) {
@@ -150,20 +136,23 @@ class TensorSliceDatasetOp::Dataset : public DatasetBase {
       return model::MakeSourceNode(std::move(args));
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
-      return split_provider_->Save(
-          [this](const std::string& key) { return full_name(key); }, writer);
+    Status SaveInternal(IteratorStateWriter* writer) override {
+      mutex_lock l(mu_);
+      TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kCurIndex), i_));
+      return Status::OK();
     }
 
     Status RestoreInternal(IteratorContext* ctx,
                            IteratorStateReader* reader) override {
-      return split_provider_->Restore(
-          [this](const std::string& key) { return full_name(key); }, reader);
+      mutex_lock l(mu_);
+      TF_RETURN_IF_ERROR(reader->ReadScalar(full_name(kCurIndex), &i_));
+      return Status::OK();
     }
 
    private:
-    std::shared_ptr<SplitProvider> split_provider_;
+    mutex mu_;
+    int64 i_ GUARDED_BY(mu_);
+    const int64 n_;
   };
 
   const std::vector<Tensor> tensors_;

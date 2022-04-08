@@ -28,28 +28,11 @@ namespace tensorflow {
 namespace grappler {
 namespace {
 
-Status OptimizeWithMapParallelization(const GrapplerItem& item,
-                                      GraphDef* output, bool autotune) {
-  MapParallelization optimizer;
-  RewriterConfig_CustomGraphOptimizer config;
-  if (autotune) {
-    (*config.mutable_parameter_map())["autotune"].set_s("true");
-  } else {
-    (*config.mutable_parameter_map())["autotune"].set_s("false");
-  }
-  TF_RETURN_IF_ERROR(optimizer.Init(&config));
-  return optimizer.Optimize(nullptr, item, output);
-}
-
 using graph_tests_utils::MakeMapNode;
 const char stateless_fun_name[] = "XTimesTwo";
 const char stateful_fun_name[] = "RandomUniform";
 
-class AutotuneSetting : public ::testing::TestWithParam<bool> {};
-
-TEST_P(AutotuneSetting, MapParallelizationTest) {
-  const bool autotune = GetParam();
-
+TEST(MapParallelizationTest, ParallelizeSimpleMap) {
   using test::function::NDef;
   GrapplerItem item;
   item.graph = test::function::GDef(
@@ -57,58 +40,21 @@ TEST_P(AutotuneSetting, MapParallelizationTest) {
        NDef("stop", "Const", {}, {{"value", 10}, {"dtype", DT_INT32}}),
        NDef("step", "Const", {}, {{"value", 1}, {"dtype", DT_INT32}}),
        NDef("range", "RangeDataset", {"start", "stop", "step"}, {}),
-       MakeMapNode("map", "range", stateless_fun_name),
-       NDef("Sink", "Identity", {"map"}, {})},
+       MakeMapNode("map1", "range", stateless_fun_name)},
       // FunctionLib
       {
           test::function::XTimesTwo(),
       });
 
-  item.fetch.push_back("Sink");
-
+  MapParallelization optimizer;
   GraphDef output;
-  TF_ASSERT_OK(OptimizeWithMapParallelization(item, &output, autotune));
-  EXPECT_EQ(graph_utils::ContainsNodeWithOp("ParallelMapDatasetV2", output),
-            autotune);
-  EXPECT_EQ(graph_utils::ContainsGraphNodeWithName("map", output), !autotune);
+  TF_ASSERT_OK(optimizer.Optimize(nullptr, item, &output));
+  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDataset", output));
+  EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map1", output));
+  EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map2", output));
 }
 
-INSTANTIATE_TEST_SUITE_P(Test, AutotuneSetting, ::testing::Values(false, true));
-
-class FromFunctionDef : public ::testing::TestWithParam<string> {};
-
-TEST_P(FromFunctionDef, MapParallelizationTest) {
-  const string op = GetParam();
-  bool from_function_def = (op == "_Retval");
-
-  using test::function::NDef;
-  GrapplerItem item;
-  item.graph = test::function::GDef(
-      {NDef("start", "Const", {}, {{"value", 0}, {"dtype", DT_INT32}}),
-       NDef("stop", "Const", {}, {{"value", 10}, {"dtype", DT_INT32}}),
-       NDef("step", "Const", {}, {{"value", 1}, {"dtype", DT_INT32}}),
-       NDef("range", "RangeDataset", {"start", "stop", "step"}, {}),
-       MakeMapNode("map", "range", stateless_fun_name),
-       NDef("Sink", op, {"map"}, {})},
-      // FunctionLib
-      {
-          test::function::XTimesTwo(),
-      });
-
-  item.fetch.push_back("Sink");
-
-  GraphDef output;
-  TF_ASSERT_OK(OptimizeWithMapParallelization(item, &output, true));
-  EXPECT_EQ(graph_utils::ContainsNodeWithOp("ParallelMapDatasetV2", output),
-            !from_function_def);
-  EXPECT_EQ(graph_utils::ContainsGraphNodeWithName("map", output),
-            from_function_def);
-}
-
-INSTANTIATE_TEST_SUITE_P(Test, FromFunctionDef,
-                         ::testing::Values("Identity", "_Retval"));
-
-TEST(ParallelizeAssert, MapParallelizationTest) {
+TEST(MapParallelization, ParallelizeAssert) {
   using test::function::NDef;
   GrapplerItem item;
   item.graph = test::function::GDef(
@@ -119,19 +65,17 @@ TEST(ParallelizeAssert, MapParallelizationTest) {
        NDef("range", "RangeDataset", {"start", "stop", "step"}, {}),
        MakeMapNode("map1", "range", stateful_fun_name),
        MakeMapNode("map2", "map1", stateless_fun_name),
-       NDef("cache", "CacheDataset", {"map2", "filename"}, {}),
-       NDef("Sink", "Identity", {"cache"}, {})},
+       NDef("cache", "CacheDataset", {"map2", "filename"}, {})},
       // FunctionLib
       {
           test::function::XTimesTwo(),
           test::function::RandomUniform(),
       });
 
-  item.fetch.push_back("Sink");
-
+  MapParallelization optimizer;
   GraphDef output;
-  TF_ASSERT_OK(OptimizeWithMapParallelization(item, &output, true));
-  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDatasetV2", output));
+  TF_ASSERT_OK(optimizer.Optimize(nullptr, item, &output));
+  EXPECT_TRUE(graph_utils::ContainsNodeWithOp("ParallelMapDataset", output));
   EXPECT_TRUE(graph_utils::ContainsGraphNodeWithName("map1", output));
   EXPECT_FALSE(graph_utils::ContainsGraphNodeWithName("map2", output));
 }

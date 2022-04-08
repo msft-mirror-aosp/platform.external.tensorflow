@@ -28,6 +28,8 @@ limitations under the License.
 //
 // Usage: minimal <tflite model>
 
+using namespace tflite;
+
 #define TFLITE_MINIMAL_CHECK(x)                              \
   if (!(x)) {                                                \
     fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
@@ -46,13 +48,10 @@ int main(int argc, char* argv[]) {
       tflite::FlatBufferModel::BuildFromFile(filename);
   TFLITE_MINIMAL_CHECK(model != nullptr);
 
-  // Build the interpreter with the InterpreterBuilder.
-  // Note: all Interpreters should be built with the InterpreterBuilder,
-  // which allocates memory for the Intrepter and does various set up
-  // tasks so that the Interpreter can read the provided model.
+  // Build the interpreter
   tflite::ops::builtin::BuiltinOpResolver resolver;
-  tflite::InterpreterBuilder builder(*model, resolver);
-  std::unique_ptr<tflite::Interpreter> interpreter;
+  InterpreterBuilder builder(*model, resolver);
+  std::unique_ptr<Interpreter> interpreter;
   builder(&interpreter);
   TFLITE_MINIMAL_CHECK(interpreter != nullptr);
 
@@ -62,9 +61,7 @@ int main(int argc, char* argv[]) {
   tflite::PrintInterpreterState(interpreter.get());
 
   // Fill input buffers
-  // TODO(user): Insert code to fill input tensors.
-  // Note: The buffer of the input tensor with index `i` of type T can
-  // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
+  // TODO(user): Insert code to fill input tensors
 
   // Run inference
   TFLITE_MINIMAL_CHECK(interpreter->Invoke() == kTfLiteOk);
@@ -73,8 +70,6 @@ int main(int argc, char* argv[]) {
 
   // Read output buffers
   // TODO(user): Insert getting data out code.
-  // Note: The buffer of the output tensor with index `i` of type T can
-  // be accessed with `T* output = interpreter->typed_output_tensor<T>(i);`
 
   return 0;
 }

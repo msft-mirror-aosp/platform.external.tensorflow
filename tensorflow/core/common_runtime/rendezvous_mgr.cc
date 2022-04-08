@@ -74,8 +74,7 @@ void SameWorkerRecvDone(const DeviceMgr* device_mgr,
     return;
   }
 
-  ScopedMemoryDebugAnnotation op_annotation("SameWorkerRecvDone", 0, "dynamic",
-                                            in.dtype(), &in.shape());
+  MEMDEBUG_CACHE_OP("SameWorkerRecvDone");
   AllocatorAttributes attr = recv_args.alloc_attrs;
   attr.set_gpu_compatible(send_args.alloc_attrs.gpu_compatible() ||
                           recv_args.alloc_attrs.gpu_compatible());
@@ -98,12 +97,6 @@ void SameWorkerRecvDone(const DeviceMgr* device_mgr,
     }
     Tensor copy(out_allocator, in.dtype(), in.shape(), aa);
     *out = copy;
-    if (in.shape().num_elements() > 0 && out->data() == nullptr) {
-      done(tensorflow::errors::ResourceExhausted(
-          "SameWorkerRecvDone unable to allocate output tensor. Key: ",
-          parsed.FullKey()));
-      return;
-    }
   }
 
   CopyTensor::ViaDMA(
@@ -119,7 +112,7 @@ void IntraProcessRecvAsyncImpl(const DeviceMgr* device_mgr,
                                RendezvousInterface::DoneCallback done) {
   VLOG(1) << "IntraProcessRendezvous Recv " << local << " " << parsed.FullKey();
 
-  ScopedMemoryDebugAnnotation op_annotation("RecvAsync");
+  MEMDEBUG_CACHE_OP("RecvAsync");
   // Recv the tensor from local_.
   local->RecvAsync(
       parsed, recv_args,
@@ -151,7 +144,7 @@ void IntraProcessRecvAsyncImpl(const DeviceMgr* device_mgr,
 
 RefCountedIntraProcessRendezvous::RefCountedIntraProcessRendezvous(
     const DeviceMgr* device_mgr)
-    : device_mgr_(device_mgr), local_(this) {}
+    : device_mgr_(device_mgr) {}
 
 RefCountedIntraProcessRendezvous::~RefCountedIntraProcessRendezvous() {}
 
@@ -176,7 +169,7 @@ void RefCountedIntraProcessRendezvous::StartAbort(const Status& s) {
 
 PrivateIntraProcessRendezvous::PrivateIntraProcessRendezvous(
     const DeviceMgr* device_mgr)
-    : device_mgr_(device_mgr), local_(nullptr) {}
+    : device_mgr_(device_mgr) {}
 
 PrivateIntraProcessRendezvous::~PrivateIntraProcessRendezvous() {}
 

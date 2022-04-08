@@ -116,6 +116,14 @@ cusparseStatus_t CUSPARSEAPI cusparseSetMatType(cusparseMatDescr_t descrA,
   return func_ptr(descrA, type);
 }
 
+cusparseMatrixType_t CUSPARSEAPI
+cusparseGetMatType(const cusparseMatDescr_t descrA) {
+  using FuncPtr = cusparseMatrixType_t(CUSPARSEAPI *)(const cusparseMatDescr_t);
+  static auto func_ptr = LoadSymbol<FuncPtr>("cusparseGetMatType");
+  if (!func_ptr) return GetSymbolNotFoundError();
+  return func_ptr(descrA);
+}
+
 cusparseStatus_t CUSPARSEAPI
 cusparseSetMatFillMode(cusparseMatDescr_t descrA, cusparseFillMode_t fillMode) {
   using FuncPtr =
@@ -123,6 +131,14 @@ cusparseSetMatFillMode(cusparseMatDescr_t descrA, cusparseFillMode_t fillMode) {
   static auto func_ptr = LoadSymbol<FuncPtr>("cusparseSetMatFillMode");
   if (!func_ptr) return GetSymbolNotFoundError();
   return func_ptr(descrA, fillMode);
+}
+
+cusparseFillMode_t CUSPARSEAPI
+cusparseGetMatFillMode(const cusparseMatDescr_t descrA) {
+  using FuncPtr = cusparseFillMode_t(CUSPARSEAPI *)(const cusparseMatDescr_t);
+  static auto func_ptr = LoadSymbol<FuncPtr>("cusparseGetMatFillMode");
+  if (!func_ptr) return GetSymbolNotFoundError();
+  return func_ptr(descrA);
 }
 
 cusparseStatus_t CUSPARSEAPI
@@ -134,6 +150,14 @@ cusparseSetMatDiagType(cusparseMatDescr_t descrA, cusparseDiagType_t diagType) {
   return func_ptr(descrA, diagType);
 }
 
+cusparseDiagType_t CUSPARSEAPI
+cusparseGetMatDiagType(const cusparseMatDescr_t descrA) {
+  using FuncPtr = cusparseDiagType_t(CUSPARSEAPI *)(const cusparseMatDescr_t);
+  static auto func_ptr = LoadSymbol<FuncPtr>("cusparseGetMatDiagType");
+  if (!func_ptr) return GetSymbolNotFoundError();
+  return func_ptr(descrA);
+}
+
 cusparseStatus_t CUSPARSEAPI cusparseSetMatIndexBase(cusparseMatDescr_t descrA,
                                                      cusparseIndexBase_t base) {
   using FuncPtr =
@@ -141,6 +165,14 @@ cusparseStatus_t CUSPARSEAPI cusparseSetMatIndexBase(cusparseMatDescr_t descrA,
   static auto func_ptr = LoadSymbol<FuncPtr>("cusparseSetMatIndexBase");
   if (!func_ptr) return GetSymbolNotFoundError();
   return func_ptr(descrA, base);
+}
+
+cusparseIndexBase_t CUSPARSEAPI
+cusparseGetMatIndexBase(const cusparseMatDescr_t descrA) {
+  using FuncPtr = cusparseIndexBase_t(CUSPARSEAPI *)(const cusparseMatDescr_t);
+  static auto func_ptr = LoadSymbol<FuncPtr>("cusparseGetMatIndexBase");
+  if (!func_ptr) return GetSymbolNotFoundError();
+  return func_ptr(descrA);
 }
 
 cusparseStatus_t CUSPARSEAPI
@@ -7780,8 +7812,6 @@ cusparseStatus_t CUSPARSEAPI cusparseCsr2cscEx2_bufferSize(
                   bufferSize);
 }
 
-#if !defined(_WIN32)
-
 cusparseStatus_t CUSPARSEAPI
 cusparseCreateSpVec(cusparseSpVecDescr_t *spVecDescr, int64_t size, int64_t nnz,
                     void *indices, void *values, cusparseIndexType_t idxType,
@@ -8224,7 +8254,5 @@ cusparseStatus_t CUSPARSEAPI cusparseConstrainedGeMM_bufferSize(
   return func_ptr(handle, opA, opB, alpha, matA, matB, beta, matC, computeType,
                   bufferSize);
 }
-
-#endif  // _WIN32
 
 }  // extern "C"

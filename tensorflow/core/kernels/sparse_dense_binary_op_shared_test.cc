@@ -276,18 +276,15 @@ static ST MakeSparseTensor(Graph* g, int B, int M, int N, int nnz_inner) {
 
 // [8, 4, N{nnz}] cmul [8, 4, N]
 #define BM_SparseMatCMulDenseMatArgs(N, NNZ_INNER)                             \
-  static void BM_SparseMatCMulDenseMat_##N##_##NNZ_INNER(                      \
-      ::testing::benchmark::State& state) {                                    \
+  static void BM_SparseMatCMulDenseMat_##N##_##NNZ_INNER(int iters) {          \
     Graph* g = new Graph(OpRegistry::Global());                                \
     Node* dense = MakeTensor(g, 8, 4, N);                                      \
     ST sp = MakeSparseTensor(g, 8, 4, N, NNZ_INNER);                           \
                                                                                \
+    testing::ItemsProcessed(static_cast<int64>(iters * 8 * 4 * N * 2));        \
     test::Benchmark(                                                           \
-        "cpu", SparseMatCMulDenseMat(g, sp.indices, sp.vals, sp.shape, dense), \
-        /*old_benchmark_api*/ false)                                           \
-        .Run(state);                                                           \
-    state.SetItemsProcessed(                                                   \
-        static_cast<int64>(state.iterations() * 8 * 4 * N * 2));               \
+        "cpu", SparseMatCMulDenseMat(g, sp.indices, sp.vals, sp.shape, dense)) \
+        .Run(iters);                                                           \
   }                                                                            \
   BENCHMARK(BM_SparseMatCMulDenseMat_##N##_##NNZ_INNER)
 

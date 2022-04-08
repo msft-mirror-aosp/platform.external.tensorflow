@@ -234,34 +234,31 @@ static void TestPickAt(int items, const int32* weights) {
   EXPECT_EQ(weight_index, picker.total_weight());
 }
 
-static void BM_Create(::testing::benchmark::State& state) {
-  int arg = state.range(0);
-  for (auto s : state) {
+static void BM_Create(int iters, int arg) {
+  while (--iters > 0) {
     WeightedPicker p(arg);
   }
 }
 BENCHMARK(BM_Create)->Range(1, 1024);
 
-static void BM_CreateAndSetWeights(::testing::benchmark::State& state) {
-  int arg = state.range(0);
+static void BM_CreateAndSetWeights(int iters, int arg) {
   std::vector<int32> weights(arg);
   for (int i = 0; i < arg; i++) {
     weights[i] = i * 10;
   }
-  for (auto s : state) {
+  while (--iters > 0) {
     WeightedPicker p(arg);
     p.SetWeightsFromArray(arg, &weights[0]);
   }
 }
 BENCHMARK(BM_CreateAndSetWeights)->Range(1, 1024);
 
-static void BM_Pick(::testing::benchmark::State& state) {
-  int arg = state.range(0);
+static void BM_Pick(int iters, int arg) {
   PhiloxRandom philox(301, 17);
   SimplePhilox rnd(&philox);
   WeightedPicker p(arg);
   int result = 0;
-  for (auto s : state) {
+  while (--iters > 0) {
     result += p.Pick(&rnd);
   }
   VLOG(4) << result;  // Dummy use

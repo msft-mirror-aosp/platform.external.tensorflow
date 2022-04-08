@@ -46,9 +46,12 @@ class GemmRewriteTest : public GpuCodegenTest {
             backend().default_stream_executor()->GetAllocator()));
     GpuExecutable* gpu_executable =
         static_cast<GpuExecutable*>(executable.get());
-    absl::Span<const BufferAllocation> allocations =
-        gpu_executable->GetAllocations();
-    CHECK_EQ(allocations.size(), expected_number_of_allocations);
+    std::shared_ptr<const BufferAssignment> buffer_assignment =
+        gpu_executable->GetBufferAssignment();
+    CHECK_EQ(buffer_assignment->Allocations().size(),
+             expected_number_of_allocations)
+        << "Unexpected buffer assignment. Was:\n"
+        << buffer_assignment->ToString();
   }
 };
 

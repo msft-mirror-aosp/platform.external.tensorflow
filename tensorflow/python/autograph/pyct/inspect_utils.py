@@ -60,13 +60,9 @@ if six.PY2:
 def islambda(f):
   if not tf_inspect.isfunction(f):
     return False
-  # TODO(mdan): Look into checking the only the code object.
-  if not (hasattr(f, '__name__') and hasattr(f, '__code__')):
+  if not hasattr(f, '__name__'):
     return False
-  # Some wrappers can rename the function, but changing the name of the
-  # code object is harder.
-  return (
-      (f.__name__ == '<lambda>') or (f.__code__.co_name == '<lambda>'))
+  return f.__name__ == '<lambda>'
 
 
 def isnamedtuple(f):
@@ -170,11 +166,7 @@ def getnamespace(f):
   freevars = six.get_function_code(f).co_freevars
   if freevars and closure:
     for name, cell in zip(freevars, closure):
-      try:
-        namespace[name] = cell.cell_contents
-      except ValueError:
-        # Cell contains undefined variable, omit it from the namespace.
-        pass
+      namespace[name] = cell.cell_contents
   return namespace
 
 

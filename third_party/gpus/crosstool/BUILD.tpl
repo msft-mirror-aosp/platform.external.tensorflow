@@ -68,7 +68,6 @@ cc_toolchain_config(
     linker_bin_path = "%{linker_bin_path}",
     builtin_sysroot = "%{builtin_sysroot}",
     cuda_path = "%{cuda_toolkit_path}",
-    compiler = "%{compiler}",
 )
 
 cc_toolchain(
@@ -125,7 +124,6 @@ cc_toolchain_config(
     msvc_lib_path = "%{msvc_lib_path}",
     msvc_link_path = "%{msvc_link_path}",
     msvc_ml_path = "%{msvc_ml_path}",
-    compiler = "msvc",
 )
 
 filegroup(

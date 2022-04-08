@@ -54,11 +54,6 @@ class UniqueDatasetOp::Dataset : public DatasetBase {
     return strings::StrCat("UniqueDatasetOp::Dataset");
   }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    inputs->push_back(input_);
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override {
     return input_->CheckExternalState();
   }
@@ -80,7 +75,7 @@ class UniqueDatasetOp::Dataset : public DatasetBase {
         : DatasetIterator<Dataset>(params) {}
 
     Status Initialize(IteratorContext* ctx) override {
-      return dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_);
+      return dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_);
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -108,11 +103,10 @@ class UniqueDatasetOp::Dataset : public DatasetBase {
       return model::MakeUnknownRatioNode(std::move(args));
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
+    Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       if (input_impl_) {
-        TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
+        TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
       } else {
         TF_RETURN_IF_ERROR(
             writer->WriteScalar(full_name("input_impl_empty"), ""));
@@ -202,9 +196,9 @@ class UniqueDatasetOp::Dataset : public DatasetBase {
     };
 
       mutex mu_;
-      std::unique_ptr<IteratorBase> input_impl_ TF_GUARDED_BY(mu_);
+      std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
       std::unordered_set<Tensor, TensorHash, TensorKeyEqual> unique_elements_
-          TF_GUARDED_BY(mu_);
+          GUARDED_BY(mu_);
   };
 
     const DatasetBase* const input_;

@@ -19,7 +19,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.keras.saving.saved_model import json_utils
+import json
+
 from tensorflow.python.util.tf_export import keras_export
 
 # pylint: disable=g-import-not-at-top
@@ -33,17 +34,8 @@ except ImportError:
 @keras_export('keras.models.model_from_config')
 def model_from_config(config, custom_objects=None):
   """Instantiates a Keras model from its config.
- 
-  Usage:
-  ```
-  # for a Functional API model
-  tf.keras.Model().from_config(model.get_config())
 
-  # for a Sequential model
-  tf.keras.Sequential().from_config(model.get_config())
-  ```
-
-  Args:
+  Arguments:
       config: Configuration dictionary.
       custom_objects: Optional dictionary mapping names
           (strings) to custom classes or functions to be
@@ -79,7 +71,7 @@ def model_from_yaml(yaml_string, custom_objects=None):
   ... except ImportError:
   ...   pass
 
-  Args:
+  Arguments:
       yaml_string: YAML string or open file encoding a model configuration.
       custom_objects: Optional dictionary mapping names
           (strings) to custom classes or functions to be
@@ -93,13 +85,7 @@ def model_from_yaml(yaml_string, custom_objects=None):
   """
   if yaml is None:
     raise ImportError('Requires yaml module installed (`pip install pyyaml`).')
-  # The method unsafe_load only exists in PyYAML 5.x+, so which branch of the
-  # try block is covered by tests depends on the installed version of PyYAML.
-  try:
-    # PyYAML 5.x+
-    config = yaml.unsafe_load(yaml_string)
-  except AttributeError:
-    config = yaml.load(yaml_string)
+  config = yaml.load(yaml_string)
   from tensorflow.python.keras.layers import deserialize  # pylint: disable=g-import-not-at-top
   return deserialize(config, custom_objects=custom_objects)
 
@@ -116,7 +102,7 @@ def model_from_json(json_string, custom_objects=None):
   >>> config = model.to_json()
   >>> loaded_model = tf.keras.models.model_from_json(config)
 
-  Args:
+  Arguments:
       json_string: JSON string encoding a model configuration.
       custom_objects: Optional dictionary mapping names
           (strings) to custom classes or functions to be
@@ -125,6 +111,6 @@ def model_from_json(json_string, custom_objects=None):
   Returns:
       A Keras model instance (uncompiled).
   """
-  config = json_utils.decode(json_string)
+  config = json.loads(json_string)
   from tensorflow.python.keras.layers import deserialize  # pylint: disable=g-import-not-at-top
   return deserialize(config, custom_objects=custom_objects)

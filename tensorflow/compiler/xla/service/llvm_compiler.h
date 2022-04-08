@@ -66,14 +66,13 @@ class LLVMCompiler : public Compiler {
   //       std::unique_ptr<HloModule> module,
   //       se::StreamExecutor* stream_exec,
   //       se::DeviceMemoryAllocator* device_allocator)
-  using Compiler::Compile;
   using Compiler::RunBackend;
   using Compiler::RunHloPasses;
 
   StatusOr<std::vector<std::unique_ptr<Executable>>> Compile(
       std::unique_ptr<HloModuleGroup> module_group,
       std::vector<std::vector<se::StreamExecutor*>> stream_execs,
-      const CompileOptions& options) override;
+      se::DeviceMemoryAllocator* device_allocator) override;
 
  protected:
   ModuleHook user_pre_optimization_hook_;

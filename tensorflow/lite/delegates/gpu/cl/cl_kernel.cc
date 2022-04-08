@@ -25,40 +25,41 @@ namespace gpu {
 namespace cl {
 namespace {
 
-absl::Status GetKernelMaxWorkGroupSize(cl_kernel kernel, cl_device_id device_id,
-                                       int* result) {
+Status GetKernelMaxWorkGroupSize(cl_kernel kernel, cl_device_id device_id,
+                                 int* result) {
   size_t max_work_group_size;
   cl_int error_code =
       clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_WORK_GROUP_SIZE,
                                sizeof(size_t), &max_work_group_size, nullptr);
   if (error_code != CL_SUCCESS) {
-    return absl::UnknownError(
+    return UnknownError(
         absl::StrCat("Failed to get info CL_KERNEL_WORK_GROUP_SIZE ",
                      CLErrorCodeToString(error_code)));
   }
   *result = static_cast<int>(max_work_group_size);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status GetKernelPrivateMemorySize(cl_kernel kernel,
-                                        cl_device_id device_id, int* result) {
+Status GetKernelPrivateMemorySize(cl_kernel kernel, cl_device_id device_id,
+                                  int* result) {
   cl_ulong private_mem_size;
   cl_int error_code =
       clGetKernelWorkGroupInfo(kernel, device_id, CL_KERNEL_PRIVATE_MEM_SIZE,
                                sizeof(cl_ulong), &private_mem_size, nullptr);
   if (error_code != CL_SUCCESS) {
-    return absl::UnknownError(
+    return UnknownError(
         absl::StrCat("Failed to get info CL_KERNEL_PRIVATE_MEM_SIZE ",
                      CLErrorCodeToString(error_code)));
   }
   *result = static_cast<int>(private_mem_size);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace
 
 CLKernel::CLKernel(CLKernel&& kernel)
-    : info_(kernel.info_),
+    : private_memory_size_(kernel.private_memory_size_),
+      max_work_group_size_(kernel.max_work_group_size_),
       binding_counter_(kernel.binding_counter_),
       function_name_(std::move(kernel.function_name_)),
       program_(kernel.program_),
@@ -69,7 +70,8 @@ CLKernel::CLKernel(CLKernel&& kernel)
 CLKernel& CLKernel::operator=(CLKernel&& kernel) {
   if (this != &kernel) {
     Release();
-    std::swap(info_, kernel.info_);
+    std::swap(private_memory_size_, kernel.private_memory_size_);
+    std::swap(max_work_group_size_, kernel.max_work_group_size_);
     std::swap(binding_counter_, kernel.binding_counter_);
     function_name_ = std::move(kernel.function_name_);
     std::swap(program_, kernel.program_);
@@ -80,17 +82,17 @@ CLKernel& CLKernel::operator=(CLKernel&& kernel) {
 
 CLKernel::~CLKernel() { Release(); }
 
-absl::Status CLKernel::ReInit() const {
+Status CLKernel::ReInit() const {
   clReleaseKernel(kernel_);
   cl_kernel* kern_ptr = const_cast<cl_kernel*>(&kernel_);
   int error_code;
   *kern_ptr = clCreateKernel(program_, function_name_.c_str(), &error_code);
   if (!kernel_ || error_code != CL_SUCCESS) {
     *kern_ptr = nullptr;
-    return absl::UnknownError(absl::StrCat("Failed to create ", function_name_,
-                                           CLErrorCodeToString(error_code)));
+    return UnknownError(absl::StrCat("Failed to create ", function_name_,
+                                     CLErrorCodeToString(error_code)));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 void CLKernel::Release() {
@@ -101,54 +103,84 @@ void CLKernel::Release() {
   }
 }
 
-absl::Status CLKernel::CreateFromProgram(const CLProgram& program,
-                                         const std::string& function_name) {
+Status CLKernel::CreateFromProgram(const CLProgram& program,
+                                   const std::string& function_name) {
   int error_code;
   function_name_ = function_name;
   kernel_ =
       clCreateKernel(program.program(), function_name.c_str(), &error_code);
   if (!kernel_ || error_code != CL_SUCCESS) {
     kernel_ = nullptr;
-    return absl::UnknownError(absl::StrCat("Failed to create ", function_name,
-                                           CLErrorCodeToString(error_code)));
+    return UnknownError(absl::StrCat("Failed to create ", function_name,
+                                     CLErrorCodeToString(error_code)));
   }
 
   program_ = program.program();
   clRetainProgram(program_);
 
   RETURN_IF_ERROR(GetKernelPrivateMemorySize(kernel_, program.GetDeviceId(),
-                                             &info_.private_memory_size));
+                                             &private_memory_size_));
   RETURN_IF_ERROR(GetKernelMaxWorkGroupSize(kernel_, program.GetDeviceId(),
-                                            &info_.max_work_group_size));
-  return absl::OkStatus();
+                                            &max_work_group_size_));
+  return OkStatus();
 }
 
-absl::Status CLKernel::SetMemory(int index, cl_mem memory) {
+Status CLKernel::SetMemory(int index, cl_mem memory) {
   return SetBytes(index, &memory, sizeof(cl_mem));
 }
 
-absl::Status CLKernel::SetMemoryAuto(cl_mem memory) {
+Status CLKernel::SetMemoryAuto(cl_mem memory) {
   return SetBytesAuto(&memory, sizeof(cl_mem));
 }
 
-absl::Status CLKernel::SetBytes(int index, const void* ptr, int length) const {
+Status CLKernel::SetBytes(int index, const void* ptr, int length) const {
   const int error_code = clSetKernelArg(kernel_, index, length, ptr);
   if (error_code != CL_SUCCESS) {
-    return absl::UnknownError(absl::StrCat("Failed to set kernel arguments - ",
-                                           CLErrorCodeToString(error_code)));
+    return UnknownError(absl::StrCat("Failed to set kernel arguments - ",
+                                     CLErrorCodeToString(error_code)));
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status CLKernel::SetBytesAuto(const void* ptr, int length) {
+Status CLKernel::SetBytesAuto(const void* ptr, int length) {
   const int error_code = clSetKernelArg(kernel_, binding_counter_, length, ptr);
   if (error_code != CL_SUCCESS) {
-    return absl::UnknownError(absl::StrCat(
-        "Failed to set kernel arguments - ", CLErrorCodeToString(error_code),
-        "(at index - ", binding_counter_, ")"));
+    return UnknownError(absl::StrCat("Failed to set kernel arguments - ",
+                                     CLErrorCodeToString(error_code),
+                                     "(at index - ", binding_counter_, ")"));
   }
   binding_counter_++;
-  return absl::OkStatus();
+  return OkStatus();
+}
+
+template <>
+Status CLKernel::SetBytes<FLT>(int index, const FLT& value) const {
+  return SetBytes(index, value.GetData(), value.GetSize());
+}
+
+template <>
+Status CLKernel::SetBytes<FLT2>(int index, const FLT2& value) const {
+  return SetBytes(index, value.GetData(), value.GetSize());
+}
+
+template <>
+Status CLKernel::SetBytes<FLT4>(int index, const FLT4& value) const {
+  return SetBytes(index, value.GetData(), value.GetSize());
+}
+
+template <>
+Status CLKernel::SetBytesAuto<FLT>(const FLT& value) {
+  return SetBytesAuto(value.GetData(), value.GetSize());
+}
+
+template <>
+Status CLKernel::SetBytesAuto<FLT2>(const FLT2& value) {
+  return SetBytesAuto(value.GetData(), value.GetSize());
+}
+
+template <>
+Status CLKernel::SetBytesAuto<FLT4>(const FLT4& value) {
+  return SetBytesAuto(value.GetData(), value.GetSize());
 }
 
 }  // namespace cl

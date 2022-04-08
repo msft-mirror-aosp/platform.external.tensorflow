@@ -15,11 +15,6 @@ limitations under the License.
 
 #include "tensorflow/lite/core/api/op_resolver.h"
 
-#include "flatbuffers/flatbuffers.h"  // from @flatbuffers
-#include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/core/api/error_reporter.h"
-#include "tensorflow/lite/schema/schema_utils.h"
-
 namespace tflite {
 
 TfLiteStatus GetRegistrationFromOpCode(
@@ -27,13 +22,12 @@ TfLiteStatus GetRegistrationFromOpCode(
     ErrorReporter* error_reporter, const TfLiteRegistration** registration) {
   TfLiteStatus status = kTfLiteOk;
   *registration = nullptr;
-  auto builtin_code = GetBuiltinCode(opcode);
+  auto builtin_code = opcode->builtin_code();
   int version = opcode->version();
 
   if (builtin_code > BuiltinOperator_MAX ||
       builtin_code < BuiltinOperator_MIN) {
-    TF_LITE_REPORT_ERROR(
-        error_reporter,
+    error_reporter->Report(
         "Op builtin_code out of range: %d. Are you using old TFLite binary "
         "with newer model?",
         builtin_code);
@@ -41,17 +35,13 @@ TfLiteStatus GetRegistrationFromOpCode(
   } else if (builtin_code != BuiltinOperator_CUSTOM) {
     *registration = op_resolver.FindOp(builtin_code, version);
     if (*registration == nullptr) {
-      TF_LITE_REPORT_ERROR(
-          error_reporter,
-          "Didn't find op for builtin opcode '%s' version '%d'. "
-          "An older version of this builtin might be supported. "
-          "Are you using an old TFLite binary with a newer model?\n",
+      error_reporter->Report(
+          "Didn't find op for builtin opcode '%s' version '%d'\n",
           EnumNameBuiltinOperator(builtin_code), version);
       status = kTfLiteError;
     }
   } else if (!opcode->custom_code()) {
-    TF_LITE_REPORT_ERROR(
-        error_reporter,
+    error_reporter->Report(
         "Operator with CUSTOM builtin_code has no custom_code.\n");
     status = kTfLiteError;
   } else {

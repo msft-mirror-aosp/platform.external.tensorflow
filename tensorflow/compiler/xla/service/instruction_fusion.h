@@ -1,3 +1,4 @@
+#include "absl/container/flat_hash_map.h"
 /* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +20,6 @@ limitations under the License.
 #include <functional>
 #include <utility>
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "tensorflow/compiler/xla/service/fusion_queue.h"
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_instruction.h"
@@ -139,20 +138,10 @@ class InstructionFusion : public HloModulePass {
     return config_collection_mode_;
   }
 
-  // Returns whether 'consumer' may reuse elements of its `operand_index`th
-  // operand.
-  bool ReusesOperandElements(const HloInstruction* consumer,
-                             int64 operand_index);
-
+ private:
   // The set of producers whose consumers we cannot fuse into.
   using HloInstructionSet = std::unordered_set<HloInstruction*>;
 
-  // Computes the set of nodes that we do not want to fuse into any of their
-  // consumers based on a global analysis of the HLO graph.
-  virtual HloInstructionSet ComputeGloballyUnfusible(
-      absl::Span<HloInstruction* const> post_order);
-
- private:
   HloInstruction* AddFusionInstruction(HloInstruction* producer,
                                        HloInstruction* consumer);
 
@@ -168,6 +157,11 @@ class InstructionFusion : public HloModulePass {
       absl::flat_hash_map<std::pair<HloInstruction*, HloInstruction*>, bool>*
           result_cache);
 
+  // Computes the set of nodes that we do not want to fuse into any of their
+  // consumers based on a global analysis of the HLO graph.
+  HloInstructionSet ComputeGloballyUnfusible(
+      absl::Span<HloInstruction* const> post_order);
+
   // Used to determine if an HLO is expensive. Expensive operations will not be
   // duplicated.
   std::function<bool(const HloInstruction& instruction)> is_expensive_;
@@ -177,11 +171,6 @@ class InstructionFusion : public HloModulePass {
 
   // Configuration mode.
   FusionConfigCollection config_collection_mode_;
-
-  // Caches which operands are reused inside fusion computations.
-  absl::flat_hash_map<const HloInstruction*,
-                      absl::flat_hash_set<const HloInstruction*>>
-      reused_fusion_operands_;
 
   TF_DISALLOW_COPY_AND_ASSIGN(InstructionFusion);
 };

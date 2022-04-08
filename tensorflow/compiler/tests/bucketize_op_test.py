@@ -21,7 +21,6 @@ from __future__ import print_function
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import errors_impl
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
@@ -58,19 +57,18 @@ class BucketizationOpTest(xla_test.XLATestCase):
           expected_out, sess.run(op,
                                  {p: [[-5, 0, 2, 3, 5], [8, 10, 11, 12, 0]]}))
 
-  @test_util.disable_mlir_bridge("Error handling")
   def testInvalidBoundariesOrder(self):
     with self.session() as sess:
       p = array_ops.placeholder(dtypes.int32)
       with self.test_scope():
         op = math_ops._bucketize(p, boundaries=[0, 8, 3, 11])
-      with self.assertRaisesRegex(errors_impl.InvalidArgumentError,
-                                  "Expected sorted boundaries"):
+      with self.assertRaisesRegexp(errors_impl.InvalidArgumentError,
+                                   "Expected sorted boundaries"):
         sess.run(op, {p: [-5, 0]})
 
   def testBoundariesNotList(self):
     with self.session():
-      with self.assertRaisesRegex(TypeError, "Expected list.*"):
+      with self.assertRaisesRegexp(TypeError, "Expected list.*"):
         p = array_ops.placeholder(dtypes.int32)
         with self.test_scope():
           math_ops._bucketize(p, boundaries=0)

@@ -43,8 +43,6 @@ std::string ToString(DataType t);
 
 std::string ToCLDataType(DataType data_type, int vec_size = 1);
 
-std::string ToMetalDataType(DataType data_type, int vec_size = 1);
-
 }  // namespace gpu
 }  // namespace tflite
 

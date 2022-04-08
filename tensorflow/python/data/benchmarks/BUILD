@@ -7,26 +7,25 @@ package(
 
 exports_files(["LICENSE"])
 
-py_library(
-    name = "benchmark_base",
-    srcs = ["benchmark_base.py"],
-    srcs_version = "PY3",
+tf_py_test(
+    name = "meta_benchmark",
+    srcs = ["meta_benchmark.py"],
     deps = [
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:session",
+        "//tensorflow/python/data/experimental/ops:testing",
         "//tensorflow/python/data/ops:dataset_ops",
         "//third_party/py/numpy",
     ],
 )
 
-tf_py_test(
-    name = "meta_benchmark",
-    srcs = ["meta_benchmark.py"],
+py_library(
+    name = "benchmark_base",
+    srcs = ["benchmark_base.py"],
+    srcs_version = "PY2AND3",
     deps = [
-        ":benchmark_base",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python:session",
-        "//tensorflow/python/data/experimental/ops:testing",
         "//tensorflow/python/data/ops:dataset_ops",
         "//third_party/py/numpy",
     ],
@@ -80,15 +79,6 @@ tf_py_test(
 tf_py_test(
     name = "map_benchmark",
     srcs = ["map_benchmark.py"],
-    deps = [
-        ":benchmark_base",
-        "//tensorflow/python/data/ops:dataset_ops",
-    ],
-)
-
-tf_py_test(
-    name = "prefetch_benchmark",
-    srcs = ["prefetch_benchmark.py"],
     deps = [
         ":benchmark_base",
         "//tensorflow/python/data/ops:dataset_ops",

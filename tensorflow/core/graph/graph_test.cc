@@ -18,11 +18,10 @@ limitations under the License.
 #include <set>
 #include <unordered_map>
 #include <vector>
-
 #include "tensorflow/core/common_runtime/function.h"
-#include "tensorflow/core/common_runtime/graph_constructor.h"
 #include "tensorflow/core/framework/function_testlib.h"
 #include "tensorflow/core/graph/benchmark_testlib.h"
+#include "tensorflow/core/graph/graph_constructor.h"
 #include "tensorflow/core/graph/node_builder.h"
 #include "tensorflow/core/kernels/ops_util.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
@@ -661,9 +660,9 @@ TEST_F(GraphTest, BuildNodeNameIndex) {
   }
 }
 
-void BM_InEdgeIteration(::testing::benchmark::State& state) {
-  const int num_nodes = state.range(0);
-  const int num_edges_per_node = state.range(1);
+static void BM_InEdgeIteration(int iters, int num_nodes,
+                               int num_edges_per_node) {
+  testing::StopTiming();
   const GraphDef graph_def =
       test::CreateGraphDef(num_nodes, num_edges_per_node);
   Graph graph(OpRegistry::Global());
@@ -671,7 +670,8 @@ void BM_InEdgeIteration(::testing::benchmark::State& state) {
   TF_CHECK_OK(ConvertGraphDefToGraph(opts, graph_def, &graph));
 
   int64 sum = 0;
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     for (const Node* node : graph.nodes()) {
       for (auto e : node->in_edges()) {
         sum += e->id();
@@ -679,6 +679,7 @@ void BM_InEdgeIteration(::testing::benchmark::State& state) {
     }
   }
   VLOG(1) << sum;
+  testing::StopTiming();
 }
 BENCHMARK(BM_InEdgeIteration)->ArgPair(10, 2);
 BENCHMARK(BM_InEdgeIteration)->ArgPair(1 << 6, 2);
@@ -701,9 +702,8 @@ BENCHMARK(BM_InEdgeIteration)->ArgPair(1 << 9, 16);
 BENCHMARK(BM_InEdgeIteration)->ArgPair(1 << 12, 16);
 BENCHMARK(BM_InEdgeIteration)->ArgPair(1 << 15, 16);
 
-void BM_GraphCreation(::testing::benchmark::State& state) {
-  const int num_nodes = state.range(0);
-  const int num_edges_per_node = state.range(1);
+static void BM_GraphCreation(int iters, int num_nodes, int num_edges_per_node) {
+  testing::StopTiming();
   const GraphDef graph_def =
       test::CreateGraphDef(num_nodes, num_edges_per_node);
   const auto registry = OpRegistry::Global();
@@ -712,12 +712,14 @@ void BM_GraphCreation(::testing::benchmark::State& state) {
   Graph graph(registry);
   TF_CHECK_OK(ConvertGraphDefToGraph(opts, graph_def, &graph));
   int64 sum = 0;
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     Graph graph(registry);
     TF_CHECK_OK(ConvertGraphDefToGraph(opts, graph_def, &graph));
     sum += graph.num_node_ids();
   }
   VLOG(1) << sum;
+  testing::StopTiming();
 }
 BENCHMARK(BM_GraphCreation)->ArgPair(10, 2);
 BENCHMARK(BM_GraphCreation)->ArgPair(1 << 6, 2);
@@ -740,9 +742,8 @@ BENCHMARK(BM_GraphCreation)->ArgPair(1 << 9, 16);
 BENCHMARK(BM_GraphCreation)->ArgPair(1 << 12, 16);
 BENCHMARK(BM_GraphCreation)->ArgPair(1 << 15, 16);
 
-void BM_ToGraphDef(::testing::benchmark::State& state) {
-  const int num_nodes = state.range(0);
-  const int num_edges_per_node = state.range(1);
+static void BM_ToGraphDef(int iters, int num_nodes, int num_edges_per_node) {
+  testing::StopTiming();
   const GraphDef graph_def =
       test::CreateGraphDef(num_nodes, num_edges_per_node);
   const auto registry = OpRegistry::Global();
@@ -751,12 +752,14 @@ void BM_ToGraphDef(::testing::benchmark::State& state) {
   Graph graph(registry);
   TF_CHECK_OK(ConvertGraphDefToGraph(opts, graph_def, &graph));
   int64 sum = 0;
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     GraphDef graph_def;
     graph.ToGraphDef(&graph_def);
     sum += graph_def.node_size();
   }
   VLOG(1) << sum;
+  testing::StopTiming();
 }
 BENCHMARK(BM_ToGraphDef)->ArgPair(10, 2);
 BENCHMARK(BM_ToGraphDef)->ArgPair(1 << 6, 2);
@@ -779,21 +782,20 @@ BENCHMARK(BM_ToGraphDef)->ArgPair(1 << 9, 16);
 BENCHMARK(BM_ToGraphDef)->ArgPair(1 << 12, 16);
 BENCHMARK(BM_ToGraphDef)->ArgPair(1 << 15, 16);
 
-void BM_RemoveNode(::testing::benchmark::State& state) {
-  const int num_nodes = state.range(0);
-  const int num_edges_per_node = state.range(1);
+static void BM_RemoveNode(int iters, int num_nodes, int num_edges_per_node) {
+  testing::StopTiming();
   const GraphDef graph_def =
       test::CreateGraphDef(num_nodes, num_edges_per_node);
   const auto registry = OpRegistry::Global();
   GraphConstructorOptions opts;
-  for (auto s : state) {
-    state.PauseTiming();
+  for (int i = 0; i < iters; ++i) {
     Graph graph(registry);
     TF_CHECK_OK(ConvertGraphDefToGraph(opts, graph_def, &graph));
-    state.ResumeTiming();
+    testing::StartTiming();
     for (Node* n : graph.op_nodes()) {
       graph.RemoveNode(n);
     }
+    testing::StopTiming();
   }
 }
 BENCHMARK(BM_RemoveNode)->ArgPair(10, 2);

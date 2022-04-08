@@ -35,17 +35,21 @@ namespace {
 
 class PReLULinearAlpha : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    const auto& attr = absl::any_cast<const PReLUAttributes&>(ctx.op_attr);
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    auto output = ctx.graph->FindOutputs(ctx.node->id)[0];
+    auto attr =
+        absl::any_cast<const PReLUAttributes&>(ctx.node->operation.attributes);
     auto alpha = absl::get_if<Tensor<Linear, DataType::FLOAT32>>(&attr.alpha);
     if (!alpha) {
-      return absl::InvalidArgumentError("Alpha is missing");
+      return InvalidArgumentError("Alpha is missing");
     }
-    if (alpha->shape.v != ctx.output_shapes[0][3]) {
-      return absl::InvalidArgumentError(
+    if (alpha->shape.v != output->tensor.shape.c) {
+      return InvalidArgumentError(
           "Alpha shape does not match the number of channels.");
     }
+
+    auto shape = output->tensor.shape;
 
     *generated_code =
         attr.clip
@@ -67,10 +71,7 @@ class PReLULinearAlpha : public NodeShader {
                   // Declare workload explicitly because shader depends on
                   // gid.z.
                   /*workload=*/
-                  uint3(static_cast<int>(ctx.output_shapes[0][2]),
-                        static_cast<int>(ctx.output_shapes[0][1]),
-                        DivideRoundUp(static_cast<int>(ctx.output_shapes[0][3]),
-                                      4)),
+                  uint3(shape.w, shape.h, IntegralDivideRoundUp(shape.c, 4)),
                   /*workgroup=*/uint3(),
                   /*source_code=*/
                   "value_0 = max(value_0, 0.0) + $alpha[gid.z]$ * min(value_0, "
@@ -78,30 +79,31 @@ class PReLULinearAlpha : public NodeShader {
                   /*input=*/IOStructure::AUTO,
                   /*output=*/IOStructure::AUTO,
               };
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 
 class PReLUFull : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    const auto& attr = absl::any_cast<const PReLUAttributes&>(ctx.op_attr);
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    auto output = ctx.graph->FindOutputs(ctx.node->id)[0];
+    auto attr =
+        absl::any_cast<const PReLUAttributes&>(ctx.node->operation.attributes);
     auto alpha = absl::get_if<Tensor<HWC, DataType::FLOAT32>>(&attr.alpha);
     if (!alpha) {
-      return absl::InvalidArgumentError("Alpha is missing");
+      return InvalidArgumentError("Alpha is missing");
     }
-    if (alpha->shape.h != ctx.output_shapes[0][1] ||
-        alpha->shape.w != ctx.output_shapes[0][2] ||
-        alpha->shape.c != ctx.output_shapes[0][3]) {
-      return absl::InvalidArgumentError(
-          "Alpha shape does not match input shape.");
+    if (alpha->shape.h != output->tensor.shape.h ||
+        alpha->shape.w != output->tensor.shape.w ||
+        alpha->shape.c != output->tensor.shape.c) {
+      return InvalidArgumentError("Alpha shape does not match input shape.");
     }
 
+    auto shape = output->tensor.shape;
+
     ObjectSize obj_size =
-        uint3(static_cast<int>(ctx.output_shapes[0][2]),
-              static_cast<int>(ctx.output_shapes[0][1]),
-              DivideRoundUp(static_cast<int>(ctx.output_shapes[0][3]), 4));
+        uint3(shape.w, shape.h, IntegralDivideRoundUp(shape.c, 4));
 
     *generated_code =
         attr.clip
@@ -114,10 +116,7 @@ class PReLUFull : public NodeShader {
                   // Declare workload explicitly because shader
                   // depends on gid.z.
                   /*workload=*/
-                  uint3(static_cast<int>(ctx.output_shapes[0][2]),
-                        static_cast<int>(ctx.output_shapes[0][1]),
-                        DivideRoundUp(static_cast<int>(ctx.output_shapes[0][3]),
-                                      4)),
+                  uint3(shape.w, shape.h, IntegralDivideRoundUp(shape.c, 4)),
                   /*workgroup=*/uint3(),
                   /*source_code=*/
                   "value_0 = clamp(value_0, 0.0, $clip$) + "
@@ -134,10 +133,7 @@ class PReLUFull : public NodeShader {
                   // Declare workload explicitly because shader depends on
                   // gid.z.
                   /*workload=*/
-                  uint3(static_cast<int>(ctx.output_shapes[0][2]),
-                        static_cast<int>(ctx.output_shapes[0][1]),
-                        DivideRoundUp(static_cast<int>(ctx.output_shapes[0][3]),
-                                      4)),
+                  uint3(shape.w, shape.h, IntegralDivideRoundUp(shape.c, 4)),
                   /*workgroup=*/uint3(),
                   /*source_code=*/
                   "value_0 = max(value_0, 0.0) + $alpha[gid.x, gid.y, gid.z]$ "
@@ -145,16 +141,17 @@ class PReLUFull : public NodeShader {
                   /*input=*/IOStructure::AUTO,
                   /*output=*/IOStructure::AUTO,
               };
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 
 class PReLU : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    const auto& attr = absl::any_cast<const PReLUAttributes&>(ctx.op_attr);
-    auto* alpha = absl::get_if<Tensor<HWC, DataType::FLOAT32>>(&attr.alpha);
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    auto attr =
+        absl::any_cast<const PReLUAttributes&>(ctx.node->operation.attributes);
+    auto alpha = absl::get_if<Tensor<HWC, DataType::FLOAT32>>(&attr.alpha);
     return alpha ? full_.GenerateCode(ctx, generated_code)
                  : linear_.GenerateCode(ctx, generated_code);
   }

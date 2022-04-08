@@ -43,11 +43,7 @@ static const HloInstruction& InstrForConstantBufferAllocation(
 
 string SanitizeConstantName(const HloInstruction& instr) {
   CHECK_EQ(instr.opcode(), HloOpcode::kConstant);
-  return SanitizeConstantName(instr.name());
-}
-
-string SanitizeConstantName(absl::string_view name) {
-  std::string instr_name(name);
+  string instr_name = instr.name();
   for (char& c : instr_name) {
     // Having a hyphen or a dot in a global variable name can crash the LLVM PTX
     // backend.
@@ -58,21 +54,14 @@ string SanitizeConstantName(absl::string_view name) {
   return instr_name;
 }
 
-string ConstantHloToGlobalName(const HloInstruction& instr) {
-  return ConstantNameToGlobalName(instr.name());
-}
-
-string ConstantNameToGlobalName(absl::string_view name) {
-  // Check that names are sanitized and stored in the HLO instructions
-  // before constant buffer allocation.
-  DCHECK_EQ(name, SanitizeConstantName(name));
-  return absl::StrCat("buffer_for_", name);
-}
-
 string ConstantBufferAllocationToGlobalName(
     const BufferAllocation& allocation) {
-  return ConstantNameToGlobalName(
-      SanitizeConstantName(InstrForConstantBufferAllocation(allocation)));
+  const HloInstruction& instr = InstrForConstantBufferAllocation(allocation);
+  string instr_name = instr.name();
+  // Check that names are sanitized and stored in the HLO instructions
+  // before constant buffer allocation.
+  DCHECK_EQ(instr_name, SanitizeConstantName(instr));
+  return absl::StrCat("buffer_for_", instr_name);
 }
 
 const Literal& LiteralForConstantAllocation(

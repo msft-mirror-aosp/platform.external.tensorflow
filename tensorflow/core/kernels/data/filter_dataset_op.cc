@@ -75,11 +75,6 @@ class FilterDatasetOp::Dataset : public DatasetBase {
     return name_utils::DatasetDebugString(kDatasetType);
   }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    inputs->push_back(input_);
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override {
     TF_RETURN_IF_ERROR(captured_func_->CheckExternalState());
     return input_->CheckExternalState();
@@ -116,7 +111,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
 
     Status Initialize(IteratorContext* ctx) override {
       TF_RETURN_IF_ERROR(
-          dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
+          dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_));
       return dataset()->captured_func_->Instantiate(
           ctx, &instantiated_captured_func_);
     }
@@ -148,7 +143,7 @@ class FilterDatasetOp::Dataset : public DatasetBase {
 
         std::vector<Tensor> result;
         TF_RETURN_IF_ERROR(instantiated_captured_func_->RunWithBorrowedArgs(
-            ctx, *out_tensors, &result, model_node()));
+            ctx, *out_tensors, &result));
 
         if (result.size() != 1 || result[0].dtype() != DT_BOOL ||
             result[0].NumElements() != 1) {
@@ -199,13 +194,10 @@ class FilterDatasetOp::Dataset : public DatasetBase {
       return model::MakeUnknownRatioNode(std::move(args));
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
-      TF_RETURN_IF_ERROR(ctx->HandleCheckExternalStateStatus(
-          dataset()->captured_func_->CheckExternalState()));
+    Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       if (input_impl_)
-        TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
+        TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
       else
         TF_RETURN_IF_ERROR(
             writer->WriteScalar(full_name(kInputImplsEmpty), ""));
@@ -232,9 +224,9 @@ class FilterDatasetOp::Dataset : public DatasetBase {
 
    private:
     mutex mu_;
-    std::unique_ptr<IteratorBase> input_impl_ TF_GUARDED_BY(mu_);
-    int64 filtered_elements_ TF_GUARDED_BY(mu_);
-    int64 dropped_elements_ TF_GUARDED_BY(mu_);
+    std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
+    int64 filtered_elements_ GUARDED_BY(mu_);
+    int64 dropped_elements_ GUARDED_BY(mu_);
     std::unique_ptr<InstantiatedCapturedFunction> instantiated_captured_func_;
   };
 
@@ -244,8 +236,10 @@ class FilterDatasetOp::Dataset : public DatasetBase {
 
 FilterDatasetOp::FilterDatasetOp(OpKernelConstruction* ctx)
     : UnaryDatasetOpKernel(ctx) {
-  OP_REQUIRES_OK(ctx, FunctionMetadata::Create(ctx, kPredicate, /*params=*/{},
-                                               &func_metadata_));
+  FunctionMetadata::Params params;
+  params.is_multi_device_function = true;
+  OP_REQUIRES_OK(
+      ctx, FunctionMetadata::Create(ctx, kPredicate, params, &func_metadata_));
   OP_REQUIRES(ctx, func_metadata_->short_circuit_info().indices.size() <= 1,
               errors::InvalidArgument(
                   "predicate function has more than one return value."));

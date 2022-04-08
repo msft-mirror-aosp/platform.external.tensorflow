@@ -43,6 +43,7 @@ filegroup(
     name = "java_resources",
     srcs = [":version-info"],
     visibility = [
+        "//tensorflow/contrib/android:__pkg__",
         "//tensorflow/java:__pkg__",
     ],
 )
@@ -292,9 +293,6 @@ tf_java_test(
     size = "small",
     srcs = ["src/test/java/org/tensorflow/TensorTest.java"],
     javacopts = JAVACOPTS,
-    tags = [
-        "noasan",  # TODO(b/177573611): enable after this is fixed.
-    ],
     test_class = "org.tensorflow.TensorTest",
     deps = [
         ":tensorflow",

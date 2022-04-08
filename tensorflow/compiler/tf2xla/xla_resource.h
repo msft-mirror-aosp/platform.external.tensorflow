@@ -135,8 +135,6 @@ class XlaResource {
   Status SetFromPack(const std::set<string>& gradient_sources,
                      const xla::XlaOp& pack, xla::XlaBuilder* builder);
 
-  bool IsOverwritten() { return is_overwritten_; }
-
   // TensorArray and Stack specific fields
   // TODO(phawkins): refactor this code to use subclasses, rather than putting
   // kind-specific fields in XlaResource.
@@ -181,7 +179,6 @@ class XlaResource {
   bool tensor_array_multiple_writes_aggregate_ = false;
 
   std::map<string, std::unique_ptr<XlaResource>> tensor_array_gradients_;
-  bool is_overwritten_ = false;
 };
 
 }  // namespace tensorflow

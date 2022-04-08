@@ -1,13 +1,12 @@
-// RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -o - | flatbuffer_to_string - | FileCheck %s
+// RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -o - | flatbuffer_to_string - | FileCheck --dump-input-on-failure %s
 
 func @main(tensor<40x37xf32>, tensor<40x37xf32>) -> tensor<40x40xf32> {
 ^bb0(%arg0: tensor<40x37xf32>, %arg1: tensor<40x37xf32>):
   // CHECK:      {
   // CHECK-NEXT:  version: 3,
   // CHECK-NEXT:  operator_codes: [ {
-  // CHECK-NEXT:    deprecated_builtin_code: 9,
-  // CHECK-NEXT:    version: 2,
-  // CHECK-NEXT:    builtin_code: FULLY_CONNECTED
+  // CHECK-NEXT:    builtin_code: FULLY_CONNECTED,
+  // CHECK-NEXT:    version: 2
   // CHECK-NEXT:  } ],
   // CHECK-NEXT:  subgraphs: [ {
   // CHECK-NEXT:    tensors: [ {
@@ -62,14 +61,7 @@ func @main(tensor<40x37xf32>, tensor<40x37xf32>) -> tensor<40x40xf32> {
   // CHECK-EMPTY:
   // CHECK-NEXT:  }, {
   // CHECK-EMPTY:
-  // CHECK-NEXT:  }, {
-  // CHECK-NEXT:  data: [ 49, 46, 49, 48, 46, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
-  // CHECK-NEXT:  } ],
-  // CHECK-NEXT:  metadata: [ {
-  // CHECK-NEXT:  name: "min_runtime_version",
-  // CHECK-NEXT:  buffer: 5
   // CHECK-NEXT:  } ]
-  // CHECK-NEXT:  signature_defs: [ ]
   // CHECK-NEXT:}
 
   %cst = constant unit

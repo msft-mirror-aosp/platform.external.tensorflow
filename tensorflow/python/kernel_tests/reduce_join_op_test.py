@@ -303,15 +303,17 @@ class ReduceJoinTest(UnicodeTestCase):
   @test_util.run_deprecated_v1
   def testInvalidReductionIndices(self):
     with self.cached_session():
-      with self.assertRaisesRegex(ValueError, "Invalid reduction dim"):
+      with self.assertRaisesRegexp(ValueError, "Invalid reduction dim"):
         string_ops.reduce_join(inputs="", axis=0)
-      with self.assertRaisesRegex(ValueError, "Invalid reduction dimension -3"):
+      with self.assertRaisesRegexp(ValueError,
+                                   "Invalid reduction dimension -3"):
         string_ops.reduce_join(inputs=[[""]], axis=-3)
-      with self.assertRaisesRegex(ValueError, "Invalid reduction dimension 2"):
+      with self.assertRaisesRegexp(ValueError, "Invalid reduction dimension 2"):
         string_ops.reduce_join(inputs=[[""]], axis=2)
-      with self.assertRaisesRegex(ValueError, "Invalid reduction dimension -3"):
+      with self.assertRaisesRegexp(ValueError,
+                                   "Invalid reduction dimension -3"):
         string_ops.reduce_join(inputs=[[""]], axis=[0, -3])
-      with self.assertRaisesRegex(ValueError, "Invalid reduction dimension 2"):
+      with self.assertRaisesRegexp(ValueError, "Invalid reduction dimension 2"):
         string_ops.reduce_join(inputs=[[""]], axis=[0, 2])
 
   def testZeroDims(self):

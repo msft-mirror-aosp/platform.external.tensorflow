@@ -20,7 +20,7 @@ limitations under the License.
 #define EIGEN_USE_THREADS
 
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#include "tensorflow/core/util/cuda_sparse.h"
+#include "tensorflow/core/kernels/cuda_sparse.h"
 #define EIGEN_USE_GPU
 #endif
 
@@ -262,7 +262,11 @@ struct CSRSparseMatrixTransposeComponent<GPUDevice, T> {
     TF_RETURN_IF_ERROR(ValidateTransposeInputs(x, *y));
     GpuSparse cuda_sparse(ctx);
     TF_RETURN_IF_ERROR(cuda_sparse.Initialize());
-    const gpusparseAction_t copyValues = GPUSPARSE(ACTION_NUMERIC);
+#if GOOGLE_CUDA
+    const gpusparseAction_t copyValues = CUSPARSE_ACTION_NUMERIC;
+#elif TENSORFLOW_USE_ROCM
+    const gpusparseAction_t copyValues = HIPSPARSE_ACTION_NUMERIC;
+#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
     const int rank = x.dense_shape_host.size();
     const int m = x.row_ptr.size() - 1;
     const int n = x.dense_shape_host(rank - 1);

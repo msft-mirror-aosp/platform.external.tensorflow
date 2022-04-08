@@ -16,7 +16,6 @@ limitations under the License.
 #include <memory>
 
 #include "tensorflow/compiler/xla/service/cpu/cpu_compiler.h"
-#include "tensorflow/compiler/xla/service/cpu/test_target_triple_helper.h"
 #include "tensorflow/compiler/xla/service/cpu/tests/cpu_codegen_test.h"
 
 namespace xla {
@@ -47,36 +46,7 @@ CHECK: private unnamed_addr constant [48 x i8]
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo_text));
 
   CpuAotCompilationOptions options{
-      /*triple=*/kTargetTripleForHost, /*cpu_name=*/kTargetCpuForHost,
-      /*features=*/"",
-      /*entry_point_name=*/"entry",
-      /*relocation_model=*/CpuAotCompilationOptions::RelocationModel::Static};
-
-  CompileAheadOfTimeAndVerifyIr(std::move(module), options, filecheck_pattern,
-                                /*match_optimized_ir=*/false);
-}
-
-TEST_F(CpuOutfeedTest, OutfeedEmpty) {
-  const string hlo_text = R"(
-HloModule Outfeed
-
-ENTRY main {
-  const_a = f32[2,0] constant({{}, {}})
-  token0 = token[] after-all()
-  outfeed = token[] outfeed(f32[2,0] const_a, token0)
-  ROOT root = () tuple()
-}
-)";
-
-  string filecheck_pattern = R"(
-CHECK: private unnamed_addr constant [0 x i8]
-)";
-
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo_text));
-
-  CpuAotCompilationOptions options{
-      /*triple=*/kTargetTripleForHost, /*cpu_name=*/kTargetCpuForHost,
-      /*features=*/"",
+      /*triple=*/"x86_64-pc-linux", /*cpu_name=*/"", /*features=*/"",
       /*entry_point_name=*/"entry",
       /*relocation_model=*/CpuAotCompilationOptions::RelocationModel::Static};
 
@@ -103,8 +73,7 @@ CHECK: Outfeed
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(hlo_text));
 
   CpuAotCompilationOptions options{
-      /*triple=*/kTargetTripleForHost, /*cpu_name=*/kTargetCpuForHost,
-      /*features=*/"",
+      /*triple=*/"x86_64-pc-linux", /*cpu_name=*/"", /*features=*/"",
       /*entry_point_name=*/"entry",
       /*relocation_model=*/CpuAotCompilationOptions::RelocationModel::Static};
 

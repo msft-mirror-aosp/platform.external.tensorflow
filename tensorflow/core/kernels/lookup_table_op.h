@@ -66,7 +66,7 @@ class LookupTableOp : public OpKernel {
 
     auto creator =
         [ctx, this](lookup::LookupInterface** ret)
-            TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+            EXCLUSIVE_LOCKS_REQUIRED(mu_) {
               lookup::LookupInterface* container = new Container(ctx, this);
               if (!ctx->status().ok()) {
                 container->Unref();
@@ -124,8 +124,8 @@ class LookupTableOp : public OpKernel {
 
  private:
   mutex mu_;
-  PersistentTensor table_handle_ TF_GUARDED_BY(mu_);
-  bool table_handle_set_ TF_GUARDED_BY(mu_);
+  PersistentTensor table_handle_ GUARDED_BY(mu_);
+  bool table_handle_set_ GUARDED_BY(mu_);
   ContainerInfo cinfo_;
   bool use_node_name_sharing_;
 
@@ -221,9 +221,7 @@ class HashTable : public InitializableLookupTable {
     if (is_initialized()) {
       return errors::Aborted("HashTable already initialized.");
     }
-    if (size > 0) {
-      table_.reserve(size);
-    }
+    table_.reserve(size);
     return Status::OK();
   };
 

@@ -2,17 +2,11 @@
 #   Contains the Keras datasets package (internal TensorFlow version).
 
 package(
-    default_visibility = [
-        "//tensorflow/python/keras:__subpackages__",
-    ],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "all_py_srcs",
-    srcs = glob(["*.py"]),
-    visibility = ["//tensorflow/python/keras/google/private_tf_api_test:__pkg__"],
-)
+exports_files(["LICENSE"])
 
 py_library(
     name = "datasets",
@@ -27,7 +21,7 @@ py_library(
         "mnist.py",
         "reuters.py",
     ],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/python:platform",

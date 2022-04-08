@@ -14,10 +14,20 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/acceleration_test_util.h"
 
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <cctype>
+#include <cstring>
+#include <set>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 
-#include <gtest/gtest.h>
+#include "tensorflow/lite/kernels/acceleration_test_util_internal.h"
+#include "tensorflow/lite/minimal_logging.h"
 
 namespace tflite {
 

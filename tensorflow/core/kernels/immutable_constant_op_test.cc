@@ -60,12 +60,8 @@ class TestReadOnlyMemoryRegion : public ReadOnlyMemoryRegion {
 class TestFileSystem : public NullFileSystem {
  public:
   ~TestFileSystem() override = default;
-
-  // import non-transactional method from the base class
-  using NullFileSystem::NewReadOnlyMemoryRegionFromFile;
-
   Status NewReadOnlyMemoryRegionFromFile(
-      const string& fname, TransactionToken* token,
+      const string& fname,
       std::unique_ptr<ReadOnlyMemoryRegion>* result) override {
     float val = 0;
     StringPiece scheme, host, path;

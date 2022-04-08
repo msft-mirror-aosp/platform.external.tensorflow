@@ -1,6 +1,8 @@
-exports_files([
-    "configure",
-    "configure.py",
-    "ACKNOWLEDGEMENTS",
-    "LICENSE",
-])
+exports_files(
+    [
+        "LICENSE",
+        "ACKNOWLEDGEMENTS",
+        "configure",
+        "configure.py",
+    ],
+)

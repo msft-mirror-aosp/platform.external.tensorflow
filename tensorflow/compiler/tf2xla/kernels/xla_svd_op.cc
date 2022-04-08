@@ -81,10 +81,8 @@ class SvdOp : public XlaOpKernel {
       ctx->SetOutput(1, result.u);
       ctx->SetOutput(2, result.v);
     } else {
-      auto shape =
-          xla::ShapeUtil::MakeShape(ctx->input_xla_type(0), /*dimensions=*/{0});
-      ctx->SetOutput(1, xla::Zeros(ctx->builder(), shape));
-      ctx->SetOutput(2, xla::Zeros(ctx->builder(), shape));
+      ctx->SetOutput(1, xla::ScalarLike(ctx->Input(0), 0.0));
+      ctx->SetOutput(2, xla::ScalarLike(ctx->Input(0), 0.0));
     }
   }
 

@@ -28,8 +28,8 @@ namespace {
 // Benchmark to simulate the overhead in training and serving workloads from too
 // many threads grabbing the ResourceMgr lock at the same time because of the
 // variable and queue ops.
-void ManyManyVariablesHelper(int threads, int variables,
-                             ::testing::benchmark::State& state) {
+void ManyManyVariablesHelper(int threads, int variables, int iters) {
+  testing::StopTiming();
   Graph g(OpRegistry::Global());
   std::vector<string> targets;
   for (int i = 0; i < variables; ++i) {
@@ -50,16 +50,16 @@ void ManyManyVariablesHelper(int threads, int variables,
   Session* sess = NewSession(opts);
   TF_CHECK_OK(sess->Create(gd));
   TF_CHECK_OK(sess->Run({}, {}, targets, nullptr));
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     TF_CHECK_OK(sess->Run({}, {}, targets, nullptr));
   }
+  testing::StopTiming();
   delete sess;
 }
 
-void BM_ManyManyVariablesManyThreads(::testing::benchmark::State& state) {
-  const int threads = state.range(0);
-
-  ManyManyVariablesHelper(threads, 1000, state);
+void BM_ManyManyVariablesManyThreads(int iters, int threads) {
+  ManyManyVariablesHelper(threads, 1000, iters);
 }
 
 BENCHMARK(BM_ManyManyVariablesManyThreads)->Arg(50);

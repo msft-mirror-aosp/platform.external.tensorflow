@@ -37,7 +37,7 @@ from tensorflow.python.util.tf_export import keras_export
 class _CuDNNRNN(RNN):
   """Private base class for CuDNNGRU and CuDNNLSTM layers.
 
-  Args:
+  Arguments:
     return_sequences: Boolean. Whether to return the last output
         in the output sequence, or the full sequence.
     return_state: Boolean. Whether to return the last state
@@ -110,10 +110,9 @@ class _CuDNNRNN(RNN):
     output, states = self._process_batch(inputs, initial_state)
 
     if self.stateful:
-      updates = [
-          state_ops.assign(self_state, state)
-          for self_state, state in zip(self.states, states)
-      ]
+      updates = []
+      for i in range(len(states)):
+        updates.append(state_ops.assign(self.states[i], states[i]))
       self.add_update(updates)
 
     if self.return_state:
@@ -166,7 +165,7 @@ class CuDNNGRU(_CuDNNRNN):
   developer website](https://developer.nvidia.com/cudnn).
   Can only be run on GPU.
 
-  Args:
+  Arguments:
       units: Positive integer, dimensionality of the output space.
       kernel_initializer: Initializer for the `kernel` weights matrix, used for
         the linear transformation of the inputs.
@@ -303,7 +302,7 @@ class CuDNNGRU(_CuDNNRNN):
         'rnn_mode': 'gru',
     }
 
-    outputs, h, _, _, _ = gen_cudnn_rnn_ops.CudnnRNNV2(**args)
+    outputs, h, _, _, _ = gen_cudnn_rnn_ops.cudnn_rnnv2(**args)
 
     if self.stateful or self.return_state:
       h = h[0]
@@ -346,7 +345,7 @@ class CuDNNLSTM(_CuDNNRNN):
   developer website](https://developer.nvidia.com/cudnn).
   Can only be run on GPU.
 
-  Args:
+  Arguments:
       units: Positive integer, dimensionality of the output space.
       kernel_initializer: Initializer for the `kernel` weights matrix, used for
         the linear transformation of the inputs.
@@ -504,7 +503,7 @@ class CuDNNLSTM(_CuDNNRNN):
         'is_training': True,
     }
 
-    outputs, h, c, _, _ = gen_cudnn_rnn_ops.CudnnRNNV2(**args)
+    outputs, h, c, _, _ = gen_cudnn_rnn_ops.cudnn_rnnv2(**args)
 
     if self.stateful or self.return_state:
       h = h[0]

@@ -14,11 +14,11 @@ limitations under the License.
 ==============================================================================*/
 
 #include "absl/base/internal/sysinfo.h"
+
 #include "tensorflow/core/platform/cpu_info.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/mem.h"
 #include "tensorflow/core/platform/numa.h"
-#include "tensorflow/core/platform/profile_utils/cpu_utils.h"
 #include "tensorflow/core/platform/snappy.h"
 #include "tensorflow/core/platform/types.h"
 
@@ -46,7 +46,7 @@ limitations under the License.
 #endif
 
 #if TENSORFLOW_USE_NUMA
-#include "hwloc.h"  // from @hwloc
+#include "hwloc.h"  // TF:hwloc
 #endif
 
 namespace tensorflow {
@@ -59,14 +59,6 @@ string Hostname() {
   gethostname(hostname, sizeof hostname);
   hostname[sizeof hostname - 1] = 0;
   return string(hostname);
-}
-
-string JobName() {
-  const char* job_name_cs = std::getenv("TF_JOB_NAME");
-  if (job_name_cs != nullptr) {
-    return string(job_name_cs);
-  }
-  return "";
 }
 
 int NumSchedulableCPUs() {
@@ -340,38 +332,21 @@ bool Snappy_Uncompress(const char* input, size_t length, char* output) {
 #endif
 }
 
-bool Snappy_UncompressToIOVec(const char* compressed, size_t compressed_length,
-                              const struct iovec* iov, size_t iov_cnt) {
-#ifdef TF_USE_SNAPPY
-  return snappy::RawUncompressToIOVec(compressed, compressed_length, iov,
-                                      iov_cnt);
-#else
-  return false;
-#endif
-}
-
 string Demangle(const char* mangled) { return mangled; }
 
 double NominalCPUFrequency() {
-  return tensorflow::profile_utils::CpuUtils::GetCycleCounterFrequency();
+  return absl::base_internal::NominalCPUFrequency();
 }
 
-MemoryInfo GetMemoryInfo() {
-  MemoryInfo mem_info = {INT64_MAX, INT64_MAX};
+int64 AvailableRam() {
 #if defined(__linux__) && !defined(__ANDROID__)
   struct sysinfo info;
   int err = sysinfo(&info);
   if (err == 0) {
-    mem_info.free = info.freeram;
-    mem_info.total = info.totalram;
+    return info.freeram;
   }
 #endif
-  return mem_info;
-}
-
-MemoryBandwidthInfo GetMemoryBandwidthInfo() {
-  MemoryBandwidthInfo membw_info = {INT64_MAX};
-  return membw_info;
+  return INT64_MAX;
 }
 
 }  // namespace port

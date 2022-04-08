@@ -20,7 +20,6 @@ limitations under the License.
 #include <vector>
 
 #include "absl/synchronization/notification.h"
-#include "tensorflow/compiler/jit/flags.h"
 #include "tensorflow/compiler/tf2xla/xla_op_registry.h"
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/common_runtime/device_factory.h"
@@ -43,11 +42,6 @@ limitations under the License.
 
 namespace tensorflow {
 namespace {
-
-static bool Initialized = [] {
-  tensorflow::GetXlaDeviceFlags()->tf_xla_enable_xla_devices = true;
-  return true;
-}();
 
 class UnaryOpsCompositionTest : public OpsTestBase {
  protected:
@@ -88,8 +82,9 @@ class UnaryOpsCompositionTest : public OpsTestBase {
     DeviceContext* device_context =
         device_->tensorflow_gpu_device_info()->default_context;
 
-    TF_CHECK_OK(device_context->CopyCPUTensorToDeviceSync(&input_on_host,
-                                                          device_, input));
+    TF_CHECK_OK(BlockingCopy([&](StatusCallback cb) {
+      device_context->CopyCPUTensorToDevice(&input_on_host, device_, input, cb);
+    }));
 
     TF_ASSERT_OK(RunOpKernel());
 
@@ -99,11 +94,26 @@ class UnaryOpsCompositionTest : public OpsTestBase {
     Tensor* output = GetOutput(0);
     Tensor output_on_host(cpu_allocator, output->dtype(), output->shape());
 
-    TF_CHECK_OK(device_context->CopyDeviceTensorToCPUSync(
-        output, "output 0", device_, &output_on_host));
+    TF_CHECK_OK(BlockingCopy([&](StatusCallback cb) {
+      device_context->CopyDeviceTensorToCPU(output, "output 0", device_,
+                                            &output_on_host, cb);
+    }));
 
     test::ExpectClose(expected_tensor, output_on_host, /*atol=*/1e-5,
                       /*rtol=*/1e-5);
+  }
+
+ private:
+  template <typename CopyFnTy>
+  Status BlockingCopy(CopyFnTy copy_fn) {
+    Notification n;
+    Status status;
+    copy_fn([&](Status s) {
+      status = s;
+      n.Notify();
+    });
+    n.WaitForNotification();
+    return status;
   }
 };
 

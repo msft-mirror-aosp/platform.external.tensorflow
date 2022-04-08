@@ -151,7 +151,7 @@ Status RendezvousInterface::Recv(const ParsedKey& key, const Args& args,
 namespace {
 class LocalRendezvousWrapper : public Rendezvous {
  public:
-  LocalRendezvousWrapper() : impl_(this) {}
+  LocalRendezvousWrapper() = default;
 
   Status Send(const ParsedKey& key, const Args& send_args, const Tensor& val,
               const bool is_dead) override {

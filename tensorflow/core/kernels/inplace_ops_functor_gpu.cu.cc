@@ -197,8 +197,6 @@ Status DoCopy(const Device& d, const Tensor& x, Tensor* y) {
     CASE(float)
     CASE(double)
     CASE(Eigen::half)
-    CASE(complex64)
-    CASE(complex128)
     CASE(int64)
 #undef CASE
     default:

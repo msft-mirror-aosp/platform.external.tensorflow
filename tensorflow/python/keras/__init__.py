@@ -21,13 +21,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-# pylint: disable=unused-import
 from tensorflow.python import tf2
-from tensorflow.python.keras import distribute
 
 # See b/110718070#comment18 for more details about this import.
 from tensorflow.python.keras import models
-
 
 from tensorflow.python.keras.engine.input_layer import Input
 from tensorflow.python.keras.engine.sequential import Sequential
@@ -35,6 +32,13 @@ from tensorflow.python.keras.engine.training import Model
 
 from tensorflow.python.util.tf_export import keras_export
 
-__version__ = '2.5.0'
+if tf2.enabled():
+  __version__ = '2.3.0-tf'
+else:
+  __version__ = '2.2.4-tf'
 
 keras_export('keras.__version__').export_constant(__name__, '__version__')
+
+del absolute_import
+del division
+del print_function

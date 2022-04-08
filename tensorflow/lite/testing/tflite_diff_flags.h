@@ -36,7 +36,6 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
     string output_layer;
     int32_t num_runs_per_pass = 100;
     string delegate_name;
-    string reference_tflite_model;
   } values;
 
   std::string delegate_name;
@@ -62,10 +61,6 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
       tensorflow::Flag("delegate", &values.delegate_name,
                        "[optional] Delegate to use for executing ops. Must be "
                        "`{\"\", NNAPI, GPU, FLEX}`"),
-      tensorflow::Flag("reference_tflite_model", &values.reference_tflite_model,
-                       "[optional] Path of the TensorFlow Lite model to "
-                       "compare inference results against the model given in "
-                       "`tflite_model`."),
   };
 
   bool no_inputs = *argc == 1;
@@ -101,8 +96,7 @@ DiffOptions ParseTfliteDiffFlags(int* argc, char** argv) {
           Split<string>(values.input_layer_shape, ":"),
           Split<string>(values.output_layer, ","),
           values.num_runs_per_pass,
-          delegate,
-          values.reference_tflite_model};
+          delegate};
 }
 
 }  // namespace testing

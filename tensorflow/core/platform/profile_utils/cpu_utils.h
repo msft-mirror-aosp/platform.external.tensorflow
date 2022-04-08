@@ -109,12 +109,6 @@ class CpuUtils {
         "\tbne     0b           \n"
         : "=r"(upper), "=r"(lower), "=r"(tmp));
     return ((static_cast<uint64>(upper) << 32) | lower);
-#elif defined(__s390x__)
-    // TOD Clock of s390x runs at a different frequency than the CPU's.
-    // The stepping is 244 picoseconds (~4Ghz).
-    uint64 t;
-    __asm__ __volatile__("stckf %0" : "=Q"(t));
-    return t;
 #else
     // TODO(satok): Support generic way to emulate clock count.
     // TODO(satok): Support other architectures if wanted.
@@ -144,10 +138,9 @@ class CpuUtils {
   // clock cycle counters from overflowing on some platforms.
   static void ResetClockCycle();
 
-  // Enable/Disable clock cycle profile
+  // Enable clock cycle profile
   // You can enable / disable profile if it's supported by the platform
-  static void EnableClockCycleProfiling();
-  static void DisableClockCycleProfiling();
+  static void EnableClockCycleProfiling(bool enable);
 
   // Return chrono::duration per each clock
   static std::chrono::duration<double> ConvertClockCycleToTime(
@@ -159,8 +152,7 @@ class CpuUtils {
     DefaultCpuUtilsHelper() = default;
     void ResetClockCycle() final {}
     uint64 GetCurrentClockCycle() final { return DUMMY_CYCLE_CLOCK; }
-    void EnableClockCycleProfiling() final {}
-    void DisableClockCycleProfiling() final {}
+    void EnableClockCycleProfiling(bool /* enable */) final {}
     int64 CalculateCpuFrequency() final { return INVALID_FREQUENCY; }
 
    private:
@@ -168,7 +160,7 @@ class CpuUtils {
   };
 
   // Return cpu frequency.
-  // CAVEAT: as this method calls system call and parse the message,
+  // CAVEAT: as this method calls system call and parse the mssage,
   // this call may be slow. This is why this class caches the value by
   // StaticVariableInitializer.
   static int64 GetCycleCounterFrequencyImpl();

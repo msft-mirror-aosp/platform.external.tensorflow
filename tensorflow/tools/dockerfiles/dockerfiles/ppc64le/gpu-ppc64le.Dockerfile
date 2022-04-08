@@ -22,17 +22,17 @@
 ARG UBUNTU_VERSION=18.04
 
 ARG ARCH=
-ARG CUDA=11.0
+ARG CUDA=10.1
 FROM nvidia/cuda${ARCH:+-$ARCH}:${CUDA}-base-ubuntu${UBUNTU_VERSION} as base
 # ARCH and CUDA are specified again because the FROM directive resets ARGs
 # (but their default value is retained if set previously)
 ARG ARCH
 ARG CUDA
-ARG CUDNN=8.0.4.30-1
-ARG CUDNN_MAJOR_VERSION=8
+ARG CUDNN=7.6.4.38-1
+ARG CUDNN_MAJOR_VERSION=7
 ARG LIB_DIR_PREFIX=x86_64
-ARG LIBNVINFER=7.1.3-1
-ARG LIBNVINFER_MAJOR_VERSION=7
+ARG LIBNVINFER=6.0.1-1
+ARG LIBNVINFER_MAJOR_VERSION=6
 
 # Needed for string substitution
 SHELL ["/bin/bash", "-c"]
@@ -40,14 +40,17 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         cuda-command-line-tools-${CUDA/./-} \
-        libcublas-${CUDA/./-} \
+        # There appears to be a regression in libcublas10=10.2.2.89-1 which
+        # prevents cublas from initializing in TF. See
+        # https://github.com/tensorflow/tensorflow/issues/9489#issuecomment-562394257
+        libcublas10=10.2.1.243-1 \ 
         cuda-nvrtc-${CUDA/./-} \
-        libcufft-${CUDA/./-} \
-        libcurand-${CUDA/./-} \
-        libcusolver-${CUDA/./-} \
-        libcusparse-${CUDA/./-} \
+        cuda-cufft-${CUDA/./-} \
+        cuda-curand-${CUDA/./-} \
+        cuda-cusolver-${CUDA/./-} \
+        cuda-cusparse-${CUDA/./-} \
         curl \
-        libcudnn8=${CUDNN}+cuda${CUDA} \
+        libcudnn7=${CUDNN}+cuda${CUDA} \
         libfreetype6-dev \
         libhdf5-serial-dev \
         libzmq3-dev \
@@ -71,19 +74,25 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
     && echo "/usr/local/cuda/lib64/stubs" > /etc/ld.so.conf.d/z-cuda-stubs.conf \
     && ldconfig
 
+ARG USE_PYTHON_3_NOT_2
+# TODO(angerson) Completely remove Python 2 support
+ARG _PY_SUFFIX=${USE_PYTHON_3_NOT_2:+3}
+ARG PYTHON=python${_PY_SUFFIX}
+ARG PIP=pip${_PY_SUFFIX}
+
 # See http://bugs.python.org/issue19846
 ENV LANG C.UTF-8
 
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip
+    ${PYTHON} \
+    ${PYTHON}-pip
 
-RUN python3 -m pip --no-cache-dir install --upgrade \
-    "pip<20.3" \
+RUN ${PIP} --no-cache-dir install --upgrade \
+    pip \
     setuptools
 
 # Some TF tools expect a "python" binary
-RUN ln -s $(which python3) /usr/local/bin/python
+RUN ln -s $(which ${PYTHON}) /usr/local/bin/python
 
 # Options:
 #   tensorflow
@@ -92,7 +101,7 @@ RUN ln -s $(which python3) /usr/local/bin/python
 #   tf-nightly-gpu
 ARG TF_PACKAGE=tensorflow
 RUN apt-get update && apt-get install -y curl libhdf5-dev wget
-RUN python3 -m pip install --no-cache-dir --global-option=build_ext \
+RUN ${PIP} install --global-option=build_ext \
             --global-option=-I/usr/include/hdf5/serial/ \
             --global-option=-L/usr/lib/powerpc64le-linux-gnu/hdf5/serial \
             h5py
@@ -108,11 +117,11 @@ RUN if [ ${TF_PACKAGE} = tensorflow-gpu ]; then \
     elif [ ${TF_PACKAGE} = tf-nightly ]; then \
         BASE=https://powerci.osuosl.org/job/TensorFlow_PPC64LE_CPU_Nightly_Artifact/lastSuccessfulBuild/; \
     fi; \
-    MAJOR=`python3 -c 'import sys; print(sys.version_info[0])'`; \
-    MINOR=`python3 -c 'import sys; print(sys.version_info[1])'`; \
+    MAJOR=`${PYTHON} -c 'import sys; print(sys.version_info[0])'`; \
+    MINOR=`${PYTHON} -c 'import sys; print(sys.version_info[1])'`; \
     PACKAGE=$(wget -qO- ${BASE}"api/xml?xpath=//fileName&wrapper=artifacts" | grep -o "[^<>]*cp${MAJOR}${MINOR}[^<>]*.whl"); \
     wget ${BASE}"artifact/tensorflow_pkg/"${PACKAGE}; \
-    python3 -m pip install --no-cache-dir ${PACKAGE}
+    ${PIP} install ${PACKAGE}
 
 COPY bashrc /etc/bash.bashrc
 RUN chmod a+rwx /etc/bash.bashrc

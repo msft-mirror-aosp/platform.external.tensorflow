@@ -650,12 +650,6 @@ Tensor::Tensor(DataType type, const TensorShape& shape, TensorBuffer* buf)
   RefIfNonNull(buf);
 }
 
-Tensor::Tensor(DataType type, const TensorShape& shape,
-               core::RefCountPtr<TensorBuffer> buf)
-    : shape_(shape), buf_(buf.release()) {
-  set_dtype(type);
-}
-
 bool Tensor::IsInitialized() const {
   return (buf_ != nullptr && buf_->data() != nullptr) ||
          shape_.num_elements() == 0;
@@ -680,6 +674,20 @@ void Tensor::CheckIsAlignedAndSingleElement() const {
 }
 
 Tensor::~Tensor() { UnrefIfNonNull(buf_); }
+
+void Tensor::CopyFromInternal(const Tensor& other, const TensorShape& shape) {
+  CHECK_EQ(shape.num_elements(), other.NumElements());
+  // Data type will be overwritten if this == &other, since dtype is part of
+  // shape.
+  DataType other_dtype = other.dtype();
+  shape_ = shape;
+  set_dtype(other_dtype);
+  if (buf_ != other.buf_) {
+    UnrefIfNonNull(buf_);
+    buf_ = other.buf_;
+    RefIfNonNull(buf_);
+  }
+}
 
 Status Tensor::BitcastFrom(const Tensor& other, DataType dtype,
                            const TensorShape& shape) {
@@ -757,9 +765,8 @@ bool Tensor::RefCountIsOne() const {
   }
 
 #define CASES(TYPE_ENUM, STMTS)                                      \
-  CASES_WITH_DEFAULT(TYPE_ENUM, STMTS,                               \
-                     LOG(FATAL) << "Unexpected type: " << TYPE_ENUM; \
-                     , LOG(FATAL) << "Type not set";)
+  CASES_WITH_DEFAULT(TYPE_ENUM, STMTS, LOG(FATAL) << "Type not set"; \
+                     , LOG(FATAL) << "Unexpected type: " << TYPE_ENUM;)
 
 Tensor::Tensor(Allocator* a, DataType type, const TensorShape& shape)
     : shape_(shape), buf_(nullptr) {
@@ -999,9 +1006,9 @@ inline const strings::AlphaNum& PrintOneElement(const strings::AlphaNum& a,
 }
 inline string PrintOneElement(const tstring& a, bool print_v2) {
   if (print_v2) {
-    return "\"" + absl::Utf8SafeCEscape(a) + "\"";
+    return "\"" + absl::CEscape(a) + "\"";
   } else {
-    return absl::Utf8SafeCEscape(a);
+    return absl::CEscape(a);
   }
 }
 inline float PrintOneElement(const Eigen::half& h, bool print_v2) {
@@ -1235,11 +1242,6 @@ string Tensor::SummarizeValue(int64 max_entries, bool print_v2) const {
 StringPiece Tensor::tensor_data() const {
   if (buf_ == nullptr) return StringPiece();  // Don't die for empty tensors
   return StringPiece(static_cast<char*>(buf_->data()), TotalBytes());
-}
-
-void* Tensor::data() const {
-  if (buf_ == nullptr) return nullptr;  // Don't die for empty tensors
-  return static_cast<void*>(buf_->data());
 }
 
 bool Tensor::SharesBufferWith(const Tensor& b) const {

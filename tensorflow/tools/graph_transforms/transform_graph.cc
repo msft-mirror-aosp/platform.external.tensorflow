@@ -26,7 +26,6 @@ limitations under the License.
 #include "tensorflow/tools/graph_transforms/transform_utils.h"
 #if !defined(PLATFORM_WINDOWS)
 #include <pwd.h>
-#include <unistd.h>
 #endif
 
 namespace tensorflow {

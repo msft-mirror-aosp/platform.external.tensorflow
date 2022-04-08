@@ -27,13 +27,13 @@ limitations under the License.
 
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/event.h"
 #include "tensorflow/stream_executor/gpu/gpu_kernel.h"
 #include "tensorflow/stream_executor/lib/status.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
 #include "tensorflow/stream_executor/platform.h"
 #include "tensorflow/stream_executor/platform/port.h"
+#include "tensorflow/stream_executor/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/stream_executor_internal.h"
 
 namespace stream_executor {
@@ -188,11 +188,15 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   bool CanEnablePeerAccessTo(StreamExecutorInterface* other) override;
 
+  SharedMemoryConfig GetDeviceSharedMemoryConfig() override;
+
+  port::Status SetDeviceSharedMemoryConfig(SharedMemoryConfig config) override;
+
   bool DeviceMemoryUsage(int64* free, int64* total) const override;
 
   // Search for the symbol and returns a device pointer and size.
   // Returns false if symbol does not exist.
-  bool GetSymbol(const std::string& symbol_name, ModuleHandle module_handle,
+  bool GetSymbol(const string& symbol_name, ModuleHandle module_handle,
                  void** mem, size_t* bytes) override;
 
   port::StatusOr<std::unique_ptr<DeviceDescription>> CreateDeviceDescription()
@@ -241,7 +245,7 @@ class GpuExecutor : public internal::StreamExecutorInterface {
   // (supported on CUDA only)
   bool FindOnDiskForComputeCapability(absl::string_view filename,
                                       absl::string_view canonical_suffix,
-                                      std::string* found_filename) const;
+                                      string* found_filename) const;
 
   // Attempts to find a more specific version of the file indicated by
   // filename by looking for AMDGPU ISA-specific suffixed versions.
@@ -249,7 +253,7 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   bool FindOnDiskForISAVersion(absl::string_view filename,
                                absl::string_view canonical_suffix,
-                               std::string* found_filename) const;
+                               string* found_filename) const;
 
   // Host callback landing routine invoked by CUDA.
   // data: User-provided callback provided to HostCallback() above, captured
@@ -269,19 +273,19 @@ class GpuExecutor : public internal::StreamExecutorInterface {
 
   // (supported on CUDA only)
   port::Status LoadModuleFromCuBin(const char* cubin, GpuModuleHandle* module)
-      TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+      EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   // Loads the PTX text `ptx` as a CUDA module.  `ptx` must be null terminated.
   // (supported on CUDA only)
   port::Status LoadModuleFromPtx(const char* ptx, GpuModuleHandle* module)
-      TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+      EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   // (supported on ROCm only)
   port::Status LoadModuleFromHsaco(const char* hsaco, GpuModuleHandle* module)
-      TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+      EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   bool UnloadGpuBinary(const void* gpu_binary)
-      TF_EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
+      EXCLUSIVE_LOCKS_REQUIRED(in_memory_modules_mu_);
 
   // Guards the on-disk-module mapping.
   absl::Mutex disk_modules_mu_;
@@ -290,21 +294,20 @@ class GpuExecutor : public internal::StreamExecutorInterface {
   // Multiple GPUFunctionHandle are usually obtained from a single
   // GPUModuleHandle so we attempt to hit in this mapping first, before
   // retrieving it.
-  std::map<std::string, GpuModuleHandle> disk_modules_
-      TF_GUARDED_BY(disk_modules_mu_);
+  std::map<string, GpuModuleHandle> disk_modules_ GUARDED_BY(disk_modules_mu_);
 
   // Guards the in-memory-module mapping.
   absl::Mutex in_memory_modules_mu_;
 
   std::map<const char*, GpuModuleHandle> in_memory_modules_
-      TF_GUARDED_BY(in_memory_modules_mu_);
+      GUARDED_BY(in_memory_modules_mu_);
 
   // Kernel -> loaded GPU binary. Many kernels may load the same binary.
   std::unordered_map<const KernelBase*, const void*> kernel_to_gpu_binary_
-      TF_GUARDED_BY(in_memory_modules_mu_);
+      GUARDED_BY(in_memory_modules_mu_);
   // GPU binary (PTX or CUBIN or HSACO) -> {CUDA module, reference count}.
   std::unordered_map<const void*, std::pair<GpuModuleHandle, uint64>>
-      gpu_binary_to_module_ TF_GUARDED_BY(in_memory_modules_mu_);
+      gpu_binary_to_module_ GUARDED_BY(in_memory_modules_mu_);
 
   // Guards the launched kernel set.
   absl::Mutex launched_kernels_mu_;
@@ -312,7 +315,7 @@ class GpuExecutor : public internal::StreamExecutorInterface {
   // Keeps track of the set of launched kernels. Currently used to suppress the
   // occupancy check on subsequent launches.
   std::set<GpuFunctionHandle> launched_kernels_
-      TF_GUARDED_BY(launched_kernels_mu_);
+      GUARDED_BY(launched_kernels_mu_);
 
   // Handle for the CUDA device being operated on. Immutable
   // post-initialization.

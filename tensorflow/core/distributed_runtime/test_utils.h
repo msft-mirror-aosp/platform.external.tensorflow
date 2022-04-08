@@ -30,7 +30,7 @@ namespace tensorflow {
 // testing.
 class TestWorkerInterface : public WorkerInterface {
  public:
-  void GetStatusAsync(CallOptions* opts, const GetStatusRequest* request,
+  void GetStatusAsync(const GetStatusRequest* request,
                       GetStatusResponse* response, bool fail_fast,
                       StatusCallback done) override {
     done(errors::Unimplemented("GetStatusAsync"));
@@ -62,7 +62,7 @@ class TestWorkerInterface : public WorkerInterface {
   }
 
   void RunGraphAsync(CallOptions* opts, RunGraphRequestWrapper* request,
-                     MutableRunGraphResponseWrapper* response,
+                     MutableRunGraphResponseWrapper* repsonse,
                      StatusCallback done) override {
     done(errors::Unimplemented("RunGraphAsync"));
   }
@@ -70,28 +70,28 @@ class TestWorkerInterface : public WorkerInterface {
   void CleanupGraphAsync(const CleanupGraphRequest* request,
                          CleanupGraphResponse* response,
                          StatusCallback done) override {
-    done(errors::Unimplemented("CleanupGraphAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void CleanupAllAsync(const CleanupAllRequest* request,
                        CleanupAllResponse* response,
                        StatusCallback done) override {
-    done(errors::Unimplemented("CleanupAllAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void RecvTensorAsync(CallOptions* opts, const RecvTensorRequest* request,
                        TensorResponse* response, StatusCallback done) override {
-    done(errors::Unimplemented("RecvTensorAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void LoggingAsync(const LoggingRequest* request, LoggingResponse* response,
                     StatusCallback done) override {
-    done(errors::Unimplemented("LoggingAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void TracingAsync(const TracingRequest* request, TracingResponse* response,
                     StatusCallback done) override {
-    done(errors::Unimplemented("TracingAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void RecvBufAsync(CallOptions* opts, const RecvBufRequest* request,
@@ -103,20 +103,20 @@ class TestWorkerInterface : public WorkerInterface {
                           const CompleteGroupRequest* request,
                           CompleteGroupResponse* response,
                           StatusCallback done) override {
-    done(errors::Unimplemented("CompleteGroupAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void CompleteInstanceAsync(CallOptions* ops,
                              const CompleteInstanceRequest* request,
                              CompleteInstanceResponse* response,
                              StatusCallback done) override {
-    done(errors::Unimplemented("CompleteInstanceAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 
   void GetStepSequenceAsync(const GetStepSequenceRequest* request,
                             GetStepSequenceResponse* response,
                             StatusCallback done) override {
-    done(errors::Unimplemented("GetStepSequenceAsync"));
+    done(errors::Unimplemented("RunGraphAsync"));
   }
 };
 

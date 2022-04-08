@@ -14,10 +14,8 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/core/kernels/data/window_dataset_op.h"
 
-#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/kernels/data/name_utils.h"
 #include "tensorflow/core/kernels/data/window_dataset.h"
-#include "tensorflow/core/platform/stringprintf.h"
 
 namespace tensorflow {
 namespace data {
@@ -52,14 +50,7 @@ class WindowDatasetOp::Dataset : public DatasetBase {
         window_stride_(window_stride),
         drop_remainder_(drop_remainder),
         output_dtypes_(input_->output_dtypes().size(), {DT_VARIANT}),
-        output_shapes_(input_->output_shapes().size(), TensorShape({})),
-        traceme_metadata_(
-            {{"window_size",
-              strings::Printf("%lld", static_cast<long long>(window_size))},
-             {"window_shift",
-              strings::Printf("%lld", static_cast<long long>(window_shift))},
-             {"window_stride", strings::Printf("%lld", static_cast<long long>(
-                                                           window_stride))}}) {
+        output_shapes_(input_->output_shapes().size(), TensorShape({})) {
     input_->Ref();
   }
 
@@ -105,11 +96,6 @@ class WindowDatasetOp::Dataset : public DatasetBase {
     return cardinality;
   }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    inputs->push_back(input_);
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override {
     return input_->CheckExternalState();
   }
@@ -142,8 +128,14 @@ class WindowDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
+    string BuildTraceMeName() override {
+      return strings::StrCat(prefix(), "#window_size=", dataset()->window_size_,
+                             ",window_shift=", dataset()->window_shift_,
+                             ",window_stride=", dataset()->window_stride_, "#");
+    }
+
     Status Initialize(IteratorContext* ctx) override {
-      return dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_);
+      return dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_);
     }
 
     Status GetNextInternal(IteratorContext* ctx,
@@ -155,17 +147,14 @@ class WindowDatasetOp::Dataset : public DatasetBase {
       std::vector<std::vector<Tensor>> window_elements;
       Status status = Status::OK();
       {
-        const size_t target_size = TargetBufferSize(window_size, window_stride);
-
         mutex_lock l(mu_);
-        if (!input_impl_ &&
-            (buffer_.empty() ||
-             (dataset()->drop_remainder_ && buffer_.size() < target_size))) {
+        if (!input_impl_ && buffer_.empty()) {
           *end_of_sequence = true;
           return Status::OK();
         }
 
         // Add elements to the buffer.
+        size_t target_size = TargetBufferSize(window_size, window_stride);
         if (input_impl_) {
           *end_of_sequence = false;
           for (size_t i = buffer_.size(); i < target_size && !*end_of_sequence;
@@ -263,13 +252,12 @@ class WindowDatasetOp::Dataset : public DatasetBase {
                                        dataset()->window_shift_);
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
+    Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       if (!input_impl_) {
         TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kInputImplEmpty), ""));
       } else {
-        TF_RETURN_IF_ERROR(SaveInput(ctx, writer, input_impl_));
+        TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
       }
       // Save buffer.
       TF_RETURN_IF_ERROR(
@@ -317,10 +305,6 @@ class WindowDatasetOp::Dataset : public DatasetBase {
       return Status::OK();
     }
 
-    TraceMeMetadata GetTraceMeMetadata() const override {
-      return dataset()->traceme_metadata_;
-    }
-
    private:
     struct InvocationResult {
       InvocationResult() = default;
@@ -333,7 +317,7 @@ class WindowDatasetOp::Dataset : public DatasetBase {
 
     Status WriteStatusLocked(IteratorStateWriter* writer, size_t index,
                              const Status& status)
-        TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+        EXCLUSIVE_LOCKS_REQUIRED(mu_) {
       TF_RETURN_IF_ERROR(writer->WriteScalar(
           CodeKey(index), static_cast<int64>(status.code())));
       if (!status.ok()) {
@@ -344,7 +328,7 @@ class WindowDatasetOp::Dataset : public DatasetBase {
     }
 
     Status ReadStatusLocked(IteratorStateReader* reader, size_t index,
-                            Status* status) TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+                            Status* status) EXCLUSIVE_LOCKS_REQUIRED(mu_) {
       int64 code_int;
       TF_RETURN_IF_ERROR(reader->ReadScalar(CodeKey(index), &code_int));
       error::Code code = static_cast<error::Code>(code_int);
@@ -374,8 +358,8 @@ class WindowDatasetOp::Dataset : public DatasetBase {
     }
 
     mutex mu_;
-    std::deque<InvocationResult> buffer_ TF_GUARDED_BY(mu_);
-    std::unique_ptr<IteratorBase> input_impl_ TF_GUARDED_BY(mu_);
+    std::deque<InvocationResult> buffer_ GUARDED_BY(mu_);
+    std::unique_ptr<IteratorBase> input_impl_ GUARDED_BY(mu_);
   };
 
   const DatasetBase* const input_;
@@ -385,7 +369,6 @@ class WindowDatasetOp::Dataset : public DatasetBase {
   const bool drop_remainder_;
   const DataTypeVector output_dtypes_;
   const std::vector<PartialTensorShape> output_shapes_;
-  const TraceMeMetadata traceme_metadata_;
 };
 
 WindowDatasetOp::WindowDatasetOp(OpKernelConstruction* ctx)

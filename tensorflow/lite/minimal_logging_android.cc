@@ -13,11 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <android/log.h>
-
-#include <cstdio>
-
 #include "tensorflow/lite/minimal_logging.h"
+
+#include <android/log.h>
+#include <cstdio>
 
 namespace tflite {
 namespace logging_internal {
@@ -41,17 +40,15 @@ int GetPlatformSeverity(LogSeverity severity) {
 void MinimalLogger::LogFormatted(LogSeverity severity, const char* format,
                                  va_list args) {
   // First log to Android's explicit log(cat) API.
-  va_list args_copy;
-  va_copy(args_copy, args);
+  va_list args_for_android_log;
+  va_copy(args_for_android_log, args);
   __android_log_vprint(GetPlatformSeverity(severity), "tflite", format,
-                       args_copy);
-  va_end(args_copy);
+      args_for_android_log);
+  va_end(args_for_android_log);
 
   // Also print to stderr for standard console applications.
   fprintf(stderr, "%s: ", GetSeverityName(severity));
-  va_copy(args_copy, args);
-  vfprintf(stderr, format, args_copy);
-  va_end(args_copy);
+  vfprintf(stderr, format, args);
   fputc('\n', stderr);
 }
 

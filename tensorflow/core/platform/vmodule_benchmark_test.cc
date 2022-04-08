@@ -18,8 +18,8 @@ limitations under the License.
 
 namespace tensorflow {
 
-static void BM_DisabledVlog(::testing::benchmark::State& state) {
-  for (auto s : state) {
+static void BM_DisabledVlog(int iters) {
+  for (int i = 0; i < iters; ++i) {
     VLOG(1) << "Testing VLOG(1)!";
   }
 }

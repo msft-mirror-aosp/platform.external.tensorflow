@@ -43,8 +43,4 @@ Alternatively, the format could be "NCDHW", the data storage order is:
 END
   }
   summary: "Performs 3D average pooling on the input."
-  description: <<END
-Each entry in `output` is the mean of the corresponding size `ksize` window in
-`value`.
-END
 }

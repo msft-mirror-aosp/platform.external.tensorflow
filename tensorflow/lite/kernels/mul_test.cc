@@ -12,16 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include <stddef.h>
-#include <stdint.h>
-
-#include <vector>
-
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "flatbuffers/flatbuffers.h"  // from @flatbuffers
+#include "tensorflow/lite/interpreter.h"
+#include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/kernels/test_util.h"
-#include "tensorflow/lite/schema/schema_generated.h"
+#include "tensorflow/lite/model.h"
 
 namespace tflite {
 namespace {
@@ -113,7 +108,7 @@ TEST(FloatMulOpTest, ActivationRELU_N1_TO_1) {
 }
 
 TEST(FloatMulOpTest, VariousInputShapes) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {6}, {2, 3}, {2, 1, 3}, {1, 3, 1, 2}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     FloatMulOpModel m({TensorType_FLOAT32, test_shapes[i]},
@@ -130,7 +125,7 @@ TEST(FloatMulOpTest, VariousInputShapes) {
 }
 
 TEST(FloatMulOpTest, WithScalarBroadcast) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {6}, {2, 3}, {2, 1, 3}, {1, 3, 1, 2}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     FloatMulOpModel m({TensorType_FLOAT32, test_shapes[i]},
@@ -147,7 +142,7 @@ TEST(FloatMulOpTest, WithScalarBroadcast) {
 }
 
 TEST(FloatMulOpTest, WithBroadcast) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {2, 4}, {2, 1, 4}, {1, 2, 4}, {1, 2, 1, 4}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     FloatMulOpModel m({TensorType_FLOAT32, test_shapes[i]},
@@ -166,9 +161,9 @@ TEST(FloatMulOpTest, WithBroadcast) {
 
 TEST(FloatMulOpTest, MixedBroadcast) {
   const std::vector<int> base_shape = {2, 3, 1, 2};
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {1, 1, 3, 2}, {1, 3, 1, 2}, {2, 1, 3, 1}, {2, 3, 1, 1}};
-  const std::vector<std::vector<float>> test_outputs = {
+  std::vector<std::vector<float>> test_outputs = {
       {-0.06f, 0.69f,  0.12f,  1.15f, -0.30f, 2.07f,  0.18f,  0.15f, -0.36f,
        0.25f,  0.90f,  0.45f,  0.16f, -0.33f, -0.32f, -0.55f, 0.80f, -0.99f,
        0.24f,  0.84f,  -0.48f, 1.40f, 1.20f,  2.52f,  -0.32f, 0.00f, 0.64f,
@@ -214,7 +209,7 @@ TEST(FloatMulOpTest, MixedBroadcast) {
 }
 
 TEST(FloatMulOpTest, WithBroadcast2Elements) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {2, 2}, {2, 1, 2}, {1, 2, 2}, {1, 2, 1, 2}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     FloatMulOpModel m({TensorType_FLOAT32, test_shapes[i]},
@@ -250,7 +245,7 @@ TEST(IntegerMulOpTest, ActivationRELU_N1_TO_1) {
 }
 
 TEST(IntegerMulOpTest, VariousInputShapes) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {6}, {2, 3}, {2, 1, 3}, {1, 3, 1, 2}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     IntegerMulOpModel m({TensorType_INT32, test_shapes[i]},
@@ -265,7 +260,7 @@ TEST(IntegerMulOpTest, VariousInputShapes) {
 }
 
 TEST(IntegerMulOpTest, WithBroadcast) {
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {6}, {2, 3}, {2, 1, 3}, {1, 3, 1, 2}};
   for (int i = 0; i < test_shapes.size(); ++i) {
     IntegerMulOpModel m({TensorType_INT32, test_shapes[i]},
@@ -296,6 +291,12 @@ void NoActivation() {
 
 template <TensorType tensor_type, typename integer_dtype>
 void NoActivationLargeMultiplier() {
+  // TODO(b/138722124): Remove this after setting the appropriate op version (3)
+  // for dependent tests.
+  if (SingleOpModel::GetForceUseNnapi()) {
+    // NNAPI doesn't currently support Mul with multiplier>1.
+    return;
+  }
   // Intentionally pathological output range much narrower than needed
   // to represent input values to exercise the multiplier>1 case.
   QuantizedMulOpModel m({tensor_type, {1, 2, 2, 1}, -100, 100},
@@ -336,27 +337,6 @@ TEST(QuantizedMulOpTest, NoActivationInt16) {
                                               kQuantizedToleranceInt16)));
 }
 
-TEST(QuantizedMulOpTest, NoActivationInt16Scaled) {
-  const float kMin = -2.f;
-  const float kMax = 2.f * 32767.f / 32768.f;
-  QuantizedMulOpModel m({TensorType_INT16, {1, 2, 3, 1}, kMin, kMax},
-                        {TensorType_INT16, {1, 2, 3, 1}, 2 * kMin, 2 * kMax},
-                        {TensorType_INT16, {}, 8 * kMin, 8 * kMax},
-                        ActivationFunctionType_NONE);
-  m.QuantizeAndPopulate<int16_t>(m.input1(), {-1.8, 0.2, 0.9, 1.7, 0.1, -1.95});
-  m.QuantizeAndPopulate<int16_t>(m.input2(),
-                                 {3.6, -3.4, 3.9, 0.8, -1.0, -3.95});
-  m.Invoke();
-
-  const float kQuantizedToleranceInt16Scaled =
-      6.0 * kQuantizedStepInt16 + kQuantizedStepInt16 * kQuantizedStepInt16;
-
-  EXPECT_THAT(
-      m.GetDequantizedOutputInt16(),
-      ElementsAreArray(ArrayFloatNear({-6.48, -0.68, 3.51, 1.36, -0.1, 7.7025},
-                                      kQuantizedToleranceInt16Scaled)));
-}
-
 template <TensorType tensor_type, typename integer_dtype>
 void NoActivationInt16With8BitOutput() {
   const float kMinInt16 = -1.f;
@@ -392,39 +372,32 @@ float GetTolerance(int min, int max) {
 
 template <TensorType tensor_type, typename integer_dtype>
 void WithBroadcast() {
-  const float kQuantizedTolerance = GetTolerance(-3.0, 3.0);
-  const std::vector<std::vector<int>> test_shapes = {
+  float kQuantizedTolerance = GetTolerance(-3.0, 3.0);
+  std::vector<std::vector<int>> test_shapes = {
       {6}, {2, 3}, {2, 1, 3}, {1, 3, 1, 2}};
-  // Test with a smaller than 1 and greater than 1 quantization multiplier
-  const std::vector<std::pair<float, float>> test_input_range = {{-3.0, 3.0},
-                                                                 {-6.0, 6.0}};
   for (int i = 0; i < test_shapes.size(); ++i) {
-    for (int j = 0; j < test_input_range.size(); ++j) {
-      const std::pair<float, float>& input_range = test_input_range[j];
-      QuantizedMulOpModel m(
-          {tensor_type, test_shapes[i], input_range.first, input_range.second},
-          {tensor_type, {}, input_range.first, input_range.second},
-          {tensor_type, {}, -0.2, 0.2}, ActivationFunctionType_NONE);
-      m.QuantizeAndPopulate<integer_dtype>(m.input1(),
-                                           {-2.0, 0.2, 0.7, 0.8, 1.1, 2.0});
-      m.QuantizeAndPopulate<integer_dtype>(m.input2(), {0.1});
-      m.Invoke();
-      EXPECT_THAT(
-          m.GetDequantizedOutput<integer_dtype>(),
-          ElementsAreArray(ArrayFloatNear({-0.2, 0.02, 0.07, 0.08, 0.11, 0.2},
-                                          kQuantizedTolerance)))
-          << "With shape number " << i << " and range number " << j;
-    }
+    QuantizedMulOpModel m({tensor_type, test_shapes[i], -3.0, 3.0},
+                          {tensor_type, {}, -3.0, 3.0},  // always a scalar
+                          {tensor_type, {}, -3.0, 3.0},
+                          ActivationFunctionType_NONE);
+    m.QuantizeAndPopulate<integer_dtype>(m.input1(),
+                                         {-2.0, 0.2, 0.7, 0.8, 1.1, 2.0});
+    m.QuantizeAndPopulate<integer_dtype>(m.input2(), {0.1});
+    m.Invoke();
+    EXPECT_THAT(m.GetDequantizedOutput<integer_dtype>(),
+                ElementsAreArray(ArrayFloatNear(
+                    {-0.2, 0.02, 0.07, 0.08, 0.11, 0.2}, kQuantizedTolerance)))
+        << "With shape number " << i;
   }
 }
 
 template <enum TensorType tensor_type, typename integer_dtype>
 void QuantizedWithMixedBroadcast() {
-  const float kQuantizedTolerance = GetTolerance(-3.f, 3.f);
+  float kQuantizedTolerance = GetTolerance(-3.f, 3.f);
   const std::vector<int> base_shape = {2, 3, 1, 2};
-  const std::vector<std::vector<int>> test_shapes = {
+  std::vector<std::vector<int>> test_shapes = {
       {1, 1, 3, 2}, {1, 3, 1, 2}, {2, 1, 3, 1}, {2, 3, 1, 1}};
-  const std::vector<std::vector<float>> test_outputs = {
+  std::vector<std::vector<float>> test_outputs = {
       {-0.06f, 0.69f,  0.12f,  1.15f, -0.30f, 2.07f,  0.18f,  0.15f, -0.36f,
        0.25f,  0.90f,  0.45f,  0.16f, -0.33f, -0.32f, -0.55f, 0.80f, -0.99f,
        0.24f,  0.84f,  -0.48f, 1.40f, 1.20f,  2.52f,  -0.32f, 0.00f, 0.64f,

@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_SERVICE_GPU_CHOLESKY_THUNK_H_
 #define TENSORFLOW_COMPILER_XLA_SERVICE_GPU_CHOLESKY_THUNK_H_
 
+#include "absl/base/thread_annotations.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/gpu/buffer_allocations.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
-#include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/blas.h"
 
 namespace xla {
@@ -41,11 +41,12 @@ namespace gpu {
 class CholeskyThunk : public Thunk {
  public:
   static StatusOr<int64> ScratchBufferSize(int64 n);
-  CholeskyThunk(ThunkInfo thunk_info, const CholeskyOptions& options,
+  CholeskyThunk(const CholeskyOptions& options,
                 BufferAllocation::Slice a_buffer,
                 BufferAllocation::Slice workspace_buffer,
-                BufferAllocation::Slice info_buffer, PrimitiveType type,
-                int64 batch_size, int64 n);
+                BufferAllocation::Slice info_buffer,
+                PrimitiveType type,
+                int64 batch_size, int64 n, const HloInstruction* hlo);
 
   CholeskyThunk(const CholeskyThunk&) = delete;
   CholeskyThunk& operator=(const CholeskyThunk&) = delete;
@@ -65,8 +66,7 @@ class CholeskyThunk : public Thunk {
   const int64 n_;
 
   tensorflow::mutex mu_;
-  absl::flat_hash_map<se::Stream*, CusolverContext> contexts_
-      TF_GUARDED_BY(mu_);
+  absl::flat_hash_map<se::Stream*, CusolverContext> contexts_ GUARDED_BY(mu_);
 };
 
 }  // namespace gpu

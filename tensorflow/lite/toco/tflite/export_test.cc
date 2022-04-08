@@ -16,11 +16,10 @@ limitations under the License.
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "flatbuffers/flatbuffers.h"  // from @flatbuffers
+#include "flatbuffers/flatbuffers.h"  // TF:flatbuffers
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-#include "tensorflow/lite/schema/schema_utils.h"
 #include "tensorflow/lite/toco/tflite/builtin_operator.h"
 #include "tensorflow/lite/toco/tflite/operator.h"
 #include "tensorflow/lite/toco/tflite/types.h"
@@ -35,13 +34,13 @@ using ::testing::HasSubstr;
 class ExportTest : public ::testing::Test {
  protected:
   void ResetOperators() { input_model_.operators.clear(); }
-  void AddTensorsByName(std::initializer_list<std::string> names) {
-    for (const std::string& name : names) {
+  void AddTensorsByName(std::initializer_list<string> names) {
+    for (const string& name : names) {
       input_model_.GetOrCreateArray(name);
     }
   }
-  void AddOperatorsByName(std::initializer_list<std::string> names) {
-    for (const std::string& name : names) {
+  void AddOperatorsByName(std::initializer_list<string> names) {
+    for (const string& name : names) {
       if (name == "Conv") {
         auto* op = new ConvOperator;
         op->padding.type = PaddingType::kSame;
@@ -75,9 +74,6 @@ class ExportTest : public ::testing::Test {
         input1_array.data_type = ArrayDataType::kFloat;
         input2_array.data_type = ArrayDataType::kFloat;
         output_array.data_type = ArrayDataType::kFloat;
-        input1_array.copy_shape({1, 2, 2, 2});
-        input2_array.copy_shape({1, 2, 2, 2});
-        output_array.copy_shape({1, 2, 2, 2});
         input_model_.operators.emplace_back(op);
       } else if (name == "Assert") {
         auto* op = new TensorFlowAssertOperator;
@@ -154,15 +150,14 @@ class ExportTest : public ::testing::Test {
   }
 
   tensorflow::Status ExportAndReturnStatus(const ExportParams& params) {
-    std::string result;
+    string result;
     return Export(input_model_, &result, params);
   }
 
-  std::vector<std::string> ExportAndSummarizeOperators(
-      const ExportParams& params) {
-    std::vector<std::string> names;
+  std::vector<string> ExportAndSummarizeOperators(const ExportParams& params) {
+    std::vector<string> names;
 
-    std::string result;
+    string result;
     auto status = Export(input_model_, &result, params);
     if (!status.ok()) {
       LOG(INFO) << status.error_message();
@@ -172,13 +167,11 @@ class ExportTest : public ::testing::Test {
     auto* model = ::tflite::GetModel(result.data());
 
     for (const ::tflite::OperatorCode* opcode : *model->operator_codes()) {
-      auto builtin_code = GetBuiltinCode(opcode);
-      if (builtin_code != ::tflite::BuiltinOperator_CUSTOM) {
-        names.push_back(std::string("builtin:") +
-                        ::tflite::EnumNameBuiltinOperator(builtin_code));
+      if (opcode->builtin_code() != ::tflite::BuiltinOperator_CUSTOM) {
+        names.push_back(string("builtin:") + ::tflite::EnumNameBuiltinOperator(
+                                                 opcode->builtin_code()));
       } else {
-        names.push_back(std::string("custom:") +
-                        opcode->custom_code()->c_str());
+        names.push_back(string("custom:") + opcode->custom_code()->c_str());
       }
     }
 
@@ -189,7 +182,7 @@ class ExportTest : public ::testing::Test {
       const ExportParams& params) {
     std::vector<uint32_t> indices;
 
-    std::string result;
+    string result;
     if (!Export(input_model_, &result, params).ok()) return indices;
     auto* model = ::tflite::GetModel(result.data());
 
@@ -261,7 +254,7 @@ TEST_F(ExportTest, ExportMinRuntime) {
   params.enable_select_tf_ops = false;
   params.quantize_weights = QuantizedBufferType::NONE;
 
-  std::string output;
+  string output;
   auto status = Export(input_model_, &output, params);
   auto* model = ::tflite::GetModel(output.data());
   EXPECT_EQ(model->metadata()->size(), 1);
@@ -269,8 +262,7 @@ TEST_F(ExportTest, ExportMinRuntime) {
   auto buf = model->metadata()->Get(0)->buffer();
   auto* buffer = (*model->buffers())[buf];
   auto* array = buffer->data();
-  std::string version(reinterpret_cast<const char*>(array->data()),
-                      array->size());
+  string version(reinterpret_cast<const char*>(array->data()), array->size());
   EXPECT_EQ(version, "1.6.0");
 }
 
@@ -280,7 +272,7 @@ TEST_F(ExportTest, ExportEmptyMinRuntime) {
   ExportParams params;
   params.allow_custom_ops = true;
 
-  std::string output;
+  string output;
   auto status = Export(input_model_, &output, params);
   auto* model = ::tflite::GetModel(output.data());
   EXPECT_EQ(model->metadata()->size(), 1);
@@ -288,8 +280,7 @@ TEST_F(ExportTest, ExportEmptyMinRuntime) {
   auto buf = model->metadata()->Get(0)->buffer();
   auto* buffer = (*model->buffers())[buf];
   auto* array = buffer->data();
-  std::string version(reinterpret_cast<const char*>(array->data()),
-                      array->size());
+  string version(reinterpret_cast<const char*>(array->data()), array->size());
   EXPECT_EQ(version, "");
 }
 
@@ -302,7 +293,7 @@ TEST_F(ExportTest, UnsupportedControlFlowErrors) {
   // The model contains control flow ops which are not convertible, so we should
   // check the returned error message.
 
-  std::string output;
+  string output;
   const auto ops_by_type = BuildOperatorByTypeMap();
   auto status = Export(input_model_, &output, params, ops_by_type);
   EXPECT_EQ(status.error_message(),
@@ -324,7 +315,7 @@ TEST_F(ExportTest, UnsupportedOpsAndNeedEnableFlex) {
   params.allow_custom_ops = false;
   params.enable_select_tf_ops = false;
 
-  std::string output;
+  string output;
   const auto ops_by_type = BuildOperatorByTypeMap();
   auto status = Export(input_model_, &output, params, ops_by_type);
   EXPECT_EQ(
@@ -354,7 +345,7 @@ TEST_F(ExportTest, UnsupportedOpsNeedCustomImplementation) {
   params.allow_custom_ops = false;
   params.enable_select_tf_ops = true;
 
-  std::string output;
+  string output;
   const auto ops_by_type = BuildOperatorByTypeMap();
   auto status = Export(input_model_, &output, params, ops_by_type);
   EXPECT_EQ(
@@ -384,7 +375,7 @@ TEST_F(ExportTest, UnsupportedControlFlowAndCustomOpsErrors) {
   // The model contains control flow ops which are not convertible, so we should
   // check the returned error message.
 
-  std::string output;
+  string output;
   const auto ops_by_type = BuildOperatorByTypeMap();
   auto status = Export(input_model_, &output, params, ops_by_type);
   EXPECT_EQ(
@@ -413,11 +404,11 @@ TEST_F(ExportTest, UnsupportedControlFlowAndCustomOpsErrors) {
 TEST_F(ExportTest, QuantizeWeights) {
   // Sanity check for quantize_weights parameter.
   BuildQuantizableTestModel();
-  std::string unquantized_result;
+  string unquantized_result;
   Export(input_model_, true, /*quantize_weights*/ false, &unquantized_result);
 
   BuildQuantizableTestModel();
-  std::string quantized_result;
+  string quantized_result;
   Export(input_model_, true, /*quantize_weights*/ true, &quantized_result);
 
   // The quantized models should be smaller.
@@ -449,13 +440,12 @@ class OpSetsTest : public ExportTest {
     }
   }
 
-  std::vector<std::string> ImportExport(
-      std::initializer_list<std::string> op_names) {
+  std::vector<string> ImportExport(std::initializer_list<string> op_names) {
     ResetOperators();
     if (!import_all_ops_as_unsupported_) {
       AddOperatorsByName(op_names);
     } else {
-      for (const std::string& name : op_names) {
+      for (const string& name : op_names) {
         auto* op = new TensorFlowUnsupportedOperator;
         op->tensorflow_op = name;
         input_model_.operators.emplace_back(op);
@@ -496,7 +486,7 @@ TEST_F(OpSetsTest, TfSelectOnly) {
   EXPECT_THAT(
       ImportExport(
           {"Add", "AdjustHue", "RandomUniform", "UnrollAndFold", "Assert"}),
-      ElementsAre("custom:FlexAdd", "custom:FlexAdjustHue", "custom:FlexAssert",
+      ElementsAre("custom:AdjustHue", "custom:FlexAdd", "custom:FlexAssert",
                   "custom:FlexRandomUniform", "custom:UnrollAndFold"));
 }
 
@@ -513,7 +503,7 @@ TEST_F(OpSetsTest, BuiltinsAndTfSelect) {
   EXPECT_THAT(
       ImportExport(
           {"Add", "AdjustHue", "RandomUniform", "UnrollAndFold", "Assert"}),
-      ElementsAre("builtin:ADD", "custom:FlexAdjustHue", "custom:FlexAssert",
+      ElementsAre("builtin:ADD", "custom:AdjustHue", "custom:FlexAssert",
                   "custom:FlexRandomUniform", "custom:UnrollAndFold"));
 }
 
@@ -651,7 +641,7 @@ TEST_F(VersionedOpExportTest, Export) {
   AddConvOp(false);
   AddConvOp(true);
 
-  std::string result;
+  string result;
   const auto ops_by_type = BuildFakeOperatorByTypeMap();
   Export(input_model_, true, false, &result, ops_by_type);
 
@@ -662,10 +652,10 @@ TEST_F(VersionedOpExportTest, Export) {
   // different versions.
   EXPECT_EQ(2, operator_codes->size());
   EXPECT_EQ(::tflite::BuiltinOperator_CONV_2D,
-            GetBuiltinCode((*operator_codes)[0]));
+            (*operator_codes)[0]->builtin_code());
   EXPECT_EQ(1, (*operator_codes)[0]->version());
   EXPECT_EQ(::tflite::BuiltinOperator_CONV_2D,
-            GetBuiltinCode((*operator_codes)[1]));
+            (*operator_codes)[1]->builtin_code());
   EXPECT_EQ(2, (*operator_codes)[1]->version());
 
   // Verify that the 2 operators points to the correct indices of the operation
@@ -795,9 +785,9 @@ TEST(OperatorKeyTest, TestFlexWithUnsupportedOp) {
   EXPECT_EQ(key.type(), ::tflite::BuiltinOperator_CUSTOM);
   EXPECT_EQ(key.custom_code(), "HashTableV2");
   EXPECT_EQ(key.version(), 1);
-  // While HashTableV2 is excluded from the allowlisted flex op list, eventually
+  // While HashTableV2 is excluded from the whitelisted flex op list, eventually
   // it won't be, and the following expectations will need to change as the op
-  // is explicitly denylisted due to lack of asset support.
+  // is explicitly blacklisted due to lack of asset support.
   EXPECT_FALSE(key.is_flex_op());
   EXPECT_FALSE(key.is_unsupported_flex_op());
 }

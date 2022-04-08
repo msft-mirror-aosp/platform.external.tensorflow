@@ -35,8 +35,6 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import check_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
-from tensorflow.python.training import checkpoint_management
-from tensorflow.python.training.tracking import util as trackable_utils
 
 
 class ShuffleTest(test_base.DatasetTestBase, parameterized.TestCase):
@@ -332,9 +330,8 @@ class ShuffleTest(test_base.DatasetTestBase, parameterized.TestCase):
       self.evaluate(get_next())
 
   @combinations.generate(
-      combinations.times(
-          test_base.default_test_combinations(),
-          combinations.combine(reshuffle=[True, False])))
+      combinations.times(test_base.default_test_combinations(),
+                         combinations.combine(reshuffle=[True, False])))
   def testRerandomizeOnReplicate(self, reshuffle):
     random_seed.set_random_seed(None)
     # When no seeds are fixed, each instantiation of the shuffle dataset should
@@ -349,23 +346,6 @@ class ShuffleTest(test_base.DatasetTestBase, parameterized.TestCase):
 
     self.assertCountEqual(shuffle_1, shuffle_2)
     self.assertNotEqual(shuffle_1, shuffle_2)
-
-  @combinations.generate(test_base.eager_only_combinations())
-  def testCheckpointLargeShuffleBuffer(self):
-    # Tensor of size 100M
-    dataset = dataset_ops.Dataset.from_tensors(
-        array_ops.ones((25, 1000, 1000), dtype=dtypes.float32))
-    dataset = dataset.repeat()
-    # Shuffle 25 tensors to exceed the 2GB protocol buffer limit
-    dataset = dataset.shuffle(25)
-
-    iterator = iter(dataset)
-    next(iterator)  # request an element to fill the shuffle buffer
-    ckpt = trackable_utils.Checkpoint(iterator=iterator)
-    manager = checkpoint_management.CheckpointManager(
-        ckpt, self.get_temp_dir(), max_to_keep=1)
-    manager.save()
-    ckpt.restore(manager.latest_checkpoint)
 
 
 if __name__ == "__main__":

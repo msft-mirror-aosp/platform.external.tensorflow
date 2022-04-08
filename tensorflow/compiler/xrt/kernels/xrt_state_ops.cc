@@ -39,8 +39,7 @@ class XRTMetricsCollectOp : public OpKernel {
     OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(metrics_proto.shape()),
                 errors::Internal("request input should be a string scalar"));
     xrt::XRTMetricsCollect metrics;
-    OP_REQUIRES(ctx,
-                ParseFromTString(metrics_proto.scalar<tstring>()(), &metrics),
+    OP_REQUIRES(ctx, metrics.ParseFromString(metrics_proto.scalar<tstring>()()),
                 errors::InvalidArgument(
                     "Unable to parse request input to XRTMetricsCollect"));
 
@@ -194,10 +193,5 @@ REGISTER_KERNEL_BUILDER(Name("XRTCompactAllocations").Device(DEVICE_XLA_CPU),
 
 REGISTER_KERNEL_BUILDER(Name("XRTMetricsCollect").Device(DEVICE_CPU),
                         XRTMetricsCollectOp);
-
-REGISTER_KERNEL_BUILDER(Name("XRTMemoryInfo").Device(DEVICE_XLA_GPU),
-                        XRTMemoryInfoOp<XRTGenericDeviceAccessor>);
-REGISTER_KERNEL_BUILDER(Name("XRTMemoryInfo").Device(DEVICE_XLA_CPU),
-                        XRTMemoryInfoOp<XRTGenericDeviceAccessor>);
 
 }  // namespace tensorflow

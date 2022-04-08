@@ -94,9 +94,6 @@ func updateAPIDefs(m *apiDefMap, dir string) error {
 		return err
 	}
 	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(file.Name(), ".pbtxt") {
-			continue
-		}
 		data, err := ioutil.ReadFile(path.Join(dir, file.Name()))
 		if err != nil {
 			return fmt.Errorf("failed to read %q: %v", file.Name(), err)
@@ -113,13 +110,13 @@ func generateFunctionsForOps(w io.Writer, ops *odpb.OpList, apimap *apiDefMap) e
 	if err := tmplHeader.Execute(w, thisPackage); err != nil {
 		return err
 	}
-	denylist := map[string]bool{
+	blacklist := map[string]bool{
 		"Const":           true,
 		"PyFunc":          true,
 		"PyFuncStateless": true,
 	}
 	for _, op := range ops.Op {
-		if denylist[op.Name] {
+		if blacklist[op.Name] {
 			continue
 		}
 		apidef, err := apimap.Get(op.Name)
@@ -570,10 +567,11 @@ func isListAttr(attrdef *odpb.OpDef_AttrDef) bool {
 // This is useful when 's' corresponds to a "oneof" protocol buffer message.
 // For example, consider the protocol buffer message:
 //   oneof value { bool b = 1;  int64 i = 2; }
-// proto.CompactTextString) will print "b:true", or "i:7" etc. This function
-// strips out the leading "b:" or "i:".
-func stripLeadingColon(m proto.Message) string {
-	x := proto.CompactTextString(m)
+// String() on a Go corresponding object (using proto.CompactTextString) will
+// print "b:true", or "i:7" etc. This function strips out the leading "b:" or
+// "i:".
+func stripLeadingColon(s fmt.Stringer) string {
+	x := s.String()
 	y := strings.SplitN(x, ":", 2)
 	if len(y) < 2 {
 		return x

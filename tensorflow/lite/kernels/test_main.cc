@@ -15,7 +15,6 @@ limitations under the License.
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "tensorflow/lite/kernels/test_delegate_providers.h"
 #include "tensorflow/lite/kernels/test_util.h"
 #include "tensorflow/lite/testing/util.h"
 #include "tensorflow/lite/tools/command_line_flags.h"
@@ -23,19 +22,14 @@ limitations under the License.
 namespace {
 
 void InitKernelTest(int* argc, char** argv) {
-  tflite::KernelTestDelegateProviders* const delegate_providers =
-      tflite::KernelTestDelegateProviders::Get();
-  delegate_providers->InitFromCmdlineArgs(argc, const_cast<const char**>(argv));
+  bool use_nnapi = false;
+  std::vector<tflite::Flag> flags = {
+      tflite::Flag::CreateFlag("use_nnapi", &use_nnapi, "Use NNAPI"),
+  };
+  tflite::Flags::Parse(argc, const_cast<const char**>(argv), flags);
 
-  if (delegate_providers->ConstParams().Get<bool>("use_nnapi")) {
-    // In Android Q, the NNAPI delegate avoids delegation if the only device
-    // is the reference CPU. However, for testing purposes, we still want
-    // delegation coverage, so force use of this reference path.
-    auto* params = delegate_providers->MutableParams();
-    if (!params->HasValueSet<std::string>("nnapi_accelerator_name")) {
-      params->Set<std::string>("nnapi_accelerator_name", "nnapi-reference");
-      params->Set("disable_nnapi_cpu", false);
-    }
+  if (use_nnapi) {
+    tflite::SingleOpModel::SetForceUseNnapi(true);
   }
 }
 
@@ -43,7 +37,7 @@ void InitKernelTest(int* argc, char** argv) {
 
 int main(int argc, char** argv) {
   ::tflite::LogToStderr();
-  InitKernelTest(&argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
+  InitKernelTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

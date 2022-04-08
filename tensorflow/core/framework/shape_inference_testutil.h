@@ -16,7 +16,6 @@ limitations under the License.
 #define TENSORFLOW_CORE_FRAMEWORK_SHAPE_INFERENCE_TESTUTIL_H_
 
 #include <vector>
-
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/lib/core/status.h"
@@ -87,11 +86,11 @@ class ShapeInferenceTestutil {
               .error_message())
 #define INFER_ERROR(error_substring, op, i)                                 \
   {                                                                         \
-    std::string error_message =                                             \
+    string error_message =                                                  \
         ::tensorflow::shape_inference::ShapeInferenceTestutil::InferShapes( \
             op, i, "e")                                                     \
             .error_message();                                               \
-    const std::string substring = error_substring;                          \
+    const string& substring = error_substring;                              \
     EXPECT_NE("", error_message);                                           \
     EXPECT_TRUE(absl::StrContains(error_message, substring))                \
         << "Expected to see '" << substring << "' in '" << error_message    \

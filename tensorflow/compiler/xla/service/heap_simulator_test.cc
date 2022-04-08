@@ -32,7 +32,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status_macros.h"
 #include "tensorflow/compiler/xla/tests/hlo_test_base.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
-#include "tensorflow/core/platform/test.h"
 
 namespace xla {
 namespace {
@@ -228,7 +227,7 @@ const char kFinish[] = "Finish";
 using CallSequence = std::vector<std::pair<string, const HloValue*>>;
 
 // HeapCallRecorder is a dummy heap algorithm that simply records its calls.
-class HeapCallRecorder : public HeapAlgorithm<HloValue> {
+class HeapCallRecorder : public HeapAlgorithm {
  public:
   explicit HeapCallRecorder(CallSequence* calls) : calls_(calls) {}
   ~HeapCallRecorder() override {}
@@ -256,15 +255,12 @@ class HeapCallRecorder : public HeapAlgorithm<HloValue> {
   }
   Result Finish() override {
     calls_->emplace_back(kFinish, nullptr);
-    HeapSimulator::Result<HloValue> result;
-    result.heap_size = result_.heap_size;
-    result.heap_results.emplace_back(std::move(result_));
-    return result;
+    return result_;
   }
 
  private:
   CallSequence* calls_;
-  HeapSimulator::HeapResult<HloValue> result_;
+  Result result_;
 };
 
 // HeapSimulatorTracker runs the heap simulator, recording the sequence of calls
@@ -338,8 +334,7 @@ class HeapSimulatorTracker {
 
   int64 OffsetAt(const HloInstruction* instruction, const ShapeIndex& index) {
     const HloValue* buffer = BufferAt(instruction, index);
-    CHECK_EQ(1, result_.heap_results.size());
-    return result_.heap_results.at(0).chunk_map.at(buffer).offset;
+    return result_.chunk_map.at(buffer).offset;
   }
 
   // Ensures the expected sequence of Alloc/Free/Finish calls was performed.
@@ -400,7 +395,7 @@ class HeapSimulatorTracker {
   std::unique_ptr<HloModule> module_;
   std::unique_ptr<HloAliasAnalysis> alias_analysis_;
   CallSequence actual_calls_;
-  HeapSimulator::Result<HloValue> result_;
+  HeapSimulator::Result result_;
 };
 
 class HeapSimulatorTest : public HloTestBase {
@@ -980,12 +975,12 @@ class HeapAlgorithmTestBase : public ::testing::Test {
 class NoFragmentationStatsHeapTest : public HeapAlgorithmTestBase {};
 
 TEST_F(NoFragmentationStatsHeapTest, Empty) {
-  NoFragmentationStatsHeap<HloValue> heap;
+  NoFragmentationStatsHeap heap;
   EXPECT_EQ(0, heap.Finish().heap_size);
 }
 
 TEST_F(NoFragmentationStatsHeapTest, Simple) {
-  NoFragmentationStatsHeap<HloValue> heap;
+  NoFragmentationStatsHeap heap;
   heap.Alloc(buffer_a_, 10);
   heap.Alloc(buffer_b_, 20);
   heap.Alloc(buffer_c_, 30);
@@ -998,7 +993,7 @@ TEST_F(NoFragmentationStatsHeapTest, Simple) {
 }
 
 TEST_F(NoFragmentationStatsHeapTest, Mixed) {
-  NoFragmentationStatsHeap<HloValue> heap;
+  NoFragmentationStatsHeap heap;
   heap.Alloc(buffer_a_, 10);  // max: A
 
   heap.Alloc(buffer_b_, 20);  // max: A+B
@@ -1017,7 +1012,7 @@ TEST_F(NoFragmentationStatsHeapTest, Mixed) {
 class GlobalDecreasingSizeBestFitHeapTest : public HeapAlgorithmTestBase {
  protected:
   class InheritedGlobalDecreasingSizeBestFitHeap
-      : public GlobalDecreasingSizeBestFitHeap<HloValue> {
+      : public GlobalDecreasingSizeBestFitHeap {
    public:
     InheritedGlobalDecreasingSizeBestFitHeap()
         : GlobalDecreasingSizeBestFitHeap(/*alignment=*/1) {}
@@ -1052,11 +1047,10 @@ class GlobalDecreasingSizeBestFitHeapTest : public HeapAlgorithmTestBase {
 };
 
 TEST_F(GlobalDecreasingSizeBestFitHeapTest, Empty) {
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
-  const HeapSimulator::Result<HloValue> result = heap.Finish();
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(0, result.heap_size);
-  EXPECT_EQ(1, result.heap_results.size());
-  EXPECT_EQ(0, result.heap_results.at(0).chunk_map.size());
+  EXPECT_EQ(0, result.chunk_map.size());
 }
 
 TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSize) {
@@ -1073,7 +1067,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSize) {
   //   |         |   d   |
   //   |         +-------+
   //   -----------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
   heap.Alloc(buffer_a_, 10);
   heap.Alloc(buffer_b_, 30);
   heap.Alloc(buffer_c_, 20);
@@ -1083,10 +1077,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSize) {
   heap.Free(buffer_c_, 20);
   heap.Free(buffer_d_, 40);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(100, result.heap_size);
   EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(30, result.chunk_map.at(buffer_b_).size);
@@ -1115,7 +1106,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSizeWithAlignment) {
   //   |         |       |
   //   |         +-------+
   //   ---------------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/20);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/20);
   heap.Alloc(buffer_a_, 10);
   heap.Alloc(buffer_b_, 20);
   heap.Alloc(buffer_c_, 50);
@@ -1125,10 +1116,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, DecreasingSizeWithAlignment) {
   heap.Free(buffer_c_, 50);
   heap.Free(buffer_d_, 40);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(120, result.heap_size);
   EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
@@ -1159,7 +1147,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, BestFit) {
   //   |           |       |
   //   |           +-------+
   //   ---------------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
   heap.Alloc(buffer_a_, 10);
   heap.Alloc(buffer_b_, 20);
   heap.Alloc(buffer_c_, 40);
@@ -1171,10 +1159,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, BestFit) {
   heap.Free(buffer_d_, 30);
   heap.Free(buffer_e_, 50);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(140, result.heap_size);
   EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
@@ -1198,7 +1183,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, Colocated) {
   //   ||      |+----+|       |
   //   |+--a---++-b--++---c---+
   //   ---------------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
   heap.Alloc(buffer_a_, 40);
   heap.Free(buffer_a_, 40);
   heap.Alloc(buffer_b_, 20);
@@ -1206,10 +1191,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, Colocated) {
   heap.ShareWith(buffer_c_, buffer_a_, 40);
   heap.Free(buffer_c_, 40);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(40, result.heap_size);
   EXPECT_EQ(40, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
@@ -1229,7 +1211,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, ColocatedII) {
   //   ||      |      |       | <--- colocate with a
   //   |+--a---+      +---c---+
   //   ---------------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
   heap.Alloc(buffer_a_, 40);
   heap.Free(buffer_a_, 40);
   heap.Alloc(buffer_b_, 20);
@@ -1238,10 +1220,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, ColocatedII) {
   heap.Free(buffer_c_, 40);
   heap.Free(buffer_b_, 20);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(60, result.heap_size);
   EXPECT_EQ(40, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(20, result.chunk_map.at(buffer_b_).size);
@@ -1262,7 +1241,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, ColocatedIII) {
   //   |       |               |
   //   |       +-------b-------+
   //   ---------------------> time
-  GlobalDecreasingSizeBestFitHeap<HloValue> heap(/*alignment=*/1);
+  GlobalDecreasingSizeBestFitHeap heap(/*alignment=*/1);
   heap.Alloc(buffer_a_, 10);
   heap.Free(buffer_a_, 10);
   heap.Alloc(buffer_b_, 30);
@@ -1271,10 +1250,7 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, ColocatedIII) {
   heap.Free(buffer_c_, 10);
   heap.Free(buffer_b_, 30);
 
-  const HeapSimulator::Result<HloValue> results = heap.Finish();
-  EXPECT_EQ(1, results.heap_results.size());
-  const HeapSimulator::HeapResult<HloValue>& result =
-      results.heap_results.at(0);
+  const HeapSimulator::Result result = heap.Finish();
   EXPECT_EQ(40, result.heap_size);
   EXPECT_EQ(10, result.chunk_map.at(buffer_a_).size);
   EXPECT_EQ(30, result.chunk_map.at(buffer_b_).size);
@@ -1332,305 +1308,6 @@ TEST_F(GlobalDecreasingSizeBestFitHeapTest, ChunkCandidate) {
   EXPECT_EQ(pair(25, 35), heap_.FindChunkCandidate(buffer_g_, 10, 4, 8, 15));
   heap_.CommitChunk();  // offset: 25, size: 10, start: 4, end: 8
   // Preferred offset 15 could not be given because it is occupied.
-}
-
-class ConstrainedGlobalDecreasingSizeBestFitHeapTest
-    : public HeapAlgorithmTestBase {};
-
-TEST_F(ConstrainedGlobalDecreasingSizeBestFitHeapTest, DecreasingSize) {
-  // space
-  //   ^
-  //   |      +-------+
-  //   |      +---c---+
-  //   |    +-------+
-  //   |    |   b   |
-  //   |    +-------+
-  //   | ................ // split into two allocations.
-  //   |  +---a---+
-  //   |         +-------+
-  //   |         |       |
-  //   |         |   d   |
-  //   |         +-------+
-  //   -----------------> time
-  ConstrainedGlobalDecreasingSizeBestFitHeap heap(/*size_limit_per_heap=*/50,
-                                                  /*alignment=*/1);
-  heap.Alloc(buffer_a_, 10);
-  heap.Alloc(buffer_b_, 30);
-  heap.Alloc(buffer_c_, 20);
-  heap.Alloc(buffer_d_, 40);
-  heap.Free(buffer_a_, 10);
-  heap.Free(buffer_b_, 30);
-  heap.Free(buffer_c_, 20);
-  heap.Free(buffer_d_, 40);
-
-  const HeapSimulator::Result<HloValue> result = heap.Finish();
-  EXPECT_EQ(100, result.heap_size);
-  EXPECT_EQ(2, result.heap_results.size());
-
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_a_));
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_d_));
-  EXPECT_EQ(10, result.heap_results[0].chunk_map.at(buffer_a_).size);
-  EXPECT_EQ(40, result.heap_results[0].chunk_map.at(buffer_d_).size);
-  EXPECT_EQ(40, result.heap_results[0].chunk_map.at(buffer_a_).offset);
-  EXPECT_EQ(0, result.heap_results[0].chunk_map.at(buffer_d_).offset);
-}
-
-TEST_F(ConstrainedGlobalDecreasingSizeBestFitHeapTest,
-       DecreasingSizeWithAlignment) {
-  // space
-  //   ^
-  //   |      +-------+
-  //   |      +---b---+
-  //   |            +-------+
-  //   |            |       |
-  //   |            |   d   |
-  //   |            +-------+
-  //   | ...................
-  //   |  +---a---+
-  //   |
-  //   |         +-------+
-  //   |         |       |
-  //   |         |   c   |
-  //   |         |       |
-  //   |         +-------+
-  //   ---------------------> time
-  ConstrainedGlobalDecreasingSizeBestFitHeap heap(/*size_limit_per_heap=*/70,
-                                                  /*alignment=*/20);
-  heap.Alloc(buffer_a_, 10);
-  heap.Alloc(buffer_b_, 20);
-  heap.Alloc(buffer_c_, 50);
-  heap.Free(buffer_a_, 10);
-  heap.Alloc(buffer_d_, 40);
-  heap.Free(buffer_b_, 20);
-  heap.Free(buffer_c_, 50);
-  heap.Free(buffer_d_, 40);
-
-  const HeapSimulator::Result<HloValue> result = heap.Finish();
-  EXPECT_EQ(130, result.heap_size);  // 70 + 60
-  EXPECT_EQ(2, result.heap_results.size());
-
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_a_));
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_c_));
-  EXPECT_EQ(10, result.heap_results[0].chunk_map.at(buffer_a_).size);
-  EXPECT_EQ(50, result.heap_results[0].chunk_map.at(buffer_c_).size);
-  EXPECT_EQ(60, result.heap_results[0].chunk_map.at(buffer_a_).offset);
-  EXPECT_EQ(0, result.heap_results[0].chunk_map.at(buffer_c_).offset);
-}
-
-TEST_F(ConstrainedGlobalDecreasingSizeBestFitHeapTest, ColocatedII) {
-  // space
-  //   ^
-  //   |       +---------------+
-  //   |       +-------b-------+
-  //   | ....................
-  //   |+------+      +-------+
-  //   ||      |      |       |
-  //   ||      |      |       | <--- colocate with a
-  //   |+--a---+      +---c---+
-  //   ---------------------> time
-  ConstrainedGlobalDecreasingSizeBestFitHeap heap(/*size_limit_per_heap=*/50,
-                                                  /*alignment=*/20);
-  heap.Alloc(buffer_a_, 30);
-  heap.Free(buffer_a_, 30);
-  heap.Alloc(buffer_b_, 20);
-
-  heap.ShareWith(buffer_c_, buffer_a_, 40);
-  heap.Free(buffer_c_, 40);
-  heap.Free(buffer_b_, 20);
-
-  const HeapSimulator::Result<HloValue> result = heap.Finish();
-  EXPECT_EQ(50, result.heap_size);
-  EXPECT_EQ(2, result.heap_results.size());
-
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_a_));
-  EXPECT_TRUE(result.heap_results[0].chunk_map.contains(buffer_c_));
-  EXPECT_EQ(30, result.heap_results[0].chunk_map.at(buffer_a_).size);
-  EXPECT_EQ(30, result.heap_results[0].chunk_map.at(buffer_c_).size);
-  EXPECT_EQ(0, result.heap_results[0].chunk_map.at(buffer_a_).offset);
-  EXPECT_EQ(0, result.heap_results[0].chunk_map.at(buffer_c_).offset);
-}
-
-class IntervalTreeTest : public ::testing::Test {};
-
-TEST_F(IntervalTreeTest, InsertAndRemove) {
-  HeapSimulator::Chunk chunk({1, 2});
-  BufferIntervalTree tree;
-  tree.Add(1, 2, chunk);
-  EXPECT_TRUE(tree.Remove(1, 2, chunk));
-  EXPECT_FALSE(tree.Remove(1, 2, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-  // Do it again.
-  tree.Add(1, 2, chunk);
-  EXPECT_TRUE(tree.Remove(1, 2, chunk));
-  EXPECT_FALSE(tree.Remove(1, 2, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, InsertAndRemoveTwoLevelsLeft) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //     /
-  //  [1, 45] (45)
-
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(1, 45, chunk);
-  EXPECT_TRUE(tree.Remove(1, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 36);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, InsertAndRemoveTwoLevelsRight) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //          \
-  //         [21, 45] (45)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(21, 45, chunk);
-  EXPECT_TRUE(tree.Remove(21, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 36);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, TwoLevelsRight_RootFirst) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //          \
-  //         [21, 45] (45)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(21, 45, chunk);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 45);
-  EXPECT_EQ(tree.GetRoot()->start, 21);
-  EXPECT_EQ(tree.GetRoot()->end, 45);
-  EXPECT_EQ(tree.GetRoot()->left, nullptr);
-  EXPECT_EQ(tree.GetRoot()->right, nullptr);
-  EXPECT_TRUE(tree.Remove(21, 45, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, TwoLevelsLeft_RootFirst) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //      /
-  //  [1, 45] (45)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(1, 45, chunk);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 45);
-  EXPECT_EQ(tree.GetRoot()->start, 1);
-  EXPECT_EQ(tree.GetRoot()->end, 45);
-  EXPECT_EQ(tree.GetRoot()->left, nullptr);
-  EXPECT_EQ(tree.GetRoot()->right, nullptr);
-  EXPECT_TRUE(tree.Remove(1, 45, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, ThreeLevelsRight) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //          \
-  //         [21, 45] (45)
-  //              \
-  //              [22, 40] (40)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(21, 45, chunk);
-  tree.Add(22, 40, chunk);
-  EXPECT_TRUE(tree.Remove(21, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(22, 40, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-TEST_F(IntervalTreeTest, ThreeLevelsLeftLeft) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //       /
-  //  [10, 45] (45)
-  //      /
-  // [1, 40] (40)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(10, 45, chunk);
-  tree.Add(1, 40, chunk);
-  EXPECT_TRUE(tree.Remove(10, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(1, 40, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 36);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, ThreeLevelsLeftRight) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //       /
-  //  [10, 45] (45)
-  //      \
-  //     [15, 40] (40)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(10, 45, chunk);
-  tree.Add(15, 40, chunk);
-  EXPECT_TRUE(tree.Remove(10, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(15, 40, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 36);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, ThreeLevelsRightLeft) {
-  HeapSimulator::Chunk chunk({1, 2});  // Value in chunk doesn't matter here.
-  //    [20, 36] (45)
-  //          \
-  //         [25, 45] (45)
-  //           /
-  //       [22, 40] (40)
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk);
-  tree.Add(25, 45, chunk);
-  tree.Add(22, 40, chunk);
-  EXPECT_TRUE(tree.Remove(25, 45, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk));
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_TRUE(tree.Remove(22, 40, chunk));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
-}
-
-TEST_F(IntervalTreeTest, ThreeLevelsRightLeftChunkDifferent) {
-  HeapSimulator::Chunk chunk1({1, 2});
-  HeapSimulator::Chunk chunk2({2, 3});
-  HeapSimulator::Chunk chunk3({3, 4});
-  //    [20, 36] (45) Chunk1({1, 2})
-  //          \
-  //         [25, 45] (45) Chunk2({2, 3})
-  //           /
-  //       [22, 40] (40) Chunk3({3, 4})
-  BufferIntervalTree tree;
-  tree.Add(20, 36, chunk1);
-  tree.Add(25, 45, chunk2);
-  tree.Add(22, 40, chunk3);
-  EXPECT_TRUE(tree.Remove(25, 45, chunk2));
-  // Chunk 1 is till the root after removing chunk 2.
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_EQ(tree.GetRoot()->chunk.offset, 1);
-  EXPECT_EQ(tree.GetRoot()->chunk.size, 2);
-  EXPECT_TRUE(tree.Remove(20, 36, chunk1));
-  // Chunk 3 becomes the root now.
-  EXPECT_EQ(tree.GetRoot()->subtree_end, 40);
-  EXPECT_EQ(tree.GetRoot()->chunk.offset, 3);
-  EXPECT_EQ(tree.GetRoot()->chunk.size, 4);
-  EXPECT_TRUE(tree.Remove(22, 40, chunk3));
-  ASSERT_EQ(tree.GetRoot(), nullptr);
 }
 
 }  // namespace

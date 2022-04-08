@@ -33,10 +33,10 @@ namespace {
 
 class MaxUnpooling : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    const auto& attr =
-        absl::any_cast<const MaxUnpooling2DAttributes&>(ctx.op_attr);
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    auto attr = absl::any_cast<MaxUnpooling2DAttributes>(
+        ctx.node->operation.attributes);
     std::vector<Variable> parameters = {
         {"stride", int2(attr.strides.w, attr.strides.h)},
         {"offset", int2(attr.padding.prepended.w, attr.padding.prepended.h)},
@@ -66,7 +66,7 @@ class MaxUnpooling : public NodeShader {
         /*input=*/IOStructure::ONLY_DEFINITIONS,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 

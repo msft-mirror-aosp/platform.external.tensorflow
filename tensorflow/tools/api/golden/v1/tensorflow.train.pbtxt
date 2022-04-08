@@ -29,10 +29,6 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "CheckpointOptions"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "CheckpointSaverHook"
     mtype: "<type \'type\'>"
   }

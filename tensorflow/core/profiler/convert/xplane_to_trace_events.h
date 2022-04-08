@@ -16,22 +16,17 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_PROFILER_CONVERT_XPLANE_TO_TRACE_EVENTS_H_
 #define TENSORFLOW_CORE_PROFILER_CONVERT_XPLANE_TO_TRACE_EVENTS_H_
 
-#include <string>
-
+#include "absl/strings/str_split.h"
 #include "tensorflow/core/platform/types.h"
-#include "tensorflow/core/profiler/protobuf/trace_events.pb.h"
 #include "tensorflow/core/profiler/protobuf/xplane.pb.h"
+#include "tensorflow/core/protobuf/trace_events.pb.h"
 
 namespace tensorflow {
 namespace profiler {
 
-void ConvertXSpaceToTraceEvents(const XSpace& xspace, Trace* trace);
-
-void ConvertXSpaceToTraceEventsString(const XSpace& xspace,
-                                      std::string* content);
-
-// Not Public API, Testing only.
-void MaybeDropEventsForTraceViewer(Trace* trace, uint32 limit);
+void ConvertXSpaceToTraceEvents(uint64 profile_start_time_ns,
+                                uint64 profile_end_time_ns,
+                                const XSpace& xspace, Trace* trace);
 
 }  // namespace profiler
 }  // namespace tensorflow

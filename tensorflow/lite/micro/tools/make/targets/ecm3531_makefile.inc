@@ -27,6 +27,7 @@ ifeq ($(TARGET), ecm3531)
     -fmessage-length=0 \
     -fno-exceptions \
     -fno-unwind-tables \
+    -fno-builtin \
     -ffunction-sections \
     -fdata-sections \
     -funsigned-char \
@@ -46,12 +47,9 @@ ifeq ($(TARGET), ecm3531)
     -Wmissing-field-initializers \
     -Wno-unused-parameter \
     -Wno-write-strings \
-    -Wunused-function \
     -fno-delete-null-pointer-checks \
-    -fno-threadsafe-statics \
     -fomit-frame-pointer \
     -fpermissive \
-    -fno-use-cxa-atexit \
     -nostdlib \
     -g \
     -Os

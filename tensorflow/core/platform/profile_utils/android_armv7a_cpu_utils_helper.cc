@@ -19,7 +19,6 @@ limitations under the License.
     (defined(__ARM_ARCH_7A__) || defined(__aarch64__))
 
 #include <asm/unistd.h>
-#include <inttypes.h>
 #include <linux/perf_event.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,11 +53,12 @@ uint64 AndroidArmV7ACpuUtilsHelper::GetCurrentClockCycle() {
   return static_cast<uint64>(count);
 }
 
-void AndroidArmV7ACpuUtilsHelper::EnableClockCycleProfiling() {
+void AndroidArmV7ACpuUtilsHelper::EnableClockCycleProfiling(const bool enable) {
   if (!is_initialized_) {
     // Initialize here to avoid unnecessary initialization
     InitializeInternal();
   }
+  if (enable) {
     const int64 cpu0_scaling_min = ReadCpuFrequencyFile(0, "scaling_min");
     const int64 cpu0_scaling_max = ReadCpuFrequencyFile(0, "scaling_max");
     if (cpu0_scaling_max != cpu0_scaling_min) {
@@ -68,14 +68,9 @@ void AndroidArmV7ACpuUtilsHelper::EnableClockCycleProfiling() {
     }
     ResetClockCycle();
     ioctl(fd_, PERF_EVENT_IOC_ENABLE, 0);
-}
-
-void AndroidArmV7ACpuUtilsHelper::DisableClockCycleProfiling() {
-  if (!is_initialized_) {
-    // Initialize here to avoid unnecessary initialization
-    InitializeInternal();
+  } else {
+    ioctl(fd_, PERF_EVENT_IOC_DISABLE, 0);
   }
-  ioctl(fd_, PERF_EVENT_IOC_DISABLE, 0);
 }
 
 int64 AndroidArmV7ACpuUtilsHelper::CalculateCpuFrequency() {
@@ -119,18 +114,14 @@ int64 AndroidArmV7ACpuUtilsHelper::ReadCpuFrequencyFile(
   if (fp == nullptr) {
     return INVALID_CPU_FREQUENCY;
   }
-  int64_t freq_in_khz = INVALID_CPU_FREQUENCY;
-  const int retval = fscanf(fp, "%" SCNd64, &freq_in_khz);
+  int64 freq_in_khz = INVALID_CPU_FREQUENCY;
+  const int retval = fscanf(fp, "%lld", &freq_in_khz);
   if (retval < 0) {
     LOG(WARNING) << "Failed to \"" << file_path << "\"";
-    if (fclose(fp) != 0) {
-      LOG(WARNING) << "fclose() failed: " << strerror(errno);
-    }
+    fclose(fp);
     return INVALID_CPU_FREQUENCY;
   }
-  if (fclose(fp) != 0) {
-    LOG(WARNING) << "fclose() failed: " << strerror(errno);
-  }
+  fclose(fp);
   return freq_in_khz * 1000;  // The file contains cpu frequency in khz
 }
 

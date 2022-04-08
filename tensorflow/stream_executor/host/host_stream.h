@@ -31,9 +31,7 @@ namespace host {
 
 class HostStream : public internal::StreamInterface {
  public:
-  // stack_size_in_bytes may be '0', meaning "use the default thread stack
-  // size".
-  explicit HostStream(size_t stack_size_in_bytes);
+  HostStream();
   ~HostStream() override;
 
   bool EnqueueTask(std::function<void()> task);
@@ -44,11 +42,11 @@ class HostStream : public internal::StreamInterface {
   void BlockUntilDone();
 
  private:
-  bool WorkAvailable() TF_EXCLUSIVE_LOCKS_REQUIRED(mu_);
+  bool WorkAvailable() EXCLUSIVE_LOCKS_REQUIRED(mu_);
   void WorkLoop();
 
   absl::Mutex mu_;
-  std::queue<std::function<void()>> work_queue_ TF_GUARDED_BY(mu_);
+  std::queue<std::function<void()>> work_queue_ GUARDED_BY(mu_);
   std::unique_ptr<port::Thread> thread_;
 };
 

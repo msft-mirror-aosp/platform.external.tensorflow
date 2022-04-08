@@ -1,4 +1,4 @@
-// RUN: tf-opt %s | tf-opt | FileCheck %s
+// RUN: tf-opt %s | tf-opt | FileCheck %s --dump-input-on-failure
 
 // Tests printer for tf_executor.island "wraps" short form.
 

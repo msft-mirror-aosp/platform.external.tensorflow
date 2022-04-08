@@ -2,7 +2,7 @@
 
 
 // CHECK:      attr {
-// CHECK:        key: "dtypes"
+// CHECK-NEXT:   key: "dtypes"
 // CHECK-NEXT:   value {
 // CHECK-NEXT:     list {
 // CHECK-NEXT:       type: DT_INT32

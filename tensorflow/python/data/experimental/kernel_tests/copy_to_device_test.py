@@ -254,7 +254,7 @@ class CopyToDeviceTest(test_base.DatasetTestBase, parameterized.TestCase):
       with self.assertRaises(errors.OutOfRangeError):
         self.evaluate(next_element)
 
-  @combinations.generate(test_base.default_test_combinations())
+  @combinations.generate(test_base.graph_only_combinations())
   def testCopyToDeviceGpu(self):
     if not test_util.is_gpu_available():
       self.skipTest("No GPU available")
@@ -264,9 +264,18 @@ class CopyToDeviceTest(test_base.DatasetTestBase, parameterized.TestCase):
         prefetching_ops.copy_to_device("/gpu:0"))
 
     with ops.device("/gpu:0"):
-      self.assertDatasetProduces(device_dataset, list(range(10)))
+      iterator = dataset_ops.make_initializable_iterator(device_dataset)
+      next_element = iterator.get_next()
 
-  @combinations.generate(test_base.default_test_combinations())
+    with self.cached_session(
+        config=config_pb2.ConfigProto(allow_soft_placement=False)):
+      self.evaluate(iterator.initializer)
+      for i in range(10):
+        self.assertEqual(i, self.evaluate(next_element))
+      with self.assertRaises(errors.OutOfRangeError):
+        self.evaluate(next_element)
+
+  @combinations.generate(test_base.graph_only_combinations())
   def testCopyToDeviceGpuWithPrefetch(self):
     if not test_util.is_gpu_available():
       self.skipTest("No GPU available")
@@ -276,7 +285,16 @@ class CopyToDeviceTest(test_base.DatasetTestBase, parameterized.TestCase):
         prefetching_ops.copy_to_device("/gpu:0")).prefetch(1)
 
     with ops.device("/gpu:0"):
-      self.assertDatasetProduces(device_dataset, list(range(10)))
+      iterator = dataset_ops.make_initializable_iterator(device_dataset)
+      next_element = iterator.get_next()
+
+    with self.cached_session(
+        config=config_pb2.ConfigProto(allow_soft_placement=False)):
+      self.evaluate(iterator.initializer)
+      for i in range(10):
+        self.assertEqual(i, self.evaluate(next_element))
+      with self.assertRaises(errors.OutOfRangeError):
+        self.evaluate(next_element)
 
   @combinations.generate(test_base.graph_only_combinations())
   def testCopyToDeviceGpuWithMap(self):

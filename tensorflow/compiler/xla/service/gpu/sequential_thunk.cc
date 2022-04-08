@@ -17,16 +17,13 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/gpu/hlo_execution_profiler.h"
 #include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/profiler/lib/scoped_annotation.h"
 
 namespace xla {
 namespace gpu {
 
-using ::tensorflow::profiler::ScopedAnnotation;
-
-SequentialThunk::SequentialThunk(ThunkInfo thunk_info,
-                                 std::vector<std::unique_ptr<Thunk>> thunks)
-    : Thunk(Kind::kSequential, thunk_info), thunks_(std::move(thunks)) {}
+SequentialThunk::SequentialThunk(std::vector<std::unique_ptr<Thunk>> thunks,
+                                 const HloInstruction* hlo)
+    : Thunk(Kind::kSequential, hlo), thunks_(std::move(thunks)) {}
 
 Status SequentialThunk::Initialize(const GpuExecutable& executable,
                                    se::StreamExecutor* executor) {
@@ -38,9 +35,8 @@ Status SequentialThunk::Initialize(const GpuExecutable& executable,
 
 Status SequentialThunk::ExecuteOnStream(const ExecuteParams& params) {
   auto op_profiler =
-      params.profiler->MakeScopedInstructionProfiler(profile_index());
+      params.profiler->MakeScopedInstructionProfiler(hlo_instruction());
   for (const auto& thunk : thunks_) {
-    ScopedAnnotation annotation([&] { return thunk->profile_annotation(); });
     TF_RETURN_IF_ERROR(thunk->ExecuteOnStream(params));
   }
   return Status::OK();

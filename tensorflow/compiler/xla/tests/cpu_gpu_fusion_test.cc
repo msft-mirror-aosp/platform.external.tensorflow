@@ -824,8 +824,9 @@ XLA_TEST_F(FusionClientLibraryTest, ManyLayoutTransformations) {
   ComputeAndCompare(&b, {});
 }
 
-void BM_ParallelFusion(::testing::benchmark::State& state) {
+void BM_ParallelFusion(int num_iters) {
   // Simple element-wise computation to benchmark parallel task partitioning.
+  tensorflow::testing::StopTiming();
 
   se::Platform* platform = PlatformUtil::GetDefaultPlatform().ValueOrDie();
   auto executors = PlatformUtil::GetStreamExecutors(platform).ValueOrDie();
@@ -914,16 +915,17 @@ void BM_ParallelFusion(::testing::benchmark::State& state) {
   const int64 total_bytes = param0_dim0 * param0_dim0 +
                             param1_dim0 * param1_dim0 +
                             param2_dim0 * param2_dim0;
-
-  for (auto s : state) {
+  tensorflow::testing::BytesProcessed(static_cast<int64>(num_iters) *
+                                      total_bytes * sizeof(float));
+  tensorflow::testing::UseRealTime();
+  tensorflow::testing::StartTiming();
+  for (int i = 0; i < num_iters; ++i) {
     auto result = executable->Run({&buffer0, &buffer1, &buffer2}, options);
     ASSERT_TRUE(result.ok());
   }
-  state.SetBytesProcessed(static_cast<int64>(state.iterations()) * total_bytes *
-                          sizeof(float));
 }
 
-BENCHMARK(BM_ParallelFusion)->UseRealTime();
+BENCHMARK(BM_ParallelFusion);
 
 }  // namespace
 }  // namespace xla

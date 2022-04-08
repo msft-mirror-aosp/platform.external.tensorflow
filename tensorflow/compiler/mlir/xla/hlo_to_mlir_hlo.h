@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_MLIR_XLA_TO_MLIR_HLO_H_
-#define TENSORFLOW_COMPILER_MLIR_XLA_TO_MLIR_HLO_H_
+#ifndef TENSORFLOW_COMPILER_MLIR_XLA_HLO_TO_MLIR_HLO_H_
+#define TENSORFLOW_COMPILER_MLIR_XLA_HLO_TO_MLIR_HLO_H_
 
 #include "tensorflow/compiler/mlir/tensorflow/utils/error_util.h"
 #include "tensorflow/compiler/xla/status.h"
@@ -28,18 +28,12 @@ class HloModule;
 class HloModuleProto;
 
 // Converts an HLO module proto to a MLIR module in HLO dialect.
-// If import_all_computation is set to true, imports all computations
-// irrespective if transitively called from entry computation.
 Status ConvertHloToMlirHlo(mlir::ModuleOp module,
-                           xla::HloModuleProto* hlo_module,
-                           bool import_all_computations = false);
+                           xla::HloModuleProto* hlo_module);
 
 // Converts an HLO module to a MLIR module in HLO dialect.
-// If import_all_computation is set to true, imports all computations
-// irrespective if transitively called from entry computation.
-Status ConvertHloToMlirHlo(mlir::ModuleOp module, xla::HloModule* hlo_module,
-                           bool import_all_computations = false);
+Status ConvertHloToMlirHlo(mlir::ModuleOp module, xla::HloModule* hlo_module);
 
 }  // namespace xla
 
-#endif  // TENSORFLOW_COMPILER_MLIR_XLA_TO_MLIR_HLO_H_
+#endif  // TENSORFLOW_COMPILER_MLIR_XLA_HLO_TO_MLIR_HLO_H_

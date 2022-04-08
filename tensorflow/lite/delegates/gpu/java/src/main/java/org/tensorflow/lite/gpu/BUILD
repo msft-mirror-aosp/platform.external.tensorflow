@@ -4,9 +4,6 @@ package(
 
 filegroup(
     name = "gpu_delegate",
-    srcs = [
-        "CompatibilityList.java",
-        "GpuDelegate.java",
-    ],
+    srcs = ["GpuDelegate.java"],
     visibility = ["//visibility:public"],
 )

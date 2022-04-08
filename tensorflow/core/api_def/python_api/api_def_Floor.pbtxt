@@ -1,4 +1,9 @@
 op {
   graph_op_name: "Floor"
-  visibility: HIDDEN
+  endpoint {
+    name: "math.floor"
+  }
+  endpoint {
+    name: "floor"
+  }
 }

@@ -37,16 +37,16 @@ namespace toco {
 using tensorflow::AttrValue;
 using tensorflow::GraphDef;
 
-void LogDumpGraphDef(int log_level, const std::string& message,
+void LogDumpGraphDef(int log_level, const string& message,
                      const GraphDef& tf_graph) {
   if (!VLOG_IS_ON(log_level)) {
     return;
   }
-  std::set<std::string> ops;
+  std::set<string> ops;
   for (const auto& node : tf_graph.node()) {
     ops.insert(node.op());
   }
-  std::string dump;
+  string dump;
   toco::port::AppendF(&dump, R"MSG(
 BEGIN DUMP OF TENSORFLOW GRAPHDEF (%s)
 There are %d nodes.

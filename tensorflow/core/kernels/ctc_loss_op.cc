@@ -15,9 +15,9 @@ limitations under the License.
 
 // See docs in ../ops/ctc_ops.cc.
 
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 #define EIGEN_USE_GPU
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 #include "tensorflow/core/framework/bounds_check.h"
 #include "tensorflow/core/framework/op.h"
@@ -31,18 +31,15 @@ limitations under the License.
 
 #if GOOGLE_CUDA
 #include "third_party/gpus/cudnn/cudnn.h"
-#endif  // GOOGLE_CUDA
-
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #include "tensorflow/core/kernels/conv_ops_gpu.h"
 #include "tensorflow/core/util/stream_executor_util.h"
 #include "tensorflow/core/util/tensor_format.h"
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 namespace tensorflow {
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#if GOOGLE_CUDA
 using GPUDevice = Eigen::GpuDevice;
 
 namespace {
@@ -63,7 +60,7 @@ void DoHistogram(OpKernelContext* ctx, const Tensor* labels_indices,
 }
 
 }  // end namespace
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif  // GOOGLE_CUDA
 
 template <typename T>
 class CTCLossOp : public OpKernel {
@@ -224,7 +221,7 @@ REGISTER_CPU(double);
 
 #undef REGISTER_CPU
 
-#if ((GOOGLE_CUDA && CUDNN_VERSION >= 7603) || TENSORFLOW_USE_ROCM)
+#if GOOGLE_CUDA && CUDNN_VERSION >= 7603
 class CTCLossOpGPU : public OpKernel {
  public:
   explicit CTCLossOpGPU(OpKernelConstruction* ctx) : OpKernel(ctx) {
@@ -369,5 +366,5 @@ REGISTER_KERNEL_BUILDER(Name("CTCLossV2")
                             .HostMemory("labels_values")
                             .HostMemory("sequence_length"),
                         CTCLossOpGPU);
-#endif  // ((GOOGLE_CUDA && CUDNN_VERSION >= 7603)  || TENSORFLOW_USE_ROCM)
+#endif  // GOOGLE_CUDA && CUDNN_VERSION >= 7603
 }  // end namespace tensorflow

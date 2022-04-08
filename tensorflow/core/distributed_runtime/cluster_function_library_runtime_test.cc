@@ -36,11 +36,9 @@ class ClusterFunctionLibraryRuntimeTest : public ::testing::Test {
     TF_CHECK_OK(spec.AddHostPortsJob("localhost", cluster_->targets()));
     ChannelCreationFunction channel_func =
         ConvertToChannelCreationFunction(NewHostPortGrpcChannel);
-    grpc_worker_env_.reset(CreateGrpcWorkerEnv());
-    std::shared_ptr<GrpcChannelCache> channel_cache(
-        NewGrpcChannelCache(spec, channel_func));
     std::unique_ptr<WorkerCacheInterface> worker_cache(
-        NewGrpcWorkerCache(channel_cache, grpc_worker_env_.get()));
+        NewGrpcWorkerCache(std::shared_ptr<GrpcChannelCache>(
+            NewGrpcChannelCache(spec, channel_func))));
 
     worker_session_.reset(new WorkerSession(
         "cluster_test_session", "/job:localhost/replica:0/task:0",
@@ -112,7 +110,6 @@ class ClusterFunctionLibraryRuntimeTest : public ::testing::Test {
   std::unique_ptr<test::TestCluster> cluster_;
   std::unique_ptr<WorkerSession> worker_session_;
   std::unique_ptr<ClusterFunctionLibraryRuntime> cluster_flr_;
-  std::unique_ptr<GrpcWorkerEnv> grpc_worker_env_;
 };
 
 TEST_F(ClusterFunctionLibraryRuntimeTest, ConstructFunctionGraph) {

@@ -10,9 +10,8 @@ details on how to use them in your iOS projects.
 
 In some cases, you might wish to use a local build of TensorFlow Lite, for
 example when you want to make local changes to TensorFlow Lite and test those
-changes in your iOS app or you prefer using static framework to our provided
-dynamic one. To create a universal iOS framework for TensorFlow Lite locally,
-you need to build it using Bazel on a macOS machine.
+changes in your iOS app. To create a universal iOS framework for TensorFlow Lite
+locally, you need to build it using Bazel on a macOS machine.
 
 ### Install Xcode
 
@@ -43,7 +42,7 @@ Run the `./configure` script in the root TensorFlow checkout directory, and
 answer "Yes" when the script asks if you wish to build TensorFlow with iOS
 support.
 
-### Build TensorFlowLiteC dynamic framework (recommended)
+### Build TensorFlowLiteC framework
 
 Note: This step is not necessary if (1) you are using Bazel for your app, or (2)
 you only want to test local changes to the Swift or Objective-C APIs. In these
@@ -55,31 +54,15 @@ Once Bazel is properly configured with iOS support, you can build the
 
 ```sh
 bazel build --config=ios_fat -c opt \
-  //tensorflow/lite/ios:TensorFlowLiteC_framework
+  //tensorflow/lite/experimental/ios:TensorFlowLiteC_framework
 ```
 
 This command will generate the `TensorFlowLiteC_framework.zip` file under
-`bazel-bin/tensorflow/lite/ios/` directory under your TensorFlow root directory.
-By default, the generated framework contains a "fat" binary, containing armv7,
-arm64, and x86_64 (but no i386). To see the full list of build flags used when
-you specify `--config=ios_fat`, please refer to the iOS configs section in the
-[`.bazelrc` file][bazelrc].
-
-### Build TensorFlowLiteC static framework
-
-By default, we only distribute the dynamic framework via Cocoapods. If you want
-to use the static framework instead, you can build the `TensorFlowLiteC` static
-framework with the following command:
-
-```
-bazel build --config=ios_fat -c opt \
-  //tensorflow/lite/ios:TensorFlowLiteC_static_framework
-```
-
-The command will generate a file named `TensorFlowLiteC_static_framework.zip`
-under `bazel-bin/tensorflow/lite/ios/` directory under your TensorFlow root
-directory. This static framework can be used in the exact same way as the
-dynamic one.
+`bazel-bin/tensorflow/lite/experimental/ios/` directory under your TensorFlow
+root directory. By default, the generated framework contains a "fat" binary,
+containing armv7, arm64, and x86_64 (but no i386). To see the full list of build
+flags used when you specify `--config=ios_fat`, please refer to the iOS configs
+section in the [`.bazelrc` file][bazelrc].
 
 ## Use in your own application
 
@@ -142,8 +125,7 @@ You can set up a private CocoaPods specs repository, and publish your custom
   ...
   s.version      = <your_desired_version_tag>
   ...
-  # Note the `///`, two from the `file://` and one from the `/path`.
-  s.source       = { :http => "file:///path/to/TensorFlowLiteC_framework.zip" }
+  s.source       = { :http => "file://<path_to_TensorFlowLiteC_framework.zip>" }
   ...
   s.vendored_frameworks = 'TensorFlowLiteC.framework'
   ...
@@ -165,7 +147,7 @@ For Swift:
 ```python
 swift_library(
   deps = [
-      "//tensorflow/lite/swift:TensorFlowLite",
+      "//tensorflow/lite/experimental/swift:TensorFlowLite",
   ],
 )
 ```
@@ -175,7 +157,7 @@ For Objective-C:
 ```python
 objc_library(
   deps = [
-      "//tensorflow/lite/objc:TensorFlowLite",
+      "//tensorflow/lite/experimental/objc:TensorFlowLite",
   ],
 )
 ```
@@ -218,7 +200,7 @@ TensorFlow Lite's C API, defined by the header files under
 [bazel-install]: https://docs.bazel.build/versions/master/install-os-x.html
 [bazelrc]: https://github.com/tensorflow/tensorflow/blob/master/.bazelrc
 [configure-py]: https://github.com/tensorflow/tensorflow/blob/master/configure.py
-[objc-api]: https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/objc
+[objc-api]: https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/objc
 [private-cocoapods]: https://guides.cocoapods.org/making/private-cocoapods.html
-[swift-api]: https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/swift
-[tflite-podspec]: https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/ios/TensorFlowLiteC.podspec
+[swift-api]: https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/experimental/swift
+[tflite-podspec]: https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/experimental/ios/TensorFlowLiteC.podspec

@@ -16,8 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_GREEDY_BY_BREADTH_ASSIGNMENT_H_
 #define TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_GREEDY_BY_BREADTH_ASSIGNMENT_H_
 
-#include <stddef.h>
-
+#include <cstdint>
 #include <vector>
 
 #include "tensorflow/lite/delegates/gpu/common/memory_management/types.h"
@@ -45,7 +44,7 @@ namespace gpu {
 // tensor’s size, assign current tensor to the smallest of them;
 // - If there are suitable objects only with size less than current tensor’s
 // size, assign current tensor to the largest of them and increase its size.
-absl::Status GreedyByBreadthAssignment(
+Status GreedyByBreadthAssignment(
     const std::vector<TensorUsageRecord<size_t>>& usage_records,
     ObjectsAssignment<size_t>* assignment);
 

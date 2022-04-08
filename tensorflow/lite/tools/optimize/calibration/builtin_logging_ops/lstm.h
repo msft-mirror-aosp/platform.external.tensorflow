@@ -23,17 +23,8 @@ namespace optimize {
 namespace calibration {
 namespace builtin {
 
-enum class LSTMType {
-  kLSTM,
-  kUnidirectionalSequenceLSTM,
-};
-
 TfLiteStatus lstm_logging_kernel(TfLiteContext* context, TfLiteNode* node,
                                  Logger* logger, ErrorReporter* error_reporter);
-
-TfLiteStatus unidirectional_sequence_lstm_logging_kernel(
-    TfLiteContext* context, TfLiteNode* node, Logger* logger,
-    ErrorReporter* error_reporter);
 
 }  // namespace builtin
 }  // namespace calibration

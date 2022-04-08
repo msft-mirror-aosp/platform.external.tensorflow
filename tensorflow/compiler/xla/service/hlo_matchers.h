@@ -203,7 +203,6 @@ HLO_MATCHER(Abs);
 HLO_MATCHER(Add);
 HLO_MATCHER(AddDependency);
 HLO_MATCHER(AfterAll);
-HLO_MATCHER(AllGather);
 HLO_MATCHER(AllReduce);
 HLO_MATCHER(AllToAll);
 HLO_MATCHER(And);
@@ -232,7 +231,6 @@ HLO_MATCHER(Fft);
 HLO_MATCHER(Floor);
 HLO_MATCHER(Fusion);
 HLO_MATCHER(Gather);
-HLO_MATCHER(GetDimensionSize);
 HLO_MATCHER(Infeed);
 HLO_MATCHER(Iota);
 HLO_MATCHER(IsFinite);
@@ -263,7 +261,6 @@ HLO_MATCHER(Select);
 HLO_MATCHER(SelectAndScatter);
 HLO_MATCHER(Send);
 HLO_MATCHER(SendDone);
-HLO_MATCHER(SetDimensionSize);
 HLO_MATCHER(ShiftLeft);
 HLO_MATCHER(ShiftRightArithmetic);
 HLO_MATCHER(ShiftRightLogical);
@@ -415,11 +412,6 @@ inline ::testing::Matcher<const ::xla::HloInstruction*> Sharding(
 inline ::testing::Matcher<const ::xla::HloInstruction*> NoSharding() {
   return ::testing::MakeMatcher(
       new ::xla::testing::HloShardingMatcher(absl::nullopt));
-}
-
-inline ::testing::Matcher<const ::xla::HloInstruction*> Dot() {
-  return ::testing::MakeMatcher(
-      new ::xla::testing::HloMatcher(::xla::HloOpcode::kDot, {}));
 }
 
 inline ::testing::Matcher<const ::xla::HloInstruction*> Dot(

@@ -27,7 +27,7 @@ from tensorflow.python.data.ops import dataset_ops
 from tensorflow.python.framework import combinations
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import sparse_tensor
-from tensorflow.python.ops.ragged import ragged_factory_ops
+from tensorflow.python.ops.ragged import ragged_tensor_value
 from tensorflow.python.platform import test
 
 
@@ -37,14 +37,6 @@ class AsNumpyIteratorTest(test_base.DatasetTestBase, parameterized.TestCase):
   def testBasic(self):
     ds = dataset_ops.Dataset.range(3)
     self.assertEqual([0, 1, 2], list(ds.as_numpy_iterator()))
-
-  @combinations.generate(test_base.eager_only_combinations())
-  def testImmutable(self):
-    ds = dataset_ops.Dataset.from_tensors([1, 2, 3])
-    arr = next(ds.as_numpy_iterator())
-    with self.assertRaisesRegex(ValueError,
-                                'assignment destination is read-only'):
-      arr[0] = 0
 
   @combinations.generate(test_base.eager_only_combinations())
   def testNestedStructure(self):
@@ -82,11 +74,9 @@ class AsNumpyIteratorTest(test_base.DatasetTestBase, parameterized.TestCase):
 
   @combinations.generate(test_base.eager_only_combinations())
   def testRaggedElement(self):
-    lst = [[1, 2], [3], [4, 5, 6]]
-    rt = ragged_factory_ops.constant(lst)
-    ds = dataset_ops.Dataset.from_tensor_slices(rt)
-    for actual, expected in zip(ds.as_numpy_iterator(), lst):
-      self.assertTrue(np.array_equal(actual, expected))
+    self._testInvalidElement(
+        ragged_tensor_value.RaggedTensorValue(
+            np.array([0, 1, 2]), np.array([0, 1, 3], dtype=np.int64)))
 
   @combinations.generate(test_base.eager_only_combinations())
   def testDatasetElement(self):

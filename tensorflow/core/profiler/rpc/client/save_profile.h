@@ -16,38 +16,20 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_PROFILER_RPC_CLIENT_SAVE_PROFILE_H_
 #define TENSORFLOW_CORE_PROFILER_RPC_CLIENT_SAVE_PROFILE_H_
 
-#include <ostream>
-#include <string>
-
-#include "tensorflow/core/platform/status.h"
-#include "tensorflow/core/platform/types.h"
+#include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/profiler/profiler_service.pb.h"
 
 namespace tensorflow {
 namespace profiler {
 
-std::string GetCurrentTimeStampAsString();
-
-// Returns the profile plugin directory given a logdir to TensorBoard.
-std::string GetTensorBoardProfilePluginDir(const std::string& logdir);
-
-// Creates an empty event file if not already exists, which indicates that we
-// have a plugins/profile/ directory in the current logdir.
-Status MaybeCreateEmptyEventFile(const std::string& logdir);
-
-// Saves all profiling tool data in a profile to <repository_root>/<run>/.
-// This writes user-facing log messages to `os`.
+// Saves all profiling tool data in a profile to a TensorBoard log directory
+// with the given run name. This writes user-facing log messages to `os`.
 // Note: this function creates a directory even when all fields in
 // ProfileResponse are unset/empty.
-Status SaveProfile(const std::string& repository_root, const std::string& run,
-                   const std::string& host, const ProfileResponse& response,
-                   std::ostream* os);
-
-// Gzip the data and save to <repository_root>/<run>/.
-Status SaveGzippedToolData(const std::string& repository_root,
-                           const std::string& run, const std::string& host,
-                           const std::string& tool_name,
-                           const std::string& data);
+Status SaveTensorboardProfile(const string& logdir, const string& run,
+                              const string& host,
+                              const ProfileResponse& response,
+                              std::ostream* os);
 
 }  // namespace profiler
 }  // namespace tensorflow

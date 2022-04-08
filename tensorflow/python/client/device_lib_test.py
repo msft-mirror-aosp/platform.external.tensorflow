@@ -39,7 +39,8 @@ class DeviceLibTest(test_util.TensorFlowTestCase):
     # GPU test
     if test.is_gpu_available():
       self.assertGreater(len(devices), 1)
-      self.assertIn("GPU", [d.device_type for d in devices])
+      self.assertTrue("GPU" in [d.device_type for d in devices] or
+                      "SYCL" in [d.device_type for d in devices])
 
 
 if __name__ == "__main__":

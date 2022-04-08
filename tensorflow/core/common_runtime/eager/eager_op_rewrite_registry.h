@@ -34,7 +34,7 @@ class EagerOpRewrite {
 
   virtual ~EagerOpRewrite() {}
 
-  // To be implemented by an Eager op rewrite pass.
+  // To be implemnted by an Eager op rewrite pass.
   virtual Status Run(EagerOperation* orig_op,
                      std::unique_ptr<tensorflow::EagerOperation>* out_op) = 0;
 
@@ -55,8 +55,7 @@ class EagerOpRewriteRegistry {
   // Phases at which the Eager op rewrite pass should run.
   // For now we only added PRE_EXECUTION. Expand as needed.
   enum Phase {
-    PRE_EXECUTION = 0,  // right before executing an eager op
-    POST_PLACEMENT = 1  // after device placement
+    PRE_EXECUTION = 0  // right before executing an eager op
   };
 
   // Add a rewrite pass to the registry.
@@ -71,7 +70,7 @@ class EagerOpRewriteRegistry {
   static EagerOpRewriteRegistry* Global();
 
  private:
-  static constexpr int32 kNumPhases = 2;
+  static constexpr int32 kNumPhases = 1;
   // Holds all the registered Eager op rewrites.
   std::array<std::unique_ptr<EagerOpRewrite>, kNumPhases> rewrites_;
 };

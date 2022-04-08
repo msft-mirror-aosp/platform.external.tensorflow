@@ -88,17 +88,16 @@ public final class OvicClassifierBenchmarker extends OvicBenchmarker {
       Log.e(TAG, e.getMessage());
       Log.e(TAG, "Failed to classify image.");
     }
-    if (iterResult == null || iterResult.latencyMilli == null || iterResult.latencyNano == null) {
+    if (iterResult == null || iterResult.latency == null) {
       throw new RuntimeException("Classification result or timing is invalid.");
     }
-    Log.d(TAG, "Native inference latency (ms): " + iterResult.latencyMilli);
-    Log.d(TAG, "Native inference latency (ns): " + iterResult.latencyNano);
+    Log.d(TAG, "Native inference latency: " + iterResult.latency);
     Log.i(TAG, iterResult.toString());
 
     if (!benchmarkStarted) {  // Skip the first image to discount warming-up time.
       benchmarkStarted = true;
     } else {
-      totalRuntimeNano += ((double) iterResult.latencyNano);
+      totalRuntime += ((double) iterResult.latency);
     }
     return true;
   }

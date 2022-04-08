@@ -23,7 +23,6 @@ limitations under the License.
 #include <limits>
 #include <memory>
 #include <sstream>
-#include <vector>
 
 #ifdef TF_ANDROID_ENABLE_LOGSINK
 #include "absl/base/log_severity.h"
@@ -52,16 +51,16 @@ class LogMessage : public std::basic_ostringstream<char> {
   // Change the location of the log message.
   LogMessage& AtLocation(const char* fname, int line);
 
-  // Returns the maximum log level for VLOG statements.
-  // E.g., if MaxVLogLevel() is 2, then VLOG(2) statements will produce output,
+  // Returns the minimum log level for VLOG statements.
+  // E.g., if MinVLogLevel() is 2, then VLOG(2) statements will produce output,
   // but VLOG(3) will not. Defaults to 0.
-  static int64 MaxVLogLevel();
+  static int64 MinVLogLevel();
 
   // Returns whether VLOG level lvl is activated for the file fname.
   //
   // E.g. if the environment variable TF_CPP_VMODULE contains foo=3 and fname is
   // foo.cc and lvl is <= 3, this will return true. It will also return true if
-  // the level is lower or equal to TF_CPP_MAX_VLOG_LEVEL (default zero).
+  // the level is lower or equal to TF_CPP_MIN_VLOG_LEVEL (default zero).
   //
   // It is expected that the result of this query will be cached in the VLOG-ing
   // call site to avoid repeated lookups. This routine performs a hash-map
@@ -119,7 +118,7 @@ class LogMessageNull : public std::basic_ostringstream<char> {
 
 #else
 
-// Otherwise, set TF_CPP_MAX_VLOG_LEVEL environment to update minimum log level
+// Otherwise, set TF_CPP_MIN_VLOG_LEVEL environment to update minimum log level
 // of VLOG, or TF_CPP_VMODULE to set the minimum log level for individual
 // translation units.
 #define VLOG_IS_ON(lvl)                                                     \
@@ -270,12 +269,16 @@ inline const T& GetReferenceableValue(const T& t) {
 inline char GetReferenceableValue(char t) { return t; }
 inline unsigned char GetReferenceableValue(unsigned char t) { return t; }
 inline signed char GetReferenceableValue(signed char t) { return t; }
-inline int16 GetReferenceableValue(int16 t) { return t; }
-inline uint16 GetReferenceableValue(uint16 t) { return t; }
+inline short GetReferenceableValue(short t) { return t; }
+inline unsigned short GetReferenceableValue(unsigned short t) { return t; }
 inline int GetReferenceableValue(int t) { return t; }
 inline unsigned int GetReferenceableValue(unsigned int t) { return t; }
-inline int64 GetReferenceableValue(int64 t) { return t; }
-inline uint64 GetReferenceableValue(uint64 t) { return t; }
+inline long GetReferenceableValue(long t) { return t; }
+inline unsigned long GetReferenceableValue(unsigned long t) { return t; }
+inline long long GetReferenceableValue(long long t) { return t; }
+inline unsigned long long GetReferenceableValue(unsigned long long t) {
+  return t;
+}
 
 // This formats a value for a failing CHECK_XX statement.  Ordinarily,
 // it uses the definition for operator<<, with a few special cases below.
@@ -296,16 +299,16 @@ void MakeCheckOpValueString(std::ostream* os, const unsigned char& v);
 #if LANG_CXX11
 // We need an explicit specialization for std::nullptr_t.
 template <>
-void MakeCheckOpValueString(std::ostream* os, const std::nullptr_t& v);
+void MakeCheckOpValueString(std::ostream* os, const std::nullptr_t& p);
 #endif
 
 // A container for a string pointer which can be evaluated to a bool -
 // true iff the pointer is non-NULL.
 struct CheckOpString {
-  explicit CheckOpString(string* str) : str_(str) {}
+  CheckOpString(string* str) : str_(str) {}
   // No destructor: if str_ is non-NULL, we're about to LOG(FATAL),
   // so there's no point in cleaning up str_.
-  explicit operator bool() const { return TF_PREDICT_FALSE(str_ != nullptr); }
+  operator bool() const { return TF_PREDICT_FALSE(str_ != NULL); }
   string* str_;
 };
 
@@ -394,12 +397,12 @@ TF_DEFINE_CHECK_OP_IMPL(Check_GT, >)
 
 // In optimized mode, use CheckOpString to hint to compiler that
 // the while condition is unlikely.
-#define CHECK_OP_LOG(name, op, val1, val2)                     \
-  while (::tensorflow::internal::CheckOpString _result{        \
-      ::tensorflow::internal::name##Impl(                      \
-          ::tensorflow::internal::GetReferenceableValue(val1), \
-          ::tensorflow::internal::GetReferenceableValue(val2), \
-          #val1 " " #op " " #val2)})                           \
+#define CHECK_OP_LOG(name, op, val1, val2)                            \
+  while (::tensorflow::internal::CheckOpString _result =              \
+             ::tensorflow::internal::name##Impl(                      \
+                 ::tensorflow::internal::GetReferenceableValue(val1), \
+                 ::tensorflow::internal::GetReferenceableValue(val2), \
+                 #val1 " " #op " " #val2))                            \
   ::tensorflow::internal::LogMessageFatal(__FILE__, __LINE__) << *(_result.str_)
 
 #define CHECK_OP(name, op, val1, val2) CHECK_OP_LOG(name, op, val1, val2)
@@ -466,7 +469,7 @@ T&& CheckNotNull(const char* file, int line, const char* exprtext, T&& t) {
 
 int64 MinLogLevelFromEnv();
 
-int64 MaxVLogLevelFromEnv();
+int64 MinVLogLevelFromEnv();
 
 }  // namespace internal
 
@@ -483,27 +486,15 @@ class TFLogEntry {
   }
 
  public:
-  explicit TFLogEntry(int severity, absl::string_view message)
-      : severity_(AsAbslLogSeverity(severity)), message_(message) {}
-
-  explicit TFLogEntry(int severity, absl::string_view fname, int line,
-                      absl::string_view message)
-      : severity_(AsAbslLogSeverity(severity)),
-        fname_(fname),
-        line_(line),
-        message_(message) {}
+  explicit TFLogEntry(int severity, absl::string_view log_line)
+      : severity_(AsAbslLogSeverity(severity)), log_line_(log_line) {}
 
   absl::LogSeverity log_severity() const { return severity_; }
-  std::string FName() const { return fname_; }
-  int Line() const { return line_; }
-  std::string ToString() const { return message_; }
-  absl::string_view text_message() const { return message_; }
+  std::string ToString() const { return std::string(log_line_); }
 
  private:
   const absl::LogSeverity severity_;
-  const std::string fname_;
-  int line_ = -1;
-  const std::string message_;
+  const absl::string_view log_line_;
 };
 
 class TFLogSink {
@@ -531,23 +522,10 @@ class TFLogSink {
   virtual void WaitTillSent() {}
 };
 
-// This is the default log sink. This log sink is used if there are no other
-// log sinks registered. To disable the default log sink, set the
-// "no_default_logger" Bazel config setting to true or define a
-// NO_DEFAULT_LOGGER preprocessor symbol. This log sink will always log to
-// stderr.
-class TFDefaultLogSink : public TFLogSink {
- public:
-  void Send(const TFLogEntry& entry) override;
-};
-
 // Add or remove a `LogSink` as a consumer of logging data.  Thread-safe.
 void TFAddLogSink(TFLogSink* sink);
 void TFRemoveLogSink(TFLogSink* sink);
-// Get all the log sinks.  Thread-safe.
-std::vector<TFLogSink*> TFGetLogSinks();
 #endif  // TF_ANDROID_ENABLE_LOGSINK
-
 }  // namespace tensorflow
 
 #endif  // TENSORFLOW_CORE_PLATFORM_DEFAULT_LOGGING_H_

@@ -35,12 +35,6 @@ limitations under the License.
  *    "#define LOAD_SD_LIBRARY" and "#define LOAD_SDFAT_LIBRARY".
  */
 
-#if defined(ARDUINO) && !defined(ARDUINO_ARDUINO_NANO33BLE)
-#define ARDUINO_EXCLUDE_CODE
-#endif  // defined(ARDUINO) && !defined(ARDUINO_ARDUINO_NANO33BLE)
-
-#ifndef ARDUINO_EXCLUDE_CODE
-
 // Required by Arducam library
 #include <SPI.h>
 #include <Wire.h>
@@ -70,7 +64,7 @@ uint32_t jpeg_length = 0;
 
 // Get the camera module ready
 TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
-  TF_LITE_REPORT_ERROR(error_reporter, "Attempting to start Arducam");
+  error_reporter->Report("Attempting to start Arducam");
   // Enable the Wire library
   Wire.begin();
   // Configure the CS pin
@@ -88,7 +82,7 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
   uint8_t test;
   test = myCAM.read_reg(ARDUCHIP_TEST1);
   if (test != 0x55) {
-    TF_LITE_REPORT_ERROR(error_reporter, "Can't communicate with Arducam");
+    error_reporter->Report("Can't communicate with Arducam");
     delay(1000);
     return kTfLiteError;
   }
@@ -104,7 +98,7 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
 
 // Begin the capture and wait for it to finish
 TfLiteStatus PerformCapture(tflite::ErrorReporter* error_reporter) {
-  TF_LITE_REPORT_ERROR(error_reporter, "Starting capture");
+  error_reporter->Report("Starting capture");
   // Make sure the buffer is emptied before each capture
   myCAM.flush_fifo();
   myCAM.clear_fifo_flag();
@@ -113,7 +107,7 @@ TfLiteStatus PerformCapture(tflite::ErrorReporter* error_reporter) {
   // Wait for indication that it is done
   while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK)) {
   }
-  TF_LITE_REPORT_ERROR(error_reporter, "Image captured");
+  error_reporter->Report("Image captured");
   delay(50);
   // Clear the capture done flag
   myCAM.clear_fifo_flag();
@@ -124,16 +118,15 @@ TfLiteStatus PerformCapture(tflite::ErrorReporter* error_reporter) {
 TfLiteStatus ReadData(tflite::ErrorReporter* error_reporter) {
   // This represents the total length of the JPEG data
   jpeg_length = myCAM.read_fifo_length();
-  TF_LITE_REPORT_ERROR(error_reporter, "Reading %d bytes from Arducam",
-                       jpeg_length);
+  error_reporter->Report("Reading %d bytes from Arducam", jpeg_length);
   // Ensure there's not too much data for our buffer
   if (jpeg_length > MAX_JPEG_BYTES) {
-    TF_LITE_REPORT_ERROR(error_reporter, "Too many bytes in FIFO buffer (%d)",
-                         MAX_JPEG_BYTES);
+    error_reporter->Report("Too many bytes in FIFO buffer (%d)",
+                           MAX_JPEG_BYTES);
     return kTfLiteError;
   }
   if (jpeg_length == 0) {
-    TF_LITE_REPORT_ERROR(error_reporter, "No data in Arducam FIFO buffer");
+    error_reporter->Report("No data in Arducam FIFO buffer");
     return kTfLiteError;
   }
   myCAM.CS_LOW();
@@ -142,7 +135,7 @@ TfLiteStatus ReadData(tflite::ErrorReporter* error_reporter) {
     jpeg_buffer[index] = SPI.transfer(0x00);
   }
   delayMicroseconds(15);
-  TF_LITE_REPORT_ERROR(error_reporter, "Finished reading");
+  error_reporter->Report("Finished reading");
   myCAM.CS_HIGH();
   return kTfLiteOk;
 }
@@ -150,9 +143,8 @@ TfLiteStatus ReadData(tflite::ErrorReporter* error_reporter) {
 // Decode the JPEG image, crop it, and convert it to greyscale
 TfLiteStatus DecodeAndProcessImage(tflite::ErrorReporter* error_reporter,
                                    int image_width, int image_height,
-                                   int8_t* image_data) {
-  TF_LITE_REPORT_ERROR(error_reporter,
-                       "Decoding JPEG and converting to greyscale");
+                                   uint8_t* image_data) {
+  error_reporter->Report("Decoding JPEG and converting to greyscale");
   // Parse the JPEG headers. The image will be decoded as a sequence of Minimum
   // Coded Units (MCUs), which are 16x8 blocks of pixels.
   JpegDec.decodeArray(jpeg_buffer, jpeg_length);
@@ -221,29 +213,26 @@ TfLiteStatus DecodeAndProcessImage(tflite::ErrorReporter* error_reporter,
         // See https://en.wikipedia.org/wiki/Grayscale for magic numbers
         float gray_value = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
 
-        // Convert to signed 8-bit integer by subtracting 128.
-        gray_value -= 128;
-
         // The x coordinate of this pixel in the output image
         int current_x = x_origin + mcu_col;
         // The index of this pixel in our flat output buffer
         int index = (current_y * image_width) + current_x;
-        image_data[index] = static_cast<int8_t>(gray_value);
+        image_data[index] = static_cast<uint8_t>(gray_value);
       }
     }
   }
-  TF_LITE_REPORT_ERROR(error_reporter, "Image decoded and processed");
+  error_reporter->Report("Image decoded and processed");
   return kTfLiteOk;
 }
 
 // Get an image from the camera module
 TfLiteStatus GetImage(tflite::ErrorReporter* error_reporter, int image_width,
-                      int image_height, int channels, int8_t* image_data) {
+                      int image_height, int channels, uint8_t* image_data) {
   static bool g_is_camera_initialized = false;
   if (!g_is_camera_initialized) {
     TfLiteStatus init_status = InitCamera(error_reporter);
     if (init_status != kTfLiteOk) {
-      TF_LITE_REPORT_ERROR(error_reporter, "InitCamera failed");
+      error_reporter->Report("InitCamera failed");
       return init_status;
     }
     g_is_camera_initialized = true;
@@ -251,24 +240,22 @@ TfLiteStatus GetImage(tflite::ErrorReporter* error_reporter, int image_width,
 
   TfLiteStatus capture_status = PerformCapture(error_reporter);
   if (capture_status != kTfLiteOk) {
-    TF_LITE_REPORT_ERROR(error_reporter, "PerformCapture failed");
+    error_reporter->Report("PerformCapture failed");
     return capture_status;
   }
 
   TfLiteStatus read_data_status = ReadData(error_reporter);
   if (read_data_status != kTfLiteOk) {
-    TF_LITE_REPORT_ERROR(error_reporter, "ReadData failed");
+    error_reporter->Report("ReadData failed");
     return read_data_status;
   }
 
   TfLiteStatus decode_status = DecodeAndProcessImage(
       error_reporter, image_width, image_height, image_data);
   if (decode_status != kTfLiteOk) {
-    TF_LITE_REPORT_ERROR(error_reporter, "DecodeAndProcessImage failed");
+    error_reporter->Report("DecodeAndProcessImage failed");
     return decode_status;
   }
 
   return kTfLiteOk;
 }
-
-#endif  // ARDUINO_EXCLUDE_CODE

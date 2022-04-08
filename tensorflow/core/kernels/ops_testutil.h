@@ -49,7 +49,6 @@ limitations under the License.
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/test.h"
-#include "tensorflow/core/platform/threadpool.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/public/session_options.h"
 #include "tensorflow/core/public/version.h"
@@ -126,7 +125,7 @@ class OpsTestBase : public ::testing::Test {
     std::string container_name =
         container.empty() ? rm->default_container() : container;
     EXPECT_TRUE(rm->Create(container_name, name, resource).ok());
-    AddResourceInputInternal(container_name, name, TypeIndex::Make<T>());
+    AddResourceInputInternal(container_name, name, MakeTypeIndex<T>());
   }
 
   // Runs an operation producing 'num_outputs' outputs.
@@ -184,7 +183,6 @@ class OpsTestBase : public ::testing::Test {
 
   std::unique_ptr<FunctionLibraryDefinition> flib_def_;
   std::unique_ptr<ProcessFunctionLibraryRuntime> pflr_;
-  std::unique_ptr<thread::ThreadPool> thread_pool_;
 
  private:
   TF_DISALLOW_COPY_AND_ASSIGN(OpsTestBase);

@@ -38,8 +38,6 @@ public final class TensorFlowLiteTest {
 
   @Test
   public void testRuntimeVersion() {
-    // Unlike the schema version, which should almost never change, the runtime version can change
-    // with some frequency, so simply ensure that it's non-empty and doesn't fail.
-    assertThat(TensorFlowLite.runtimeVersion()).isNotEmpty();
+    assertThat(TensorFlowLite.runtimeVersion()).startsWith("1.");
   }
 }

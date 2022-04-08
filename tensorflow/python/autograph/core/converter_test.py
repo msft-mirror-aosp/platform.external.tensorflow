@@ -18,8 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import imp
-
 from tensorflow.python.autograph.core import converter
 from tensorflow.python.autograph.core import converter_testing
 from tensorflow.python.autograph.pyct import anno
@@ -40,18 +38,16 @@ class ConversionOptionsTest(converter_testing.TestCase):
     opts_ast = opts.to_ast()
 
     template = '''
-    def f():
+    def test_fn():
       return opts_ast
     '''
     opts_packed = templates.replace(template, opts_ast=opts_ast)
 
     reparsed, _, _ = loader.load_ast(opts_packed)
-    fake_ag = imp.new_module('fake_ag')
-    fake_ag.ConversionOptions = converter.ConversionOptions
-    fake_ag.Feature = converter.Feature
-    reparsed.ag__ = fake_ag
+    reparsed.__dict__['ag__'] = self.make_fake_mod(
+        'fake_ag', converter.ConversionOptions, converter.Feature)
 
-    reparsed_opts = reparsed.f()
+    reparsed_opts = reparsed.test_fn()
 
     self.assertEqual(opts.recursive, reparsed_opts.recursive)
     self.assertEqual(opts.user_requested, False)
@@ -67,12 +63,12 @@ class ConverterBaseTest(converter_testing.TestCase):
 
     directive_key = object
 
-    def f():
+    def test_fn():
       a = 1
       return a
 
-    _, node, ctx = self.transform(f, (), include_ast=True)
-
+    ns = {}
+    node, ctx = self.prepare(test_fn, ns)
     symbol_a = node.body[1].value
     defs, = anno.getanno(symbol_a, anno.Static.ORIG_DEFINITIONS)
     defs.directives[directive_key] = {
@@ -88,12 +84,12 @@ class ConverterBaseTest(converter_testing.TestCase):
 
     directive_key = object
 
-    def f():
+    def test_fn():
       a = 1
       return a
 
-    _, node, ctx = self.transform(f, (), include_ast=True)
-
+    ns = {}
+    node, ctx = self.prepare(test_fn, ns)
     symbol_a = node.body[1].value
     c = TestConverter(ctx)
     value = c.get_definition_directive(symbol_a, directive_key, 'test_arg',
@@ -104,14 +100,14 @@ class ConverterBaseTest(converter_testing.TestCase):
 
     directive_key = object
 
-    def f():
+    def test_fn():
       a = 1
       if a:
         a = 2
       return a
 
-    _, node, ctx = self.transform(f, (), include_ast=True)
-
+    ns = {}
+    node, ctx = self.prepare(test_fn, ns)
     symbol_a = node.body[2].value
     defs = anno.getanno(symbol_a, anno.Static.ORIG_DEFINITIONS)
     defs[0].directives[directive_key] = {
@@ -131,14 +127,14 @@ class ConverterBaseTest(converter_testing.TestCase):
 
     directive_key = object
 
-    def f():
+    def test_fn():
       a = 1
       if a:
         a = 2
       return a
 
-    _, node, ctx = self.transform(f, (), include_ast=True)
-
+    ns = {}
+    node, ctx = self.prepare(test_fn, ns)
     symbol_a = node.body[2].value
     defs = anno.getanno(symbol_a, anno.Static.ORIG_DEFINITIONS)
     defs[0].directives[directive_key] = {

@@ -1,19 +1,14 @@
 # Description:
 #   Contains the Keras Premade Models (internal TensorFlow version).
-load("//tensorflow:tensorflow.bzl", "tf_py_test")
 
 package(
-    default_visibility = [
-        "//tensorflow/python/keras:__subpackages__",
-    ],
+    default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-filegroup(
-    name = "all_py_srcs",
-    srcs = glob(["*.py"]),
-    visibility = ["//tensorflow/python/keras/google/private_tf_api_test:__pkg__"],
-)
+exports_files(["LICENSE"])
+
+load("//tensorflow:tensorflow.bzl", "py_test")
 
 py_library(
     name = "premade",
@@ -22,7 +17,7 @@ py_library(
         "linear.py",
         "wide_deep.py",
     ],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/python:framework",
         "//tensorflow/python:math_ops",
@@ -33,7 +28,7 @@ py_library(
     ],
 )
 
-tf_py_test(
+py_test(
     name = "linear_test",
     size = "medium",
     srcs = ["linear_test.py"],
@@ -47,13 +42,13 @@ tf_py_test(
     ],
 )
 
-tf_py_test(
+py_test(
     name = "wide_deep_test",
     size = "medium",
     srcs = ["wide_deep_test.py"],
     python_version = "PY3",
     shard_count = 2,
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         ":premade",
         "//tensorflow/python:client_testlib",

@@ -20,7 +20,7 @@ from __future__ import print_function
 import os
 import re
 
-from tensorflow.lite.tools import test_utils
+from tensorflow.lite.tools import test_utilities
 from tensorflow.lite.tools import visualize
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import test
@@ -35,9 +35,9 @@ class VisualizeTest(test_util.TensorFlowTestCase):
     self.assertEqual('HASHTABLE_LOOKUP', visualize.BuiltinCodeToName(10))
 
   def testFlatbufferToDict(self):
-    model = test_utils.build_mock_flatbuffer_model()
-    model_dict = visualize.CreateDictFromFlatbuffer(model)
-    self.assertEqual(test_utils.TFLITE_SCHEMA_VERSION, model_dict['version'])
+    model_data = test_utilities.BuildMockModel()
+    model_dict = visualize.CreateDictFromFlatbuffer(model_data)
+    self.assertEqual(0, model_dict['version'])
     self.assertEqual(1, len(model_dict['subgraphs']))
     self.assertEqual(1, len(model_dict['operator_codes']))
     self.assertEqual(3, len(model_dict['buffers']))
@@ -45,11 +45,12 @@ class VisualizeTest(test_util.TensorFlowTestCase):
     self.assertEqual(0, model_dict['subgraphs'][0]['tensors'][0]['buffer'])
 
   def testVisualize(self):
-    model = test_utils.build_mock_flatbuffer_model()
+    model_data = test_utilities.BuildMockModel()
+
     tmp_dir = self.get_temp_dir()
     model_filename = os.path.join(tmp_dir, 'model.tflite')
     with open(model_filename, 'wb') as model_file:
-      model_file.write(model)
+      model_file.write(model_data)
     html_filename = os.path.join(tmp_dir, 'visualization.html')
 
     visualize.CreateHtmlFile(model_filename, html_filename)

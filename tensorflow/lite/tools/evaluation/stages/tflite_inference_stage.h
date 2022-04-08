@@ -24,7 +24,6 @@ limitations under the License.
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
-#include "tensorflow/lite/tools/evaluation/evaluation_delegate_provider.h"
 #include "tensorflow/lite/tools/evaluation/evaluation_stage.h"
 #include "tensorflow/lite/tools/evaluation/proto/evaluation_config.pb.h"
 
@@ -42,24 +41,20 @@ class TfliteInferenceStage : public EvaluationStage {
   explicit TfliteInferenceStage(const EvaluationStageConfig& config)
       : EvaluationStage(config) {}
 
-  TfLiteStatus Init() override { return Init(nullptr); }
-  TfLiteStatus Init(const DelegateProviders* delegate_providers);
+  TfLiteStatus Init() override;
 
   TfLiteStatus Run() override;
 
   // EvaluationStageMetrics.num_runs denotes the number of inferences run.
   EvaluationStageMetrics LatestMetrics() override;
 
-  ~TfliteInferenceStage() override {}
+  ~TfliteInferenceStage() {}
 
   // Call before Run().
   // This class does not take ownership of raw_input_ptrs.
   void SetInputs(const std::vector<void*>& raw_input_ptrs) {
     inputs_ = &raw_input_ptrs;
   }
-
-  // Resize input tensors with given shapes.
-  TfLiteStatus ResizeInputs(const std::vector<std::vector<int>>& shapes);
 
   // Applies provided delegate to the underlying TFLite Interpreter.
   TfLiteStatus ApplyCustomDelegate(Interpreter::TfLiteDelegatePtr delegate);

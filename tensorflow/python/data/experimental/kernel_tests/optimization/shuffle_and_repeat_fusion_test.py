@@ -19,9 +19,11 @@ from __future__ import print_function
 
 from absl.testing import parameterized
 
+from tensorflow.python import tf2
 from tensorflow.python.data.experimental.ops import testing
 from tensorflow.python.data.kernel_tests import test_base
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.eager import context
 from tensorflow.python.framework import combinations
 from tensorflow.python.framework import errors
 from tensorflow.python.platform import test
@@ -32,7 +34,11 @@ class ShuffleAndRepeatFusionTest(test_base.DatasetTestBase,
 
   @combinations.generate(test_base.default_test_combinations())
   def testShuffleAndRepeatFusion(self):
-    expected = "ShuffleAndRepeat"
+    if tf2.enabled() and context.executing_eagerly():
+      expected = "Shuffle"
+    else:
+      expected = "ShuffleAndRepeat"
+
     dataset = dataset_ops.Dataset.range(10).apply(
         testing.assert_next([expected])).shuffle(10).repeat(2)
     options = dataset_ops.Options()

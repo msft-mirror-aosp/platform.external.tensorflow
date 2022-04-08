@@ -13,8 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "tensorflow/core/framework/node_properties.h"
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#ifdef GOOGLE_CUDA
 #define EIGEN_USE_GPU
 #include "tensorflow/core/common_runtime/gpu/gpu_managed_allocator.h"
 #endif
@@ -72,9 +71,6 @@ OpsTestBase::OpsTestBase() : device_type_(DEVICE_CPU) {
   auto device = DeviceFactory::NewDevice("CPU", {}, "/job:a/replica:0/task:0");
   CHECK(device) << "Could not create CPU device";
 
-  thread_pool_ = absl::make_unique<thread::ThreadPool>(
-      Env::Default(), /*name=*/"default", /*num_threads=*/1);
-
   device_ = device.get();
   device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(device));
 
@@ -108,11 +104,10 @@ void OpsTestBase::SetDevice(const DeviceType& device_type,
   device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(device));
   pflr_ = absl::make_unique<ProcessFunctionLibraryRuntime>(
       device_mgr_.get(), Env::Default(), /*config=*/nullptr,
-      TF_GRAPH_DEF_VERSION, flib_def_.get(), OptimizerOptions(),
-      thread_pool_.get());
+      TF_GRAPH_DEF_VERSION, flib_def_.get(), OptimizerOptions());
 
   device_type_ = device_type;
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#ifdef GOOGLE_CUDA
   if (device_type == DEVICE_GPU) {
     managed_allocator_.reset(new GpuManagedAllocator());
     allocator_ = managed_allocator_.get();
@@ -122,8 +117,7 @@ void OpsTestBase::SetDevice(const DeviceType& device_type,
   }
 #else
   CHECK_NE(device_type, DEVICE_GPU)
-      << "Requesting GPU on binary compiled without GOOGLE_CUDA or "
-         "TENSORFLOW_USE_ROCM.";
+      << "Requesting GPU on binary compiled without GOOGLE_CUDA.";
   allocator_ = device_->GetAllocator(AllocatorAttributes());
 #endif
 }
@@ -139,16 +133,11 @@ Status OpsTestBase::InitOp() {
 }
 
 Status OpsTestBase::InitOpWithGraphVersion(int graph_def_version) {
-  std::shared_ptr<const NodeProperties> props;
-  TF_RETURN_IF_ERROR(NodeProperties::CreateFromNodeDef(
-      node_def_, OpRegistry::Global(), &props));
-  OpKernel* kernel;
-  TF_RETURN_IF_ERROR(CreateOpKernel(
-      device_type_, device_, allocator(), /*flib=*/nullptr,
-      device_->resource_manager(), props, graph_def_version, &kernel));
-  kernel_.reset(kernel);
-  input_types_ = kernel_->input_types();
-  return Status::OK();
+  Status status;
+  kernel_ = CreateOpKernel(device_type_, device_, allocator(), node_def_,
+                           graph_def_version, &status);
+  if (kernel_ != nullptr) input_types_ = kernel_->input_types();
+  return status;
 }
 
 Status OpsTestBase::RunOpKernel() {
@@ -196,7 +185,7 @@ TensorValue OpsTestBase::mutable_input(int input_index) {
 Tensor* OpsTestBase::GetOutput(int output_index) {
   CHECK_LT(output_index, context_->num_outputs());
   Tensor* output = context_->mutable_output(output_index);
-#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#ifdef GOOGLE_CUDA
   if (device_type_ == DEVICE_GPU) {
     managed_outputs_.resize(context_->num_outputs());
     // Copy the output tensor to managed memory if we haven't done so.

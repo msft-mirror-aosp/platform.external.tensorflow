@@ -76,9 +76,8 @@ namespace toco {
   reshape_op->outputs = expand_op->outputs;
 
   // Create a new input array
-  std::string axis_array_name = expand_op->inputs[1];
-  std::string shape_array_name =
-      toco::AvailableArrayName(*model, axis_array_name);
+  string axis_array_name = expand_op->inputs[1];
+  string shape_array_name = toco::AvailableArrayName(*model, axis_array_name);
   Array& shape_array = model->GetOrCreateArray(shape_array_name);
   *(shape_array.mutable_shape()->mutable_dims()) = {
       1, static_cast<int>(reshape_dims.size())};

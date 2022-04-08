@@ -56,10 +56,6 @@ class Dataset : public DatasetBase {
 
   int64 Cardinality() const override { return sparse_tensor_.shape()[0]; }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override { return Status::OK(); }
 
  protected:
@@ -165,8 +161,7 @@ class Dataset : public DatasetBase {
       return model::MakeSourceNode(std::move(args));
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
+    Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       TF_RETURN_IF_ERROR(writer->WriteScalar(Iterator::full_name("i"), i_));
       TF_RETURN_IF_ERROR(
@@ -207,13 +202,13 @@ class Dataset : public DatasetBase {
     Tensor dense_shape_;
 
     mutex mu_;
-    sparse::GroupIterable group_iterable_ TF_GUARDED_BY(mu_);
-    sparse::GroupIterable::IteratorStep iter_ TF_GUARDED_BY(mu_);
-    int64 i_ TF_GUARDED_BY(mu_) = 0;
+    sparse::GroupIterable group_iterable_ GUARDED_BY(mu_);
+    sparse::GroupIterable::IteratorStep iter_ GUARDED_BY(mu_);
+    int64 i_ GUARDED_BY(mu_) = 0;
     const int64 kNextNonEmptyUnknown = -1;
-    int64 next_non_empty_i_ TF_GUARDED_BY(mu_) = kNextNonEmptyUnknown;
-    Tensor next_indices_ TF_GUARDED_BY(mu_);
-    Tensor next_values_ TF_GUARDED_BY(mu_);
+    int64 next_non_empty_i_ GUARDED_BY(mu_) = kNextNonEmptyUnknown;
+    Tensor next_indices_ GUARDED_BY(mu_);
+    Tensor next_values_ GUARDED_BY(mu_);
   };
 
   const sparse::SparseTensor sparse_tensor_;

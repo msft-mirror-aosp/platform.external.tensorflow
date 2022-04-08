@@ -45,7 +45,6 @@ public class OvicBenchmarkerActivity extends Activity {
 
   /** Name of the task-dependent data files stored in Assets. */
   private static String labelPath = null;
-
   private static String testImagePath = null;
   private static String modelPath = null;
   /**
@@ -92,7 +91,7 @@ public class OvicBenchmarkerActivity extends Activity {
       labelPath = "labels.txt";
       testImagePath = "test_image_224.jpg";
       modelPath = "quantized_model.lite";
-    } else { // Benchmarking detection.
+    } else {  // Benchmarking detection.
       benchmarker = new OvicDetectorBenchmarker(WALL_TIME);
       labelPath = "coco_labels.txt";
       testImagePath = "test_image_224.jpg";
@@ -146,7 +145,6 @@ public class OvicBenchmarkerActivity extends Activity {
   public void detectPressed(View view) throws IOException {
     benchmarkSession(false);
   }
-
   public void classifyPressed(View view) throws IOException {
     benchmarkSession(true);
   }
@@ -196,7 +194,7 @@ public class OvicBenchmarkerActivity extends Activity {
             displayText
                 + modelPath
                 + ": Average latency="
-                + df2.format(benchmarker.getTotalRuntimeNano() * 1.0e-6 / testIter)
+                + df2.format(benchmarker.getTotalRunTime() / testIter)
                 + "ms after "
                 + testIter
                 + " runs.");
@@ -206,15 +204,12 @@ public class OvicBenchmarkerActivity extends Activity {
     }
   }
 
-  // TODO(b/153429929) Remove with resolution of issue (see below).
-  @SuppressWarnings("RuntimeExec")
   private static void setProcessorAffinity(int mask) throws IOException {
     int myPid = Process.myPid();
     Log.i(TAG, String.format("Setting processor affinity to 0x%02x", mask));
 
     String command = String.format("taskset -a -p %x %d", mask, myPid);
     try {
-      // TODO(b/153429929) This is deprecated, but updating is not safe while verification is hard.
       Runtime.getRuntime().exec(command).waitFor();
     } catch (InterruptedException e) {
       throw new IOException("Interrupted: " + e);

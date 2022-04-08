@@ -13,19 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Null implementation of the PercentileSampler metric for mobile platforms.
-
 #ifndef TENSORFLOW_CORE_LIB_MONITORING_MOBILE_PERCENTILE_SAMPLER_H_
 #define TENSORFLOW_CORE_LIB_MONITORING_MOBILE_PERCENTILE_SAMPLER_H_
-
-#if !defined(IS_MOBILE_PLATFORM) || \
-    !defined(TENSORFLOW_INCLUDED_FROM_PERCENTILE_SAMPLER_H)
-// If this header file were included directly, and something else included its
-// non-mobile counterpart, there could be an unchecked ODR violation on the
-// classes below.
-#error do not include mobile_percentile_sampler.h directly; use percetile_sampler.h instead
-#endif  // !defined(IS_MOBILE_PLATFORM) ||
-        // !defined(TENSORFLOW_INCLUDED_FROM_PERCENTILE_SAMPLER_H)
 
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/monitoring/collection_registry.h"
@@ -49,8 +38,7 @@ class PercentileSampler {
   static PercentileSampler* New(
       const MetricDef<MetricKind::kCumulative, Percentiles, NumLabels>&
           metric_def,
-      std::vector<double> percentiles, size_t max_samples,
-      UnitOfMeasure unit_of_measure);
+      std::vector<double> percentiles, size_t max_samples);
 
   template <typename... Labels>
   PercentileSamplerCell* GetCell(const Labels&... labels) {
@@ -62,8 +50,6 @@ class PercentileSampler {
  private:
   PercentileSamplerCell default_cell_;
 
-  PercentileSampler() = default;
-
   TF_DISALLOW_COPY_AND_ASSIGN(PercentileSampler);
 };
 
@@ -71,8 +57,7 @@ template <int NumLabels>
 PercentileSampler<NumLabels>* PercentileSampler<NumLabels>::New(
     const MetricDef<MetricKind::kCumulative, Percentiles, NumLabels>&
     /* metric_def */,
-    std::vector<double> /* percentiles */, size_t /* max_samples */,
-    UnitOfMeasure /* unit_of_measure */) {
+    std::vector<double> /* percentiles */, size_t /* max_samples */) {
   return new PercentileSampler<NumLabels>();
 }
 

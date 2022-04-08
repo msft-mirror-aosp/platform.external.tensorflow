@@ -12,15 +12,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include <stdint.h>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/kernels/test_util.h"
+#include "tensorflow/lite/model.h"
 
 namespace tflite {
 
-// Forward declaration for op kernels.
+// Forward declaraction for op kernels.
 namespace ops {
 namespace custom {
 
@@ -44,7 +46,7 @@ class VariableOpsTest : public ::testing::Test {
   }
 
   void ConstructGraph() {
-    // Construct a graph like this:
+    // Construct a graph like ths:
     //   Input: %0, %1, %2
     //   Output: %3
     //   variable_assign(%0, %2)
@@ -102,7 +104,7 @@ TEST_F(VariableOpsTest, TestReadVariableBeforeAssign) {
   ASSERT_EQ(interpreter_.Invoke(), kTfLiteError);
 }
 
-TEST_F(VariableOpsTest, TestReassignToDifferentSize) {
+TEST_F(VariableOpsTest, TestReeasignToDifferentSize) {
   // 1st invocation. The variable is assigned as a scalar.
   {
     ASSERT_EQ(interpreter_.AllocateTensors(), kTfLiteOk);

@@ -52,9 +52,7 @@ int GetPlatformStrings(const std::string& path,
     }
 
     result = (ferror(ifp) == 0) ? 0 : errno;
-    if (fclose(ifp) != 0) {
-      result = errno;
-    }
+    fclose(ifp);
   } else {
     result = errno;
   }

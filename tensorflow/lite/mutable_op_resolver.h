@@ -15,20 +15,15 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_MUTABLE_OP_RESOLVER_H_
 #define TENSORFLOW_LITE_MUTABLE_OP_RESOLVER_H_
 
-#include <stddef.h>
-
 #include <string>
 #include <unordered_map>
-#include <utility>
 
-#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/core/api/op_resolver.h"
-#include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/util.h"
 
 namespace tflite {
 
-// Some versions of gcc don't support partial specialization in class scope,
+// Some versions of gcc doesn't support partial specialization in class scope,
 // so these are defined in a namescope.
 namespace op_resolver_hasher {
 template <typename V>
@@ -65,14 +60,10 @@ class MutableOpResolver : public OpResolver {
                                    int version) const override;
   const TfLiteRegistration* FindOp(const char* op, int version) const override;
   void AddBuiltin(tflite::BuiltinOperator op,
-                  const TfLiteRegistration* registration, int version = 1);
-  void AddBuiltin(tflite::BuiltinOperator op,
-                  const TfLiteRegistration* registration, int min_version,
-                  int max_version);
+                  const TfLiteRegistration* registration, int min_version = 1,
+                  int max_version = 1);
   void AddCustom(const char* name, const TfLiteRegistration* registration,
-                 int version = 1);
-  void AddCustom(const char* name, const TfLiteRegistration* registration,
-                 int min_version, int max_version);
+                 int min_version = 1, int max_version = 1);
   void AddAll(const MutableOpResolver& other);
 
  private:

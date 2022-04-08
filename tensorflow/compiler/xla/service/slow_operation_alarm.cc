@@ -106,19 +106,12 @@ SlowOperationAlarm::SlowOperationAlarm(absl::Duration timeout, string msg,
 
 SlowOperationAlarm::~SlowOperationAlarm() { UnscheduleAlarm(this); }
 
-std::unique_ptr<SlowOperationAlarm> SlowCompilationAlarm(
-    absl::string_view msg) {
+std::unique_ptr<SlowOperationAlarm> SlowCompilationAlarm() {
   // Pass a counter to these alarms so they only log once every power-of-two
   // occurrences.
   static auto* counter = new std::atomic<int64>(0);
 
   const char* separator = "\n********************************";
-
-  std::string msg_suffix;
-  if (!msg.empty()) {
-    msg_suffix = absl::StrCat("\n", msg);
-  }
-
 #if NDEBUG
   return absl::make_unique<SlowOperationAlarm>(
       absl::Duration(absl::Minutes(2)),
@@ -126,7 +119,7 @@ std::unique_ptr<SlowOperationAlarm> SlowCompilationAlarm(
           separator,
           "\nVery slow compile?  If you want to file a bug, run with envvar "
           "XLA_FLAGS=--xla_dump_to=/tmp/foo and attach the results.",
-          msg_suffix, separator),
+          separator),
       counter);
 #else
   return absl::make_unique<SlowOperationAlarm>(
@@ -135,7 +128,7 @@ std::unique_ptr<SlowOperationAlarm> SlowCompilationAlarm(
           separator,
           "\nSlow compile?  XLA was built without compiler optimizations, "
           "which can be slow.  Try rebuilding with -c opt.",
-          msg_suffix, separator),
+          separator),
       counter);
 #endif
 }

@@ -41,6 +41,8 @@ limitations under the License.
 namespace tensorflow {
 namespace {
 
+using test::internal::ExpectEqual;
+
 TEST(GraphRunnerTest, SingleConst) {
   Scope root = Scope::NewRootScope();
   auto c = ops::Const(root, 42.0f);
@@ -48,7 +50,7 @@ TEST(GraphRunnerTest, SingleConst) {
   std::vector<Tensor> outputs;
   Status s = graph_runner.Run(root.graph(), nullptr, {}, {c.name()}, &outputs);
   TF_ASSERT_OK(s);
-  test::ExpectEqual(test::AsScalar(42.0f), outputs[0]);
+  ExpectEqual(42.0f, outputs[0].scalar<float>()());
 }
 
 // If not using DeepCopy, and the allocator is deleted with the cpu-device,
@@ -75,7 +77,7 @@ TEST(GraphRunnerTest, DeepCopy) {
         graph_runner.Run(root.graph(), nullptr, inputs, {"add:0"}, &outputs);
     TF_ASSERT_OK(s);
   }
-  test::ExpectEqual(test::AsScalar(3.0f), outputs[0]);
+  ExpectEqual(3.0f, outputs[0].scalar<float>()());
 }
 
 TEST(GraphRunnerTest, MultiFetchConst) {
@@ -87,8 +89,8 @@ TEST(GraphRunnerTest, MultiFetchConst) {
   Status s = graph_runner.Run(root.graph(), nullptr, {}, {c.name(), pi.name()},
                               &outputs);
   TF_ASSERT_OK(s);
-  test::ExpectEqual(test::AsScalar(42.0f), outputs[0]);
-  test::ExpectEqual(test::AsScalar(3.14f), outputs[1]);
+  ExpectEqual(42.0f, outputs[0].scalar<float>()());
+  ExpectEqual(3.14f, outputs[1].scalar<float>()());
 }
 
 TEST(GraphRunnerTest, FeedAndFetch) {
@@ -109,7 +111,7 @@ TEST(GraphRunnerTest, FeedAndFetch) {
   Status s =
       graph_runner.Run(root.graph(), nullptr, inputs, {"add:0"}, &outputs);
   TF_ASSERT_OK(s);
-  test::ExpectEqual(test::AsScalar(3.0f), outputs[0]);
+  ExpectEqual(3.0f, outputs[0].scalar<float>()());
 }
 
 }  // namespace

@@ -16,7 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_KERNELS_AGGREGATE_OPS_H_
 #define TENSORFLOW_CORE_KERNELS_AGGREGATE_OPS_H_
 
-#include <numeric>
+// Functor definitions for Aggregate ops, must be compilable by nvcc.
 
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/tensor_types.h"
@@ -24,7 +24,6 @@ limitations under the License.
 namespace tensorflow {
 namespace functor {
 
-// Functor definitions for Aggregate ops, must be compilable by nvcc.
 template <typename Device, typename T>
 struct Add2Functor {
   void operator()(const Device& d, typename TTypes<T>::Flat out,
@@ -220,6 +219,7 @@ struct Add9EigenImpl {
     out.device(d) = in1 + in2 + in3 + in4 + in5 + in6 + in7 + in8 + in9;
   }
 };
+
 }  // namespace functor
 }  // namespace tensorflow
 

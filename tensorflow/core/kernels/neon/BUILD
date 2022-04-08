@@ -1,4 +1,7 @@
-load("//tensorflow:tensorflow.bzl", "tf_kernel_library")
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_kernel_library",
+)
 
 # Description:
 # Kernel implementations using Neon intrinsics.
@@ -20,7 +23,7 @@ tf_kernel_library(
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
-        "//tensorflow/core/framework:bounds_check",
+        "//tensorflow/core/kernels:bounds_check",
         "//tensorflow/core/kernels:ops_util",
         "@gemmlowp",
     ],

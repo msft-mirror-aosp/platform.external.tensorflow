@@ -26,6 +26,7 @@ OUTPUT_HANDLER_TEST_HDRS := \
 tensorflow/lite/micro/examples/magic_wand/output_handler.h
 
 GESTURE_PREDICTOR_TEST_SRCS := \
+tensorflow/lite/micro/examples/magic_wand/constants.cc \
 tensorflow/lite/micro/examples/magic_wand/gesture_predictor.cc \
 tensorflow/lite/micro/examples/magic_wand/gesture_predictor_test.cc
 
@@ -47,6 +48,7 @@ tensorflow/lite/micro/examples/magic_wand/ring_micro_features_data.h
 magic_wand_SRCS := \
 tensorflow/lite/micro/examples/magic_wand/main.cc \
 tensorflow/lite/micro/examples/magic_wand/main_functions.cc \
+tensorflow/lite/micro/examples/magic_wand/constants.cc \
 tensorflow/lite/micro/examples/magic_wand/magic_wand_model_data.cc \
 tensorflow/lite/micro/examples/magic_wand/accelerometer_handler.cc \
 tensorflow/lite/micro/examples/magic_wand/gesture_predictor.cc \

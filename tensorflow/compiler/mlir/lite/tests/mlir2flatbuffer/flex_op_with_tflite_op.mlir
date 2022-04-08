@@ -5,17 +5,14 @@ func @main(tensor<4xf32>) -> tensor<4xf32> {
 // CHECK:  {
 // CHECK-NEXT:  version: 3,
 // CHECK-NEXT:  operator_codes: [ {
-// CHECK-NEXT:    deprecated_builtin_code: 18,
-// CHECK-NEXT:    version: 1,
 // CHECK-NEXT:    builtin_code: MUL
+// CHECK-NEXT:    version: 1
 // CHECK-NEXT:  }, {
-// CHECK-NEXT:    deprecated_builtin_code: 32,
-// CHECK-NEXT:    custom_code: "FlexDiv",
-// CHECK-NEXT:    builtin_code: CUSTOM
+// CHECK-NEXT:    builtin_code: CUSTOM,
+// CHECK-NEXT:    custom_code: "FlexDiv"
 // CHECK-NEXT:  }, {
-// CHECK-NEXT:    deprecated_builtin_code: 47,
-// CHECK-NEXT:    version: 1,
 // CHECK-NEXT:    builtin_code: EXP
+// CHECK-NEXT:    version: 1
 // CHECK-NEXT:  } ],
 // CHECK-NEXT:  subgraphs: [ {
 // CHECK-NEXT:    tensors: [ {
@@ -92,14 +89,7 @@ func @main(tensor<4xf32>) -> tensor<4xf32> {
 // CHECK-EMPTY:
 // CHECK-NEXT:  }, {
 // CHECK-EMPTY:
-// CHECK-NEXT:  }, {
-// CHECK-NEXT:    data: [ 49, 46, 55, 46, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
-// CHECK-NEXT:  } ],
-// CHECK-NEXT:  metadata: [ {
-// CHECK-NEXT:  name: "min_runtime_version",
-// CHECK-NEXT:  buffer: 6
 // CHECK-NEXT:  } ]
-// CHECK-NEXT:  signature_defs: [ ]
 // CHECK-NEXT:}
 
   %0 = "tfl.pseudo_const" () {value = dense<1.0> : tensor<4xf32>} : () -> tensor<4xf32> loc("Const")

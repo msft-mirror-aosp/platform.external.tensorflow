@@ -64,16 +64,13 @@ static void MulChain(int chain_length, Graph** init_g, Graph** run_g) {
 
 // Benchmark a chain of simple multiplications.
 // This emphasizes per-op overhead.
-static void BM_MulChain(::testing::benchmark::State& state) {
-  const int chain_length = state.range(0);
-
+static void BM_MulChain(int iters, int chain_length) {
+  const int64 tot = static_cast<int64>(iters) * chain_length;
+  testing::ItemsProcessed(tot);
   Graph* init;
   Graph* run;
   MulChain(chain_length, &init, &run);
-  test::Benchmark("cpu", run, GetOptions(), init, nullptr, "",
-                  /*old_benchmark_api=*/false)
-      .Run(state);
-  state.SetItemsProcessed(state.iterations());
+  test::Benchmark("cpu", run, GetOptions(), init).Run(iters);
 }
 BENCHMARK(BM_MulChain)->Arg(1 << 10);
 

@@ -12,7 +12,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include <stdint.h>
 #include <string.h>
 
 #include <memory>
@@ -21,6 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
 
 namespace tflite {
 namespace ops {
@@ -38,16 +38,13 @@ TfLiteStatus ResizeOutput(TfLiteContext* context, TfLiteNode* node) {
   std::unique_ptr<TfLiteIntArray, void (*)(TfLiteIntArray*)>
       scoped_output_shape(output_shape, TfLiteIntArrayFree);
 
-  const TfLiteTensor* input;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context,
-                    GetOutputSafe(context, node, kOutputTensor, &output));
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
   // Tensorflow's Reshape allows one of the shape components to have the
   // special -1 value, meaning it will be calculated automatically based on the
   // input. Here we calculate what that dimension should be so that the number
-  // of output elements is the same as the number of input elements.
+  // of output elements in the same as the number of input elements.
   int num_input_elements = NumElements(input);
 
   int num_output_elements = 1;
@@ -73,7 +70,6 @@ TfLiteStatus ResizeOutput(TfLiteContext* context, TfLiteNode* node) {
 inline TfLiteIntArray* GetOutputShapeFromTensor(TfLiteContext* context,
                                                 TfLiteNode* node) {
   const TfLiteTensor* shape = GetInput(context, node, kShapeTensor);
-  if (shape == nullptr) return nullptr;
 
   TfLiteIntArray* output_shape = TfLiteIntArrayCreate(shape->dims->data[0]);
   for (int i = 0; i < output_shape->size; ++i) {
@@ -107,8 +103,7 @@ inline TfLiteIntArray* GetOutputShapeFromParam(TfLiteContext* context,
 // Check if the shape tensor is valid. Shapes should be int32 vectors.
 inline bool ShapeIsVector(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* shape = GetInput(context, node, kShapeTensor);
-  return (shape != nullptr && shape->dims->size == 1 &&
-          shape->type == kTfLiteInt32);
+  return (shape->dims->size == 1 && shape->type == kTfLiteInt32);
 }
 
 TfLiteIntArray* GetOutputShape(TfLiteContext* context, TfLiteNode* node) {
@@ -127,9 +122,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   // calculate their shapes now. String tensors don't benefit from having their
   // shapes precalculated because the actual memory can only be allocated after
   // we know all the content.
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context,
-                    GetOutputSafe(context, node, kOutputTensor, &output));
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
   if (output->type != kTfLiteString) {
     if (NumInputs(node) == 1 ||
         IsConstantTensor(GetInput(context, node, kShapeTensor))) {
@@ -142,11 +135,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-  const TfLiteTensor* input;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, kInputTensor, &input));
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context,
-                    GetOutputSafe(context, node, kOutputTensor, &output));
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
   // There are two ways in which the 'output' can be made dynamic: it could be
   // a string tensor, or its shape cannot be calculated during Prepare(). In

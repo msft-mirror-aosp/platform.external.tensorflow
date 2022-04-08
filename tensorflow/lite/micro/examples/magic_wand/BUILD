@@ -1,10 +1,14 @@
 # Description:
 #   TensorFlow Lite for Microcontrollers "gesture recognition" example.
-package(
-    default_visibility = ["//visibility:public"],
-    features = ["-layering_check"],
-    licenses = ["notice"],  # Apache 2.0
+
+load(
+    "//tensorflow/lite/micro/testing:micro_test.bzl",
+    "tflite_micro_cc_test",
 )
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])  # Apache 2.0
 
 cc_library(
     name = "magic_wand_model_data",
@@ -28,7 +32,7 @@ cc_library(
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "magic_wand_test",
     srcs = [
         "magic_wand_test.cc",
@@ -36,9 +40,10 @@ cc_test(
     deps = [
         ":magic_wand_model_data",
         ":sample_feature_data",
-        "//tensorflow/lite/micro:micro_error_reporter",
+        "//tensorflow/lite:schema_fbs_version",
         "//tensorflow/lite/micro:micro_framework",
-        "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro/kernels:all_ops_resolver",
+        "//tensorflow/lite/micro/kernels:micro_ops",
         "//tensorflow/lite/micro/testing:micro_test",
         "//tensorflow/lite/schema:schema_fbs",
     ],
@@ -46,6 +51,9 @@ cc_test(
 
 cc_library(
     name = "constants",
+    srcs = [
+        "constants.cc",
+    ],
     hdrs = [
         "constants.h",
     ],
@@ -61,11 +69,11 @@ cc_library(
     ],
     deps = [
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/micro:micro_error_reporter",
+        "//tensorflow/lite/micro:micro_framework",
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "accelerometer_handler_test",
     srcs = [
         "accelerometer_handler_test.cc",
@@ -73,9 +81,7 @@ cc_test(
     deps = [
         ":accelerometer_handler",
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/micro:micro_error_reporter",
         "//tensorflow/lite/micro:micro_framework",
-        "//tensorflow/lite/micro:op_resolvers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )
@@ -93,7 +99,7 @@ cc_library(
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "gesture_predictor_test",
     srcs = [
         "gesture_predictor_test.cc",
@@ -116,11 +122,11 @@ cc_library(
     ],
     deps = [
         "//tensorflow/lite/c:common",
-        "//tensorflow/lite/micro:micro_error_reporter",
+        "//tensorflow/lite/micro:micro_framework",
     ],
 )
 
-cc_test(
+tflite_micro_cc_test(
     name = "output_handler_test",
     srcs = [
         "output_handler_test.cc",
@@ -151,10 +157,9 @@ cc_binary(
         ":gesture_predictor",
         ":magic_wand_model_data",
         ":output_handler",
-        "//tensorflow/lite/micro:micro_error_reporter",
+        "//tensorflow/lite:schema_fbs_version",
         "//tensorflow/lite/micro:micro_framework",
-        "//tensorflow/lite/micro:op_resolvers",
-        "//tensorflow/lite/micro:system_setup",
+        "//tensorflow/lite/micro/kernels:micro_ops",
         "//tensorflow/lite/schema:schema_fbs",
     ],
 )

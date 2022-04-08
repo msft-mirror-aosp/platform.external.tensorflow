@@ -209,7 +209,6 @@ class Layout {
     return *this;
   }
   static constexpr int64 kDefaultMemorySpace = 0;
-  static constexpr int64 kGenericFastMemorySpace = 1;
   int64 memory_space() const { return memory_space_; }
   Layout& set_memory_space(int64 value) {
     memory_space_ = value;

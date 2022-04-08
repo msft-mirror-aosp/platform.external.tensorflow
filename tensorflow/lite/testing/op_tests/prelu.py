@@ -18,7 +18,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-import tensorflow.compat.v1 as tf
+import tensorflow as tf
 from tensorflow.lite.testing.zip_test_utils import create_tensor_data
 from tensorflow.lite.testing.zip_test_utils import make_zip_of_tests
 from tensorflow.lite.testing.zip_test_utils import register_make_test_function
@@ -35,33 +35,12 @@ def make_prelu_tests(options):
           # channel.
           "input_shape": [[1, 10, 10, 3], [3, 3, 3, 3]],
           "shared_axes": [[1, 2], [1]],
-          "fully_quantize": [False],
-          "input_range": [(-10, 10)],
       },
       {
           # 2D-3D example. Share the 2nd axis.
           "input_shape": [[20, 20], [20, 20, 20]],
           "shared_axes": [[1]],
-          "fully_quantize": [False],
-          "input_range": [(-10, 10)],
-      },
-      # Quantized cases.
-      {
-          # The canonical case for image processing is having a 4D `input`
-          # (NHWC)and `shared_axes`=[1, 2], so the alpha parameter is per
-          # channel.
-          "input_shape": [[1, 10, 10, 3], [3, 3, 3, 3]],
-          "shared_axes": [[1, 2], [1]],
-          "fully_quantize": [True],
-          "input_range": [(-10, 10)],
-      },
-      {
-          # 2D-3D example. Share the 2nd axis.
-          "input_shape": [[20, 20], [20, 20, 20]],
-          "shared_axes": [[1]],
-          "fully_quantize": [True],
-          "input_range": [(-10, 10)],
-      },
+      }
   ]
 
   def build_graph(parameters):
@@ -85,8 +64,7 @@ def make_prelu_tests(options):
     for dim in range(1, len(input_shape)):
       alpha_shape.append(1 if dim in shared_axes else input_shape[dim])
 
-    alpha_values = create_tensor_data(
-        np.float32, alpha_shape, min_value=-5, max_value=5)
+    alpha_values = create_tensor_data(np.float32, alpha_shape)
 
     # There should be only 1 trainable variable tensor.
     variables = tf.compat.v1.all_variables()

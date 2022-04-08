@@ -5,7 +5,8 @@ load(
 
 package(
     default_visibility = [
-        "//tensorflow:__subpackages__",
+        # tensorflow/core:lib effectively exposes all targets under tensorflow/core/lib/**
+        "//tensorflow/core:__pkg__",
     ],
     licenses = ["notice"],  # Apache 2.0
 )
@@ -21,12 +22,16 @@ cc_library(
         "//tensorflow/core/platform:stringpiece",
         "//tensorflow/core/platform:types",
         "@com_google_absl//absl/base",
-        "@zlib",
+        "@zlib_archive//:zlib",
     ],
 )
 
-alias(
+filegroup(
     name = "testdata",
-    actual = "//tensorflow/core/lib/png/testdata:png_testdata",
-    visibility = ["//tensorflow/core:__pkg__"],
+    srcs = [
+        "testdata/lena_gray.png",
+        "testdata/lena_palette.png",
+        "testdata/lena_palette_trns.png",
+        "testdata/lena_rgba.png",
+    ],
 )

@@ -47,7 +47,7 @@ class MockErrorReporter : public ErrorReporter {
 class MockDataAllocator : public BuiltinDataAllocator {
  public:
   MockDataAllocator() : is_allocated_(false) {}
-  void* Allocate(size_t size, size_t alignment_hint) override {
+  void* Allocate(size_t size) override {
     EXPECT_FALSE(is_allocated_);
     const int max_size = kBufferSize;
     EXPECT_LE(size, max_size);
@@ -82,12 +82,15 @@ class FlatbufferConversionsTest : public ::testing::Test {
   flatbuffers::FlatBufferBuilder builder_;
 };
 
-TEST_F(FlatbufferConversionsTest, ParseSqueezeAll) {
+TEST_F(FlatbufferConversionsTest, ParseBadSqueeze) {
   const Operator* op = BuildTestOperator(
       BuiltinOptions_SqueezeOptions, CreateSqueezeOptions(builder_).Union());
   void* output_data = nullptr;
-  EXPECT_EQ(kTfLiteOk, ParseOpData(op, BuiltinOperator_SQUEEZE, &mock_reporter_,
+  EXPECT_NE(kTfLiteOk, ParseOpData(op, BuiltinOperator_SQUEEZE, &mock_reporter_,
                                    &mock_allocator_, &output_data));
+  EXPECT_THAT(mock_reporter_.GetAsString(),
+              ::testing::ContainsRegex(
+                  "Input array not provided for operation 'squeeze'"));
 }
 
 TEST_F(FlatbufferConversionsTest, ParseDynamicReshape) {

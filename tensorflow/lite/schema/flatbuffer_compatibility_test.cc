@@ -15,7 +15,7 @@ limitations under the License.
 
 #include <fstream>
 #include <gtest/gtest.h>
-#include "flatbuffers/flatc.h"  // from @flatbuffers
+#include "flatbuffers/flatc.h"  // TF:flatbuffers
 #include "tensorflow/core/platform/platform.h"
 
 #ifdef PLATFORM_GOOGLE
@@ -61,7 +61,8 @@ TEST(SchemaTest, TestCompatibility) {
   // Read file contents of schemas into strings
   // TODO(aselle): Need a reliable way to load files.
   std::string base_contents, current_contents;
-  const char *base_filename = TFLITE_TF_PREFIX "lite/schema/schema_v3a.fbs";
+  const char *base_filename =
+      TFLITE_TF_PREFIX "lite/schema/schema_v3.fbs";
   const char *current_filename =
       TFLITE_TF_PREFIX "lite/schema/schema.fbs";
 

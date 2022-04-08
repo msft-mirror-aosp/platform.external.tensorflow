@@ -558,17 +558,10 @@ GpuDriver::ContextGetSharedMemConfig(GpuContext* context) {
 }
 
 /* static */ bool GpuDriver::CreateStream(GpuContext* context,
-                                          GpuStreamHandle* stream,
-                                          int priority) {
+                                          GpuStreamHandle* stream) {
   ScopedActivateContext activated{context};
-  hipError_t res;
-  if (priority == 0) {
-    res = tensorflow::wrap::hipStreamCreateWithFlags(
-        stream, hipStreamDefault);  // switch to hipStreamNonBlocking?
-  } else {
-    res = tensorflow::wrap::hipStreamCreateWithPriority(
-        stream, hipStreamDefault, priority);  // switch to hipStreamNonBlocking?
-  }
+  hipError_t res = tensorflow::wrap::hipStreamCreateWithFlags(
+      stream, hipStreamDefault);  // switch to hipStreamNonBlocking?
   if (res != hipSuccess) {
     LOG(ERROR) << "could not allocate ROCM stream for device "
                << context->device_ordinal() << ": " << ToString(res);
@@ -1077,21 +1070,6 @@ GpuDriver::ContextGetSharedMemConfig(GpuContext* context) {
   return port::Status{
       port::error::INTERNAL,
       absl::StrFormat("failed to determine AMDGpu ISA version for device %d",
-                      device)};
-}
-
-/* static */ port::Status GpuDriver::GetGpuGCNArchName(
-    hipDevice_t device, std::string* gcnArchName) {
-  hipDeviceProp_t props;
-  hipError_t result = tensorflow::wrap::hipGetDeviceProperties(&props, device);
-  if (result == hipSuccess) {
-    *gcnArchName = props.gcnArchName;
-    return port::Status::OK();
-  }
-  *gcnArchName = "";
-  return port::Status{
-      port::error::INTERNAL,
-      absl::StrFormat("failed to determine AMDGpu GCN Arch Name for device %d",
                       device)};
 }
 

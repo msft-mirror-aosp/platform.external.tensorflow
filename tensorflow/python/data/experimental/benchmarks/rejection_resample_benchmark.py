@@ -17,14 +17,43 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
 
 import numpy as np
+from six.moves import xrange  # pylint: disable=redefined-builtin
+
+from tensorflow.python.client import session
 from tensorflow.python.data.experimental.ops import resampling
-from tensorflow.python.data.benchmarks import benchmark_base
 from tensorflow.python.data.ops import dataset_ops
+from tensorflow.python.platform import test
 
 
-class RejectionResampleBenchmark(benchmark_base.DatasetBenchmarkBase):
+def _time_resampling(data_np, target_dist, init_dist, num_to_sample):  # pylint: disable=missing-docstring
+  dataset = dataset_ops.Dataset.from_tensor_slices(data_np).repeat()
+
+  # Reshape distribution via rejection sampling.
+  dataset = dataset.apply(
+      resampling.rejection_resample(
+          class_func=lambda x: x,
+          target_dist=target_dist,
+          initial_dist=init_dist,
+          seed=142))
+
+  options = dataset_ops.Options()
+  options.experimental_optimization.apply_default_optimizations = False
+  dataset = dataset.with_options(options)
+  get_next = dataset_ops.make_one_shot_iterator(dataset).get_next()
+
+  with session.Session() as sess:
+    start_time = time.time()
+    for _ in xrange(num_to_sample):
+      sess.run(get_next)
+    end_time = time.time()
+
+  return end_time - start_time
+
+
+class RejectionResampleBenchmark(test.Benchmark):
   """Benchmarks for `tf.data.experimental.rejection_resample()`."""
 
   def benchmark_resample_performance(self):
@@ -34,28 +63,12 @@ class RejectionResampleBenchmark(benchmark_base.DatasetBenchmarkBase):
     # We don't need many samples to test a dirac-delta target distribution
     num_samples = 1000
     data_np = np.random.choice(num_classes, num_samples, p=init_dist)
-    # Prepare the dataset
-    dataset = dataset_ops.Dataset.from_tensor_slices(data_np).repeat()
-    # Reshape distribution via rejection sampling.
-    dataset = dataset.apply(
-        resampling.rejection_resample(
-            class_func=lambda x: x,
-            target_dist=target_dist,
-            initial_dist=init_dist,
-            seed=142))
-    options = dataset_ops.Options()
-    options.experimental_optimization.apply_default_optimizations = False
-    dataset = dataset.with_options(options)
 
-    wall_time = self.run_benchmark(
-        dataset=dataset, num_elements=num_samples, iters=10, warmup=True)
-    resample_time = wall_time * num_samples
+    resample_time = _time_resampling(
+        data_np, target_dist, init_dist, num_to_sample=1000)
 
-    self.report_benchmark(
-        iters=10,
-        wall_time=resample_time,
-        name="resample_{}".format(num_samples))
+    self.report_benchmark(iters=1000, wall_time=resample_time, name="resample")
 
 
 if __name__ == "__main__":
-  benchmark_base.test.main()
+  test.main()

@@ -22,7 +22,6 @@ tensorflow/contrib/cmake/_build/
 /tensorflow/python/framework/fast_tensor_util.cpp
 /tensorflow/lite/gen/**
 /tensorflow/lite/tools/make/downloads/**
-/tensorflow/lite/tools/make/gen/**
 /api_init_files_list.txt
 /estimator_api_init_files_list.txt
 *.whl
@@ -38,10 +37,7 @@ gradleBuild
 *.pbxproj
 *.xcworkspace
 /*.podspec
-/tensorflow/lite/**/coreml/**/BUILD
-/tensorflow/lite/**/ios/BUILD
-/tensorflow/lite/**/objc/BUILD
-/tensorflow/lite/**/swift/BUILD
+/tensorflow/lite/**/[ios|objc|swift]*/BUILD
 /tensorflow/lite/examples/ios/simple/data/*.tflite
 /tensorflow/lite/examples/ios/simple/data/*.txt
 Podfile.lock

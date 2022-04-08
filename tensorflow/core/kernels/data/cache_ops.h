@@ -27,9 +27,11 @@ namespace data {
 // The expected use is that a single `MemoryWriterIterator` populates the
 // cache with dataset elements. Once all elements are cached, the cache can
 // be used by one or more `MemoryReaderIterator`s.
-class MemoryCache {
+class MemoryCache : public ResourceBase {
  public:
   MemoryCache() = default;
+
+  string DebugString() const override;
 
   // Marks the cache as completed.
   void Complete(std::vector<std::vector<Tensor>>&& cache);
@@ -46,35 +48,18 @@ class MemoryCache {
   // Returns the size of the cache.
   size_t size();
 
-  // Returns a reference to the cache's data. The returned reference will be
-  // invalidated by any call to Reset().
-  const std::vector<std::vector<Tensor>>& data();
-
  private:
   mutex mu_;
   // Determines whether all elements of the dataset have been cached.
-  bool completed_ TF_GUARDED_BY(mu_) = false;
-  std::vector<std::vector<Tensor>> cache_ TF_GUARDED_BY(mu_);
-};
-
-// A resource wrapping a shared instance of a memory cache.
-class MemoryCacheManager : public ResourceBase {
- public:
-  MemoryCacheManager() : cache_(std::make_shared<MemoryCache>()) {}
-
-  string DebugString() const override;
-
-  std::shared_ptr<MemoryCache> get() { return cache_; }
-
- private:
-  std::shared_ptr<MemoryCache> cache_;
+  bool completed_ GUARDED_BY(mu_) = false;
+  std::vector<std::vector<Tensor>> cache_ GUARDED_BY(mu_);
 };
 
 // Creates an instance of cache resource and transfers ownership to the caller.
-class AnonymousMemoryCacheHandleOp
-    : public AnonymousResourceOp<MemoryCacheManager> {
+class AnonymousMemoryCacheHandleOp : public AnonymousResourceOp<MemoryCache> {
  public:
   explicit AnonymousMemoryCacheHandleOp(OpKernelConstruction* ctx);
+  void Compute(OpKernelContext* ctx) override;
 
  private:
   string name() override;
@@ -82,7 +67,7 @@ class AnonymousMemoryCacheHandleOp
                         std::unique_ptr<FunctionLibraryDefinition> flib_def,
                         std::unique_ptr<ProcessFunctionLibraryRuntime> pflr,
                         FunctionLibraryRuntime* lib,
-                        MemoryCacheManager** manager) override;
+                        MemoryCache** resource) override;
 };
 
 // Deletes an instance of cache resource.

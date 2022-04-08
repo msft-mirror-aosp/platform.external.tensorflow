@@ -3,14 +3,13 @@
 // CHECK: {
 // CHECK:  version: 3,
 // CHECK:  operator_codes: [ {
-// CHECK:    deprecated_builtin_code: 32,
-// CHECK:    custom_code: "HashTableV2",
-// CHECK:    builtin_code: CUSTOM
+// CHECK:    builtin_code: CUSTOM,
+// CHECK:   custom_code: "HashTableV2"
 // CHECK: } ],
 // CHECK: subgraphs: [ {
 // CHECK:   tensors: [ {
 // CHECK:     shape: [  ],
-// CHECK:     type: RESOURCE,
+// CHECK:     type: INT32,
 // CHECK:     buffer: 1,
 // CHECK:     name: "tf.HashTableV2",
 // CHECK:     quantization: {

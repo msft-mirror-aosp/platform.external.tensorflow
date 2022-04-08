@@ -17,8 +17,6 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_CONTEXT_UTIL_H_
 #define TENSORFLOW_LITE_CONTEXT_UTIL_H_
 
-#include <stddef.h>
-
 #include "tensorflow/lite/c/common.h"
 
 namespace tflite {

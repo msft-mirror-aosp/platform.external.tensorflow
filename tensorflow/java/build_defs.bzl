@@ -5,7 +5,6 @@
 
 JAVA_VERSION_OPTS = [
     "-source 7 -target 7",
-    "-XDnoparameters",
 ]
 
 # A more robust set of lint and errorprone checks when building

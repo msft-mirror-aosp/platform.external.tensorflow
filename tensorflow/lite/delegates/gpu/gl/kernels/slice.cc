@@ -33,9 +33,12 @@ namespace {
 
 class Slice : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
-    const auto& attr = absl::any_cast<const SliceAttributes&>(ctx.op_attr);
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
+    auto output = ctx.graph->FindOutputs(ctx.node->id)[0];
+
+    auto attr =
+        absl::any_cast<const SliceAttributes&>(ctx.node->operation.attributes);
 
     const int4 channels(attr.starts.c, attr.strides.c, attr.ends.c, 0);
     const int4 heights(attr.starts.h, attr.strides.h, attr.ends.h, 0);
@@ -45,7 +48,7 @@ class Slice : public NodeShader {
         {"channels", channels},
         {"heights", heights},
         {"widths", widths},
-        {"dst_size", static_cast<int>(ctx.output_shapes[0][3])},
+        {"dst_size", output->tensor.shape.c},
     };
 
     std::string code;
@@ -104,7 +107,7 @@ class Slice : public NodeShader {
         /*input=*/IOStructure::ONLY_DEFINITIONS,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
+    return OkStatus();
   }
 };
 

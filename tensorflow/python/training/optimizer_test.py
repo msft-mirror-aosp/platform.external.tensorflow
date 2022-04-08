@@ -18,9 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from tensorflow.python.distribute import cross_device_ops
-from tensorflow.python.distribute import distribute_utils
-from tensorflow.python.distribute import mirrored_strategy
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -32,7 +29,6 @@ from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.ops import state_ops
 from tensorflow.python.ops import variables
 from tensorflow.python.platform import test
-from tensorflow.python.training import adam
 from tensorflow.python.training import gradient_descent
 
 
@@ -82,7 +78,7 @@ class OptimizerTest(test.TestCase):
             aggregation_method=gradients_util.AggregationMethod.
             EXPERIMENTAL_ACCUMULATE_N)
 
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
         # Fetch params to validate initial values
         self.assertAllClose([1.0, 2.0], self.evaluate(var0))
         self.assertAllClose([3.0, 4.0], self.evaluate(var1))
@@ -106,7 +102,7 @@ class OptimizerTest(test.TestCase):
         opt_op = sgd_op.minimize(
             cost, global_step, [var0, var1], grad_loss=grad_loss)
 
-        self.evaluate(variables.global_variables_initializer())
+        variables.global_variables_initializer().run()
         # Fetch params to validate initial values
         self.assertAllClose([1.0, 2.0], self.evaluate(var0))
         self.assertAllClose([3.0, 4.0], self.evaluate(var1))
@@ -130,7 +126,7 @@ class OptimizerTest(test.TestCase):
         return 5 * var0 + var1
       # pylint: enable=cell-var-from-loop
       sgd_op = gradient_descent.GradientDescentOptimizer(3.0)
-      with self.assertRaisesRegex(ValueError, 'No.*variables'):
+      with self.assertRaisesRegexp(ValueError, 'No.*variables'):
         sgd_op.minimize(loss)
 
   @test_util.run_in_graph_and_eager_modes
@@ -147,7 +143,7 @@ class OptimizerTest(test.TestCase):
         return 5 * var0
       # pylint: enable=cell-var-from-loop
       sgd_op = gradient_descent.GradientDescentOptimizer(3.0)
-      with self.assertRaisesRegex(ValueError, 'No gradients'):
+      with self.assertRaisesRegexp(ValueError, 'No gradients'):
         # var1 has no gradient
         sgd_op.minimize(loss, var_list=[var1])
 
@@ -163,8 +159,8 @@ class OptimizerTest(test.TestCase):
       def loss():
         return constant_op.constant(5.0)
       sgd_op = gradient_descent.GradientDescentOptimizer(3.0)
-      with self.assertRaisesRegex(ValueError,
-                                  'No gradients provided for any variable'):
+      with self.assertRaisesRegexp(ValueError,
+                                   'No gradients provided for any variable'):
         sgd_op.minimize(loss, var_list=[var0, var1])
 
   @test_util.run_in_graph_and_eager_modes
@@ -177,8 +173,8 @@ class OptimizerTest(test.TestCase):
       var1 = resource_variable_ops.ResourceVariable([3.0, 4.0], dtype=dtype,
                                                     name='b_%d' % i)
       sgd_op = gradient_descent.GradientDescentOptimizer(3.0)
-      with self.assertRaisesRegex(ValueError,
-                                  'No gradients provided for any variable'):
+      with self.assertRaisesRegexp(ValueError,
+                                   'No gradients provided for any variable'):
         sgd_op.apply_gradients([(None, var0), (None, var1)])
 
   @test_util.run_in_graph_and_eager_modes
@@ -206,7 +202,7 @@ class OptimizerTest(test.TestCase):
       ]
 
       self.evaluate(variables.global_variables_initializer())
-      # Run convert_ops to achieve the gradients converting
+      # Run convert_ops to achieve the gradietns converting
       self.evaluate(convert_ops)
       # Fetch params to validate initial values
       self.assertAllClose([1.0, 2.0], self.evaluate(var0))
@@ -263,7 +259,7 @@ class OptimizerTest(test.TestCase):
       sgd_op = gradient_descent.GradientDescentOptimizer(3.0)
       opt_op = sgd_op.minimize(cost, global_step, [var0, var1])
 
-      self.evaluate(variables.global_variables_initializer())
+      variables.global_variables_initializer().run()
       # Fetch params to validate initial values
       self.assertAllClose([1.0, 2.0], self.evaluate(var0))
       self.assertAllClose([3.0, 4.0], self.evaluate(var1))
@@ -272,28 +268,6 @@ class OptimizerTest(test.TestCase):
       # Validate updated params
       self.assertAllClose([-0.1, -0.1], self.evaluate(var0))
       self.assertAllClose([0., 0.], self.evaluate(var1))
-
-  @test_util.run_deprecated_v1
-  def testGetSlotUnderDistributedStrategy(self):
-    # Only run this test in graph mode so we don't need actual GPU.
-    ds = mirrored_strategy.MirroredStrategy(
-        ['CPU:0', 'GPU:0'],
-        cross_device_ops=cross_device_ops.HierarchicalCopyAllReduce())
-    # We need an optimizer that creates slots.
-    optimizer = adam.AdamOptimizer()
-
-    def f():
-      v = variables.Variable([1.0])
-      self.assertTrue(distribute_utils.is_distributed_variable(v))
-      # Slot variables are created in the first call to apply_gradients.
-      optimizer.apply_gradients([(ops.convert_to_tensor([1.0]), v)])
-      self.assertTrue(optimizer.get_slot_names())
-      for name in optimizer.get_slot_names():
-        slot = optimizer.get_slot(v, name)
-        self.assertIsNotNone(slot)
-        self.assertTrue(distribute_utils.is_distributed_variable(slot))
-
-    ds.run(f)
 
 
 if __name__ == '__main__':

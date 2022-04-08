@@ -25,13 +25,13 @@ namespace cuda {
 using DriverVersion = gpu::DriverVersion;
 
 // Converts a parsed driver version to string form.
-std::string DriverVersionToString(DriverVersion version);
+string DriverVersionToString(DriverVersion version);
 
 // Converts a parsed driver version or status value to natural string form.
-std::string DriverVersionStatusToString(port::StatusOr<DriverVersion> version);
+string DriverVersionStatusToString(port::StatusOr<DriverVersion> version);
 
 // Converts a string of a form like "331.79" to a DriverVersion{331, 79}.
-port::StatusOr<DriverVersion> StringToDriverVersion(const std::string& value);
+port::StatusOr<DriverVersion> StringToDriverVersion(const string& value);
 
 using Diagnostician = gpu::Diagnostician;
 

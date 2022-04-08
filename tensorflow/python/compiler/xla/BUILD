@@ -11,7 +11,7 @@ py_library(
         "__init__.py",
         "jit.py",
     ],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         ":xla",
         "//tensorflow/core:protos_all_py",
@@ -24,9 +24,6 @@ cuda_py_test(
     name = "jit_test",
     size = "small",
     srcs = ["jit_test.py"],
-    tags = [
-        "no_windows",  # TODO(b/171385770)
-    ],
     xla_enabled = True,
     deps = [
         ":compiler_py",
@@ -50,7 +47,7 @@ cuda_py_test(
 py_library(
     name = "xla",
     srcs = ["xla.py"],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/compiler/jit:xla_ops_py",
         "//tensorflow/compiler/jit/ops:xla_ops_grad",
@@ -95,8 +92,8 @@ cuda_py_test(
 )
 
 cuda_py_test(
-    name = "jit_compile_test",
-    srcs = ["jit_compile_test.py"],
+    name = "experimental_compile_test",
+    srcs = ["experimental_compile_test.py"],
     python_version = "PY3",
     tags = [
         "no_mac",

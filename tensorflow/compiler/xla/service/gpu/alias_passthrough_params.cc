@@ -37,10 +37,12 @@ StatusOr<bool> AliasPassthroughParams::Run(HloModule* module) {
               << " in module " << module->name()
               << " is passed-through to root tuple element " << i << ": "
               << root->shape().ToString();
+      // Use must-alias semantics (kUserAlias) for pass-through params.
       TF_RETURN_IF_ERROR(module->input_output_alias_config().SetUpAlias(
           /*output_index=*/{i},
           /*param_number=*/root->operand(i)->parameter_number(),
-          /*param_index=*/{}));
+          /*param_index=*/{},
+          HloInputOutputAliasConfig::AliasKind::kUserAlias));
       used_params.insert(root->operand(i)->parameter_number());
       changed = true;
     }

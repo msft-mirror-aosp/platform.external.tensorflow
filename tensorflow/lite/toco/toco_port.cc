@@ -12,15 +12,13 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/toco/toco_port.h"
-
 #include <cstring>
 
-#include "absl/status/status.h"
+#include "tensorflow/lite/toco/toco_port.h"
+#include "tensorflow/lite/toco/toco_types.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/platform/logging.h"
-#include "tensorflow/lite/toco/toco_types.h"
 
 #if defined(__ANDROID__) && defined(__ARM_ARCH_7A__)
 namespace std {
@@ -30,12 +28,12 @@ double round(double x) { return ::round(x); }
 
 namespace toco {
 namespace port {
-void CopyToBuffer(const std::string& src, char* dest) {
+void CopyToBuffer(const string& src, char* dest) {
   memcpy(dest, src.data(), src.size());
 }
 
 #ifdef PLATFORM_GOOGLE
-void CopyToBuffer(const absl::Cord& src, char* dest) { src.CopyToArray(dest); }
+void CopyToBuffer(const Cord& src, char* dest) { src.CopyToArray(dest); }
 #endif
 }  // namespace port
 }  // namespace toco
@@ -71,7 +69,7 @@ void CheckInitGoogleIsDone(const char* message) {
 namespace file {
 
 // Conversion to our wrapper Status.
-tensorflow::Status ToStatus(const absl::Status& uts) {
+tensorflow::Status ToStatus(const ::util::Status& uts) {
   if (!uts.ok()) {
     return tensorflow::Status(
         tensorflow::errors::Code(::util::RetrieveErrorCode(uts)),
@@ -86,7 +84,7 @@ toco::port::file::Options ToOptions(const ::file::Options& options) {
   return Options();
 }
 
-tensorflow::Status Writable(const std::string& filename) {
+tensorflow::Status Writable(const string& filename) {
   File* f = nullptr;
   const auto status = ::file::Open(filename, "w", &f, ::file::Defaults());
   if (f) {
@@ -95,30 +93,28 @@ tensorflow::Status Writable(const std::string& filename) {
   return ToStatus(status);
 }
 
-tensorflow::Status Readable(const std::string& filename,
+tensorflow::Status Readable(const string& filename,
                             const file::Options& options) {
   return ToStatus(::file::Readable(filename, ::file::Defaults()));
 }
 
-tensorflow::Status Exists(const std::string& filename,
+tensorflow::Status Exists(const string& filename,
                           const file::Options& options) {
   auto status = ::file::Exists(filename, ::file::Defaults());
   return ToStatus(status);
 }
 
-tensorflow::Status GetContents(const std::string& filename,
-                               std::string* contents,
+tensorflow::Status GetContents(const string& filename, string* contents,
                                const file::Options& options) {
   return ToStatus(::file::GetContents(filename, contents, ::file::Defaults()));
 }
 
-tensorflow::Status SetContents(const std::string& filename,
-                               const std::string& contents,
+tensorflow::Status SetContents(const string& filename, const string& contents,
                                const file::Options& options) {
   return ToStatus(::file::SetContents(filename, contents, ::file::Defaults()));
 }
 
-std::string JoinPath(const std::string& a, const std::string& b) {
+string JoinPath(const string& a, const string& b) {
   return ::file::JoinPath(a, b);
 }
 

@@ -78,19 +78,7 @@ class ReachingDefinitionsAnalyzerTest(
 
     self.assertSameDef(local_body[1].test, local_body[2].value.elts[0])
 
-    # Note: the function name is visible inside the function body. But it's
-    # a closure variable, not a local.
-    #
-    # Example:
-    #
-    #   >>> def f():
-    #   ...  print(f)
-    #   >>> g = f
-    #   >>> f = 'something else'
-    #   >>> g()
-    #   something else
-    #
-    self.assertHasDefinedIn(local_body[1], ('a', 'b'))
+    self.assertHasDefinedIn(local_body[1], ('a', 'b', 'local_fn'))
 
 
 if __name__ == '__main__':

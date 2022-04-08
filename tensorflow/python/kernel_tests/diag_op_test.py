@@ -374,19 +374,19 @@ class MatrixDiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testVector(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = np.array([1.0, 2.0, 3.0])
       mat = np.diag(v)
       v_diag = array_ops.matrix_diag(v)
       self.assertEqual((3, 3), v_diag.get_shape())
-      self.assertAllEqual(v_diag, mat)
+      self.assertAllEqual(v_diag.eval(), mat)
 
       # {Sub,Super}diagonals.
       for offset in [1, -2, 5]:
         mat = np.diag(v, offset)
         v_diag = array_ops.matrix_diag(v, k=offset)
         self.assertEqual(mat.shape, v_diag.get_shape())
-        self.assertAllEqual(v_diag, mat)
+        self.assertAllEqual(v_diag.eval(), mat)
 
       # Diagonal bands.
       for align in alignment_list:
@@ -394,17 +394,17 @@ class MatrixDiagTest(test.TestCase):
           for diags, (vecs, solution) in tests.items():
             v_diags = array_ops.matrix_diag(vecs[0], k=diags, align=align)
             self.assertEqual(v_diags.get_shape(), solution[0].shape)
-            self.assertAllEqual(v_diags, solution[0])
+            self.assertAllEqual(v_diags.eval(), solution[0])
 
   def _testVectorBatch(self, dtype):
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       v_batch = np.array([[1.0, 0.0, 3.0], [4.0, 5.0, 6.0]]).astype(dtype)
       mat_batch = np.array([[[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 3.0]],
                             [[4.0, 0.0, 0.0], [0.0, 5.0, 0.0],
                              [0.0, 0.0, 6.0]]]).astype(dtype)
       v_batch_diag = array_ops.matrix_diag(v_batch)
       self.assertEqual((2, 3, 3), v_batch_diag.get_shape())
-      self.assertAllEqual(v_batch_diag, mat_batch)
+      self.assertAllEqual(v_batch_diag.eval(), mat_batch)
 
       # {Sub,Super}diagonals.
       for offset in [1, -2, 5]:
@@ -414,7 +414,7 @@ class MatrixDiagTest(test.TestCase):
         ]
         mat_batch = np.stack(mats, axis=0)
         self.assertEqual(mat_batch.shape, v_batch_diag.get_shape())
-        self.assertAllEqual(v_batch_diag, mat_batch)
+        self.assertAllEqual(v_batch_diag.eval(), mat_batch)
 
       # Diagonal bands with padding_value.
       for padding_value, align in zip_to_first_list_length([0, 555, -11],
@@ -429,7 +429,7 @@ class MatrixDiagTest(test.TestCase):
             mask = solution == 0
             solution = (solution + padding_value * mask).astype(dtype)
             self.assertEqual(v_diags.get_shape(), solution.shape)
-            self.assertAllEqual(v_diags, solution)
+            self.assertAllEqual(v_diags.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testVectorBatch(self):
@@ -441,7 +441,7 @@ class MatrixDiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       # Stores expected num_rows and num_cols (when the other is given).
       # expected[d_lower, d_upper] = (expected_num_rows, expected_num_cols)
       test_list = list()
@@ -495,7 +495,7 @@ class MatrixDiagTest(test.TestCase):
             mask = solution == 0
             solution = solution + padding_value * mask
             self.assertEqual(v_diags.get_shape(), solution.shape)
-            self.assertAllEqual(v_diags, solution)
+            self.assertAllEqual(v_diags.eval(), solution)
 
         # Giving just num_rows.
         for expected, (_, tests) in test_list:
@@ -514,7 +514,7 @@ class MatrixDiagTest(test.TestCase):
             mask = solution == 0
             solution = solution + padding_value * mask
             self.assertEqual(v_diags.get_shape(), solution.shape)
-            self.assertAllEqual(v_diags, solution)
+            self.assertAllEqual(v_diags.eval(), solution)
 
         # Giving just num_cols.
         for expected, (_, tests) in test_list:
@@ -533,16 +533,17 @@ class MatrixDiagTest(test.TestCase):
             mask = solution == 0
             solution = solution + padding_value * mask
             self.assertEqual(v_diags.get_shape(), solution.shape)
-            self.assertAllEqual(v_diags, solution)
+            self.assertAllEqual(v_diags.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testInvalidShape(self):
-    with self.assertRaisesRegex(ValueError, "must be at least rank 1"):
+    with self.assertRaisesRegexp(ValueError, "must be at least rank 1"):
       array_ops.matrix_diag(0)
 
   @test_util.run_deprecated_v1
+  @test_util.disable_xla("b/123337890")  # Error messages differ
   def testInvalidShapeAtEval(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = array_ops.placeholder(dtype=dtypes_lib.float32)
       with self.assertRaisesOpError("diagonal must be at least 1-dim"):
         array_ops.matrix_diag(v).eval(feed_dict={v: 0.0})
@@ -550,7 +551,7 @@ class MatrixDiagTest(test.TestCase):
   @test_util.run_deprecated_v1
   def testGrad(self):
     shapes = ((3,), (7, 4))
-    with self.session():
+    with self.session(use_gpu=True):
       for shape in shapes:
         x = constant_op.constant(np.random.rand(*shape), np.float32)
         y = array_ops.matrix_diag(x)
@@ -564,7 +565,7 @@ class MatrixDiagTest(test.TestCase):
     tests = dict()  # tests[shape] = (d_lower, d_upper)
     tests[(3,)] = (-1, -1)
     tests[(7, 3, 4)] = (-1, 1)
-    with self.session():
+    with self.session(use_gpu=True):
       for shape, diags in tests.items():
         x = constant_op.constant(np.random.rand(*shape), np.float32)
         for align in alignment_list:
@@ -580,7 +581,7 @@ class MatrixSetDiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testSquare(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = np.array([1.0, 2.0, 3.0])
       mat = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 1.0], [1.0, 1.0, 1.0]])
       mat_set_diag = np.array([[1.0, 1.0, 0.0], [1.0, 2.0, 1.0],
@@ -599,11 +600,11 @@ class MatrixSetDiagTest(test.TestCase):
           output = array_ops.matrix_set_diag(
               input_mat, vecs[0], k=diags, align=align)
           self.assertEqual(output.get_shape(), solution.shape)
-          self.assertAllEqual(output, solution)
+          self.assertAllEqual(output.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testRectangular(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = np.array([3.0, 4.0])
       mat = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 1.0]])
       expected = np.array([[3.0, 1.0, 0.0], [1.0, 4.0, 1.0]])
@@ -628,10 +629,10 @@ class MatrixSetDiagTest(test.TestCase):
             output = array_ops.matrix_set_diag(
                 input_mat, vecs[0], k=diags, align=align)
             self.assertEqual(output.get_shape(), solution.shape)
-            self.assertAllEqual(output, solution)
+            self.assertAllEqual(output.eval(), solution)
 
   def _testSquareBatch(self, dtype):
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       v_batch = np.array([[-1.0, 0.0, -3.0], [-4.0, -5.0, -6.0]]).astype(dtype)
       mat_batch = np.array([[[1.0, 0.0, 3.0], [0.0, 2.0, 0.0], [1.0, 0.0, 3.0]],
                             [[4.0, 0.0, 4.0], [0.0, 5.0, 0.0],
@@ -656,7 +657,7 @@ class MatrixSetDiagTest(test.TestCase):
           output = array_ops.matrix_set_diag(
               input_mat, vecs.astype(dtype), k=diags, align=align)
           self.assertEqual(output.get_shape(), solution.shape)
-          self.assertAllEqual(output, solution)
+          self.assertAllEqual(output.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testSquareBatch(self):
@@ -668,7 +669,7 @@ class MatrixSetDiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v_batch = np.array([[-1.0, -2.0], [-4.0, -5.0]])
       mat_batch = np.array([[[1.0, 0.0, 3.0], [0.0, 2.0, 0.0]],
                             [[4.0, 0.0, 4.0], [0.0, 5.0, 0.0]]])
@@ -690,18 +691,18 @@ class MatrixSetDiagTest(test.TestCase):
             output = array_ops.matrix_set_diag(
                 input_mat, vecs, k=diags, align=align)
             self.assertEqual(output.get_shape(), solution.shape)
-            self.assertAllEqual(output, solution)
+            self.assertAllEqual(output.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testInvalidShape(self):
-    with self.assertRaisesRegex(ValueError, "must be at least rank 2"):
+    with self.assertRaisesRegexp(ValueError, "must be at least rank 2"):
       array_ops.matrix_set_diag(0, [0])
-    with self.assertRaisesRegex(ValueError, "must be at least rank 1"):
+    with self.assertRaisesRegexp(ValueError, "must be at least rank 1"):
       array_ops.matrix_set_diag([[0]], 0)
 
   @test_util.run_deprecated_v1
   def testInvalidShapeAtEval(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = array_ops.placeholder(dtype=dtypes_lib.float32)
       with self.assertRaisesOpError("input must be at least 2-dim"):
         array_ops.matrix_set_diag(v, [v]).eval(feed_dict={v: 0.0})
@@ -717,7 +718,7 @@ class MatrixSetDiagTest(test.TestCase):
         })
 
   def _testGrad(self, input_shape, diag_shape, diags, align):
-    with self.session():
+    with self.session(use_gpu=True):
       x = constant_op.constant(
           np.random.rand(*input_shape), dtype=dtypes_lib.float32)
       x_diag = constant_op.constant(
@@ -751,7 +752,7 @@ class MatrixSetDiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testGradWithNoShapeInformation(self):
-    with self.session() as sess:
+    with self.session(use_gpu=True) as sess:
       v = array_ops.placeholder(dtype=dtypes_lib.float32)
       mat = array_ops.placeholder(dtype=dtypes_lib.float32)
       grad_input = array_ops.placeholder(dtype=dtypes_lib.float32)
@@ -774,18 +775,18 @@ class MatrixDiagPartTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testSquare(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = np.array([1.0, 2.0, 3.0])
       mat = np.diag(v)
       mat_diag = array_ops.matrix_diag_part(mat)
       self.assertEqual((3,), mat_diag.get_shape())
-      self.assertAllEqual(mat_diag, v)
+      self.assertAllEqual(mat_diag.eval(), v)
 
       for offset in [-2, 3]:
         mat = np.diag(v, offset)
         mat_diag = array_ops.matrix_diag_part(mat, k=offset)
         self.assertEqual((3,), mat_diag.get_shape())
-        self.assertAllEqual(mat_diag, v)
+        self.assertAllEqual(mat_diag.eval(), v)
 
       # Diagonal bands.
       for align in alignment_list:
@@ -794,17 +795,17 @@ class MatrixDiagPartTest(test.TestCase):
           solution, _ = pair
           mat_diag = array_ops.matrix_diag_part(mat[0], k=diags, align=align)
           self.assertEqual(mat_diag.get_shape(), solution[0].shape)
-          self.assertAllEqual(mat_diag, solution[0])
+          self.assertAllEqual(mat_diag.eval(), solution[0])
 
   @test_util.run_deprecated_v1
   def testRectangular(self):
-    with self.session():
+    with self.session(use_gpu=True):
       mat = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
       mat_diag = array_ops.matrix_diag_part(mat)
-      self.assertAllEqual(mat_diag, np.array([1.0, 5.0]))
+      self.assertAllEqual(mat_diag.eval(), np.array([1.0, 5.0]))
       mat = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
       mat_diag = array_ops.matrix_diag_part(mat)
-      self.assertAllEqual(mat_diag, np.array([1.0, 4.0]))
+      self.assertAllEqual(mat_diag.eval(), np.array([1.0, 4.0]))
 
       # Diagonal bands.
       for align in alignment_list:
@@ -814,10 +815,10 @@ class MatrixDiagPartTest(test.TestCase):
             mat_diag = array_ops.matrix_diag_part(
                 mat[0], k=diags, align=align)
             self.assertEqual(mat_diag.get_shape(), solution[0].shape)
-            self.assertAllEqual(mat_diag, solution[0])
+            self.assertAllEqual(mat_diag.eval(), solution[0])
 
   def _testSquareBatch(self, dtype):
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       v_batch = np.array([[1.0, 0.0, 3.0], [4.0, 5.0, 6.0]]).astype(dtype)
       mat_batch = np.array([[[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 3.0]],
                             [[4.0, 0.0, 0.0], [0.0, 5.0, 0.0],
@@ -825,7 +826,7 @@ class MatrixDiagPartTest(test.TestCase):
       self.assertEqual(mat_batch.shape, (2, 3, 3))
       mat_batch_diag = array_ops.matrix_diag_part(mat_batch)
       self.assertEqual((2, 3), mat_batch_diag.get_shape())
-      self.assertAllEqual(mat_batch_diag, v_batch)
+      self.assertAllEqual(mat_batch_diag.eval(), v_batch)
 
       # Diagonal bands with padding_value.
       for padding_value, align in zip_to_first_list_length([0, 555, -11],
@@ -841,7 +842,7 @@ class MatrixDiagPartTest(test.TestCase):
           mask = solution == 0
           solution = (solution + padding_value * mask).astype(dtype)
           self.assertEqual(mat_batch_diag.get_shape(), solution.shape)
-          self.assertAllEqual(mat_batch_diag, solution)
+          self.assertAllEqual(mat_batch_diag.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testSquareBatch(self):
@@ -853,14 +854,14 @@ class MatrixDiagPartTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testRectangularBatch(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v_batch = np.array([[1.0, 2.0], [4.0, 5.0]])
       mat_batch = np.array([[[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]],
                             [[4.0, 0.0, 0.0], [0.0, 5.0, 0.0]]])
       self.assertEqual(mat_batch.shape, (2, 2, 3))
       mat_batch_diag = array_ops.matrix_diag_part(mat_batch)
       self.assertEqual((2, 2), mat_batch_diag.get_shape())
-      self.assertAllEqual(mat_batch_diag, v_batch)
+      self.assertAllEqual(mat_batch_diag.eval(), v_batch)
 
       # Diagonal bands with padding_value and align.
       for padding_value, align in zip_to_first_list_length([0, 555, -11],
@@ -873,25 +874,26 @@ class MatrixDiagPartTest(test.TestCase):
             mask = solution == 0
             solution = solution + padding_value * mask
             self.assertEqual(mat_batch_diag.get_shape(), solution.shape)
-            self.assertAllEqual(mat_batch_diag, solution)
+            self.assertAllEqual(mat_batch_diag.eval(), solution)
 
   @test_util.run_deprecated_v1
   def testUnknownShape(self):
     matrix = array_ops.placeholder(dtypes_lib.int32, shape=[None, None])
     result = array_ops.matrix_diag_part(matrix, k=-1)
     input_matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-    with self.session():
+    with self.session(use_gpu=True):
       result_eval = result.eval(feed_dict={matrix: input_matrix})
     self.assertAllEqual([4, 8], result_eval)
 
   @test_util.run_deprecated_v1
   def testInvalidShape(self):
-    with self.assertRaisesRegex(ValueError, "must be at least rank 2"):
+    with self.assertRaisesRegexp(ValueError, "must be at least rank 2"):
       array_ops.matrix_diag_part(0)
 
   @test_util.run_deprecated_v1
+  @test_util.disable_xla("b/123337890")  # Error messages differ
   def testInvalidShapeAtEval(self):
-    with self.session():
+    with self.session(use_gpu=True):
       v = array_ops.placeholder(dtype=dtypes_lib.float32)
       with self.assertRaisesOpError("input must be at least 2-dim"):
         array_ops.matrix_diag_part(v).eval(feed_dict={v: 0.0})
@@ -899,7 +901,7 @@ class MatrixDiagPartTest(test.TestCase):
   @test_util.run_deprecated_v1
   def testGrad(self):
     shapes = ((3, 3), (2, 3), (3, 2), (5, 3, 3))
-    with self.session():
+    with self.session(use_gpu=True):
       for shape in shapes:
         x = constant_op.constant(np.random.rand(*shape), dtype=np.float32)
         y = array_ops.matrix_diag_part(x)
@@ -913,7 +915,7 @@ class MatrixDiagPartTest(test.TestCase):
     tests = dict()  # tests[shape] = (d_lower, d_upper)
     tests[(3, 3)] = (-1, -1)
     tests[(7, 3, 4)] = (-1, 1)
-    with self.session():
+    with self.session(use_gpu=True):
       for align in alignment_list:
         for shape, diags in tests.items():
           x = constant_op.constant(np.random.rand(*shape), np.float32)
@@ -1066,7 +1068,7 @@ class DiagTest(test.TestCase):
 
   @test_util.run_deprecated_v1
   def testInvalidRank(self):
-    with self.assertRaisesRegex(ValueError, "must be at least rank 1"):
+    with self.assertRaisesRegexp(ValueError, "must be at least rank 1"):
       array_ops.diag(0.0)
 
 

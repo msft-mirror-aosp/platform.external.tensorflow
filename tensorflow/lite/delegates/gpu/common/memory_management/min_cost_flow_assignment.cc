@@ -16,15 +16,11 @@ limitations under the License.
 #include "tensorflow/lite/delegates/gpu/common/memory_management/min_cost_flow_assignment.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <limits>
 #include <queue>
-#include <utility>
+#include <set>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "tensorflow/lite/delegates/gpu/common/memory_management/internal.h"
-#include "tensorflow/lite/delegates/gpu/common/memory_management/types.h"
 
 namespace tflite {
 namespace gpu {
@@ -215,14 +211,14 @@ class MinCostFlowSolver {
 // auxiliary flow graph, find minimum-cost flow in it and calculates the
 // assignment of shared objects to tensors, using the result of the flow
 // algorithm.
-absl::Status MinCostFlowAssignment(
+Status MinCostFlowAssignment(
     const std::vector<TensorUsageRecord<size_t>>& usage_records,
     ObjectsAssignment<size_t>* assignment) {
   MinCostFlowSolver solver;
   solver.Build(usage_records);
   solver.Solve();
   solver.CalculateAssignment(assignment);
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace gpu

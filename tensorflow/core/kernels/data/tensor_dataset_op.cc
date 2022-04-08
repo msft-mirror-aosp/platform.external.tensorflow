@@ -64,10 +64,6 @@ class TensorDatasetOp::Dataset : public DatasetBase {
 
   int64 Cardinality() const override { return 1LL; }
 
-  Status InputDatasets(std::vector<const DatasetBase*>* inputs) const override {
-    return Status::OK();
-  }
-
   Status CheckExternalState() const override { return Status::OK(); }
 
  protected:
@@ -79,7 +75,7 @@ class TensorDatasetOp::Dataset : public DatasetBase {
     for (const Tensor& t : tensors_) {
       Node* node;
       if (ctx->serialize_data_tensors()) {
-        TF_RETURN_IF_ERROR(b->AddDatasetOrTensor(ctx, t, &node));
+        TF_RETURN_IF_ERROR(b->AddTensor(t, &node));
       } else {
         TF_RETURN_IF_ERROR(b->AddPlaceholder(t, &node));
         DCHECK_NE(ctx->input_list(), nullptr);
@@ -121,8 +117,7 @@ class TensorDatasetOp::Dataset : public DatasetBase {
       return model::MakeSourceNode(std::move(args));
     }
 
-    Status SaveInternal(SerializationContext* ctx,
-                        IteratorStateWriter* writer) override {
+    Status SaveInternal(IteratorStateWriter* writer) override {
       mutex_lock l(mu_);
       if (produced_)
         TF_RETURN_IF_ERROR(writer->WriteScalar(full_name(kProduced), ""));
@@ -138,7 +133,7 @@ class TensorDatasetOp::Dataset : public DatasetBase {
 
    private:
     mutex mu_;
-    bool produced_ TF_GUARDED_BY(mu_);
+    bool produced_ GUARDED_BY(mu_);
   };
 
   const std::vector<Tensor> tensors_;

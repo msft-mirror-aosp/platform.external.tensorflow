@@ -1,4 +1,3 @@
-load("//tensorflow:tensorflow.bzl", "filegroup")
 load("//tensorflow/compiler/mlir:glob_lit_test.bzl", "glob_lit_tests")
 
 licenses(["notice"])
@@ -11,7 +10,9 @@ glob_lit_tests(
     driver = "@llvm-project//mlir:run_lit.sh",
     test_file_exts = [
         "pbtxt",
-        #        "py", TODO(b/150304798)
+        # TODO(fengliuai): reenable these tests after the fused loc is
+        # supported in the diagnostic handler.
+        # "py",
     ],
 )
 

@@ -18,10 +18,9 @@ limitations under the License.
 
 // A file provides predicates to match subgraphs.
 
-#include <algorithm>
-#include <iterator>
 #include <string>
-#include <vector>
+
+#include "tensorflow/lite/delegates/gpu/common/model.h"
 
 namespace tflite {
 namespace gpu {

@@ -2,7 +2,6 @@
 #   BenchmarkModel Android harness for TensorFlow Lite benchmarks.
 
 load("//tensorflow/lite:build_def.bzl", "tflite_jni_binary")
-load("//tensorflow/lite:special_rules.bzl", "tflite_hexagon_nn_skel_libraries")
 load("@build_bazel_rules_android//android:rules.bzl", "android_binary")
 
 package(
@@ -10,20 +9,11 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-# See README.md for details about building and executing the benchmark in APK
-# format.
+exports_files(["LICENSE"])
 
-APK_VARIANTS = [
-    # (suffix, extra deps)
-    ("", []),
-    (
-        "_plus_flex",
-        ["//tensorflow/lite/delegates/flex:delegate"],
-    ),
-]
-
-[android_binary(
-    name = "benchmark_model%s" % suffix,
+# See README.md for details about building and executing this benchmark.
+android_binary(
+    name = "benchmark_model",
     srcs = glob([
         "src/**/*.java",
     ]),
@@ -33,14 +23,11 @@ APK_VARIANTS = [
     # can't be built. We need to prevent the build system from trying to
     # use the target in that case.
     tags = ["manual"],
-    deps = [
-        ":hexagon_libs",
-        ":tensorflowlite_benchmark_native%s" % suffix,
-    ],
-) for suffix, _ in APK_VARIANTS]
+    deps = [":tensorflowlite_benchmark_native"],
+)
 
-[tflite_jni_binary(
-    name = "libtensorflowlite_benchmark%s.so" % suffix,
+tflite_jni_binary(
+    name = "libtensorflowlite_benchmark.so",
     srcs = glob([
         "jni/**/*.cc",
         "jni/**/*.h",
@@ -48,25 +35,12 @@ APK_VARIANTS = [
     deps = [
         "//tensorflow/lite/java/jni",
         "//tensorflow/lite/tools/benchmark:benchmark_tflite_model_lib",
-    ] + extra_deps,
-) for suffix, extra_deps in APK_VARIANTS]
-
-[cc_library(
-    name = "tensorflowlite_benchmark_native%s" % suffix,
-    srcs = ["libtensorflowlite_benchmark%s.so" % suffix],
-    visibility = ["//visibility:private"],
-) for suffix, _ in APK_VARIANTS]
+        "//tensorflow/lite/tools/benchmark:logging",
+    ],
+)
 
 cc_library(
-    name = "hexagon_libs",
-    srcs = select({
-        "//tensorflow:android_arm64": [
-            "//tensorflow/lite/delegates/hexagon/hexagon_nn:libhexagon_interface.so",
-        ] + tflite_hexagon_nn_skel_libraries(),
-        "//tensorflow:android_arm": [
-            "//tensorflow/lite/delegates/hexagon/hexagon_nn:libhexagon_interface.so",
-        ] + tflite_hexagon_nn_skel_libraries(),
-        "//conditions:default": [],
-    }),
+    name = "tensorflowlite_benchmark_native",
+    srcs = ["libtensorflowlite_benchmark.so"],
     visibility = ["//visibility:private"],
 )

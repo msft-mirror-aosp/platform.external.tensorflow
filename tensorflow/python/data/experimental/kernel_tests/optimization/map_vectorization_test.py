@@ -18,7 +18,6 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import time
 
 from absl.testing import parameterized
 import numpy as np
@@ -43,8 +42,6 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
 from tensorflow.python.ops import parsing_ops
-from tensorflow.python.ops import script_ops
-from tensorflow.python.ops import special_math_ops
 from tensorflow.python.platform import test
 
 
@@ -91,9 +88,8 @@ def _unary_real_test_combinations():
       ("Asinh", math_ops.asinh),
       ("Atan", math_ops.atan),
       ("Atanh", math_ops.atanh),
-      # TODO(b/157272291): Add testing for more special functions.
-      ("BesselI0e", special_math_ops.bessel_i0e),
-      ("BesselI1e", special_math_ops.bessel_i1e),
+      ("BesselI0e", math_ops.bessel_i0e),
+      ("BesselI1e", math_ops.bessel_i1e),
       ("Ceil", math_ops.ceil),
       ("Cos", math_ops.cos),
       ("Cosh", math_ops.cosh),
@@ -221,9 +217,7 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
     Returns:
       Tuple of (unoptimized dataset, optimized dataset).
     """
-    map_node_name = "Map"
-    if num_parallel_calls is not None:
-      map_node_name = "ParallelMap"
+    map_node_name = "Map" if num_parallel_calls is None else "ParallelMap"
 
     def _make_dataset(node_names):
       dataset = base_dataset.apply(testing.assert_next(node_names))
@@ -235,11 +229,11 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
       dataset = dataset.with_options(options)
       return dataset
 
-    unoptimized = _make_dataset([map_node_name, "Batch"])
+    unoptimized = _make_dataset([map_node_name, "BatchV2"])
     # Note that because of the `ChooseDataset` fork, we can't use `assert_next`
     # to verify the optimization result.
-    optimized = _make_dataset(["ChooseFastestBranch"]
-                              if expect_optimized else [map_node_name, "Batch"])
+    optimized = _make_dataset(["ChooseFastestBranch"] if expect_optimized else
+                              [map_node_name, "BatchV2"])
     optimized = self._enable_map_vectorization(optimized)
     return unoptimized, optimized
 
@@ -466,8 +460,8 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
       # x has leading dimension 5, this will raise an error
       return array_ops.gather(x, 10)
 
-    with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                r"indices = 10 is not in \[0, 5\)"):
+    with self.assertRaisesRegexp(errors.InvalidArgumentError,
+                                 r"indices = 10 is not in \[0, 5\)"):
       base_dataset = dataset_ops.Dataset.range(5).repeat(5).batch(
           5, drop_remainder=True)
       _, optimized = self._get_test_datasets(base_dataset, map_fn)
@@ -520,8 +514,11 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
     def map_fn(x):
       return x * 2
 
+    unoptimized_seq = []
+
     def make_apply_fn(is_fused):
       if is_fused:
+        unoptimized_seq.append("MapAndBatch")
 
         def apply_fn(dataset):
           return dataset.apply(
@@ -529,6 +526,7 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
 
         return apply_fn
       else:
+        unoptimized_seq.extend(["ParallelMap", "BatchV2"])
 
         def apply_fn(dataset):
           return dataset.map(map_fn, 12).batch(2, drop_remainder=True)
@@ -543,56 +541,16 @@ class MapVectorizationTest(test_base.DatasetTestBase, parameterized.TestCase):
     apply_fn_1 = make_apply_fn(fuse_first)
     apply_fn_2 = make_apply_fn(fuse_second)
 
-    def make_dataset():
-      dataset = base_dataset
+    def make_dataset(node_names):
+      dataset = base_dataset.apply(testing.assert_next(node_names))
       dataset = apply_fn_1(dataset)
       dataset = apply_fn_2(dataset)
       return dataset
 
-    unoptimized = make_dataset()
-    optimized = make_dataset()
+    unoptimized = make_dataset(unoptimized_seq)
+    optimized = make_dataset(["ChooseFastestBranch", "ChooseFastestBranch"])
     optimized = self._enable_map_vectorization(optimized)
     self.assertDatasetsEqual(optimized, unoptimized)
-
-  @combinations.generate(
-      combinations.times(
-          test_base.default_test_combinations(),
-          combinations.combine(
-              local_determinism=[True, False, None],
-              global_determinism=[True, False])))
-  def testOptimizationDeterminism(self, local_determinism, global_determinism):
-    # Tests that vectorization maintains the determinism setting.
-    expect_determinism = local_determinism or (local_determinism is None and
-                                               global_determinism)
-    num_elements = 1000
-    def dataset_fn(delay_ms):
-
-      def sleep(x):
-        # Inject random delay in the interval [0, delay_ms / 1000).
-        time.sleep(delay_ms * (np.random.randint(x + 1) / (x + 1)) / 1000)
-        return x
-
-      def map_function(x):
-        return check_ops.ensure_shape(
-            script_ops.py_func(sleep, [x], x.dtype, stateful=False), ())
-
-      dataset = dataset_ops.Dataset.range(num_elements)
-      dataset = dataset.map(
-          map_function, num_parallel_calls=10, deterministic=local_determinism)
-      dataset = dataset.batch(1)
-
-      opts = dataset_ops.Options()
-      opts.experimental_deterministic = global_determinism
-      # Prevent the map/batch from being rewritten as MapAndBatch.
-      opts.experimental_optimization.apply_default_optimizations = False
-      dataset = dataset.with_options(opts)
-      dataset = self._enable_map_vectorization(dataset)
-      return dataset
-
-    self.checkDeterminism(
-        dataset_fn,
-        expect_determinism,
-        expected_elements=[[element] for element in range(num_elements)])
 
   @combinations.generate(test_base.default_test_combinations())
   def testOptimizationIgnoreStateful(self):

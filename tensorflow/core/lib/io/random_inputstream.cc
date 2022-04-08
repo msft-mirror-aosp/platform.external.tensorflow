@@ -35,7 +35,7 @@ Status RandomAccessInputStream::ReadNBytes(int64 bytes_to_read,
     return errors::InvalidArgument("Cannot read negative number of bytes");
   }
   result->clear();
-  result->resize_uninitialized(bytes_to_read);
+  result->resize(bytes_to_read);
   char* result_buffer = &(*result)[0];
   StringPiece data;
   Status s = file_->Read(pos_, bytes_to_read, &data, result_buffer);
@@ -49,16 +49,15 @@ Status RandomAccessInputStream::ReadNBytes(int64 bytes_to_read,
   return s;
 }
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
 Status RandomAccessInputStream::ReadNBytes(int64 bytes_to_read,
                                            absl::Cord* result) {
   if (bytes_to_read < 0) {
     return errors::InvalidArgument("Cannot read negative number of bytes");
   }
-  int64 current_size = result->size();
   Status s = file_->Read(pos_, bytes_to_read, result);
   if (s.ok() || errors::IsOutOfRange(s)) {
-    pos_ += result->size() - current_size;
+    pos_ += result->size();
   }
   return s;
 }
@@ -93,7 +92,7 @@ Status RandomAccessInputStream::SkipNBytes(int64 bytes_to_skip) {
     } else {
       return s;
     }
-    if (data.size() < static_cast<size_t>(bytes_to_read)) {
+    if (data.size() < bytes_to_read) {
       return errors::OutOfRange("reached end of file");
     }
     bytes_to_skip -= bytes_to_read;

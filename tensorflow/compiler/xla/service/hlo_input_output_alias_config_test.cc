@@ -86,7 +86,8 @@ ENTRY main {
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{0}, /*param_number=*/1,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   expect_aliased(/*output_index=*/{0}, /*param_number=*/1,
                  /*param_index=*/{}, config);
@@ -117,11 +118,13 @@ ENTRY main {
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{0}, /*param_number=*/0,
-      /*param_index=*/{0}));
+      /*param_index=*/{0},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{1}, /*param_number=*/0,
-      /*param_index=*/{1}));
+      /*param_index=*/{1},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   expect_aliased(/*output_index=*/{0}, /*param_number=*/0,
                  /*param_index=*/{0}, config);
@@ -154,11 +157,13 @@ ENTRY main {
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{0}, /*param_number=*/0,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{1}, /*param_number=*/0,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   ASSERT_IS_NOT_OK(config.Verify(*module, [](const Shape& shape) {
     return ShapeUtil::ByteSizeOf(shape);
@@ -183,7 +188,8 @@ ENTRY main {
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{1}, /*param_number=*/0,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   ASSERT_IS_NOT_OK(config.Verify(*module, [](const Shape& shape) {
     return ShapeUtil::ByteSizeOf(shape);
@@ -208,11 +214,13 @@ ENTRY main {
 
   TF_ASSERT_OK(config.SetUpAlias(
       /*output_index=*/{0}, /*param_number=*/0,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 
   ASSERT_IS_NOT_OK(config.SetUpAlias(
       /*output_index=*/{0}, /*param_number=*/1,
-      /*param_index=*/{}));
+      /*param_index=*/{},
+      /*kind=*/HloInputOutputAliasConfig::AliasKind::kUserAlias));
 }
 }  // namespace
 }  // namespace xla

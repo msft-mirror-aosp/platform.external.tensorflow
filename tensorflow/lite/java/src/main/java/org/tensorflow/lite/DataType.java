@@ -30,13 +30,7 @@ public enum DataType {
   INT64(4),
 
   /** Strings. */
-  STRING(5),
-
-  /** Bool. */
-  BOOL(6),
-
-  /** 8-bit signed integer. */
-  INT8(9);
+  STRING(5);
 
   private final int value;
 
@@ -48,16 +42,13 @@ public enum DataType {
   public int byteSize() {
     switch (this) {
       case FLOAT32:
+        return 4;
       case INT32:
         return 4;
-      case INT8:
       case UINT8:
         return 1;
       case INT64:
         return 8;
-      case BOOL:
-        // Boolean size is JVM-dependent.
-        return -1;
       case STRING:
         return -1;
     }
@@ -92,13 +83,10 @@ public enum DataType {
         return "float";
       case INT32:
         return "int";
-      case INT8:
       case UINT8:
         return "byte";
       case INT64:
         return "long";
-      case BOOL:
-        return "bool";
       case STRING:
         return "string";
     }

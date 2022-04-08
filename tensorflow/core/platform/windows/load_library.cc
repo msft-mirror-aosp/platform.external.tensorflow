@@ -22,6 +22,7 @@ limitations under the License.
 #include <stdio.h>
 #include <time.h>
 #include <windows.h>
+#undef LoadLibrary
 #undef ERROR
 
 #include "tensorflow/core/platform/errors.h"
@@ -33,7 +34,7 @@ namespace tensorflow {
 
 namespace internal {
 
-Status LoadDynamicLibrary(const char* library_filename, void** handle) {
+Status LoadLibrary(const char* library_filename, void** handle) {
   string file_name = library_filename;
   std::replace(file_name.begin(), file_name.end(), '/', '\\');
 

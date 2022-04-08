@@ -21,7 +21,7 @@ limitations under the License.
 #include "tensorflow/lite/toco/toco_convert.h"
 
 int main(int argc, char** argv) {
-  std::string msg;
+  toco::string msg;
   toco::ParsedTocoFlags parsed_toco_flags;
   toco::ParsedModelFlags parsed_model_flags;
 

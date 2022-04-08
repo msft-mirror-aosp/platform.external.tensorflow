@@ -23,7 +23,6 @@ limitations under the License.
 
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
-#include "tensorflow/lite/delegates/gpu/common/convert.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
 #include "tensorflow/lite/delegates/gpu/common/types.h"
 
@@ -34,31 +33,36 @@ namespace gl {
 namespace {
 
 bool IsApplyMaskSupported(const NodeShader::GenerationContext& ctx) {
-  if (ctx.input_shapes.size() != 2) return false;
+  const auto inputs = ctx.graph->FindInputs(ctx.node->id);
+  if (inputs.size() != 2) return false;
+  const auto& shape0 = inputs[0]->tensor.shape;
+  const auto& shape1 = inputs[1]->tensor.shape;
 
   // [H, W, C] x [H, W, 0][0]
-  if (ctx.input_shapes[0][1] == ctx.input_shapes[1][1] &&
-      ctx.input_shapes[0][2] == ctx.input_shapes[1][2] &&
-      ctx.input_shapes[1][3] == 1) {
+  if (shape0.h == shape1.h && shape0.w == shape1.w && shape1.c == 1) {
     return true;
   }
 
   // [H, W, C] x [H, W, C]
-  if (ctx.input_shapes[0] == ctx.input_shapes[1]) return true;
+  if (shape0 == shape1) {
+    return true;
+  }
 
   // [H, W, C] x [0, 0, C]
-  return ctx.input_shapes[1][1] == 1 && ctx.input_shapes[1][2] == 1 &&
-         ctx.input_shapes[0][3] == ctx.input_shapes[1][3];
+  return shape1.h == 1 && shape1.w == 1 && shape0.c == shape1.c;
 }
 
-absl::Status GenerateApplyMaskCode(const NodeShader::GenerationContext& ctx,
-                                   GeneratedCode* generated_code) {
+Status GenerateApplyMaskCode(const NodeShader::GenerationContext& ctx,
+                             GeneratedCode* generated_code) {
+  const auto inputs = ctx.graph->FindInputs(ctx.node->id);
+  const auto& shape0 = inputs[0]->tensor.shape;
+  const auto& shape1 = inputs[1]->tensor.shape;
+
   std::string source = "value_0 = $input_data_0[gid.x, gid.y, gid.z]$ * ";
-  if (ctx.input_shapes[1][3] == 1) {
+  if (shape1.c == 1) {
     // [H, W, C] x [H, W, 0][0]
     absl::StrAppend(&source, "$input_data_1[gid.x, gid.y, 0]$.x;");
-  } else if (ctx.input_shapes[0][1] == ctx.input_shapes[1][1] &&
-             ctx.input_shapes[0][2] == ctx.input_shapes[1][2]) {
+  } else if (shape0.h == shape1.h && shape0.w == shape1.w) {
     // [H, W, C] x [H, W, C]
     absl::StrAppend(&source, "$input_data_1[gid.x, gid.y, gid.z]$;");
   } else {
@@ -76,16 +80,19 @@ absl::Status GenerateApplyMaskCode(const NodeShader::GenerationContext& ctx,
       /*input=*/IOStructure::ONLY_DEFINITIONS,
       /*output=*/IOStructure::AUTO,
   };
-  return absl::OkStatus();
+  return OkStatus();
 }
 
-absl::Status GenerateMultiplyScalarCode(
-    const NodeShader::GenerationContext& ctx, GeneratedCode* generated_code) {
-  const auto& attr = absl::any_cast<const ElementwiseAttributes&>(ctx.op_attr);
+Status GenerateMultiplyScalarCode(const NodeShader::GenerationContext& ctx,
+                                  GeneratedCode* generated_code) {
+  auto attr =
+      absl::any_cast<MultiplyAttributes>(ctx.node->operation.attributes);
+  auto muls = absl::get_if<Tensor<Linear, DataType::FLOAT32>>(&attr.param);
+  auto scalar = absl::get_if<float>(&attr.param);
 
-  if (absl::holds_alternative<float>(attr.param)) {
+  if (scalar) {
     *generated_code = {
-        /*parameters=*/{{"scalar", absl::get<float>(attr.param)}},
+        /*parameters=*/{{"scalar", *scalar}},
         /*objects=*/{},
         /*shared_variables=*/{},
         /*workload=*/uint3(),
@@ -94,62 +101,32 @@ absl::Status GenerateMultiplyScalarCode(
         /*input=*/IOStructure::AUTO,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
-  }
-
-  if (absl::holds_alternative<Tensor<Linear, DataType::FLOAT32>>(attr.param)) {
+  } else {
+    if (!muls) {
+      return InvalidArgumentError("Empty parameters for Multiplication.");
+    }
+    auto shape = ctx.graph->FindInputs(ctx.node->id)[0]->tensor.shape;
     *generated_code = {
         /*parameters=*/{},
-        /*objects=*/
-        {{"mul_buffer",
-          MakeReadonlyObject(
-              absl::get<Tensor<Linear, DataType::FLOAT32>>(attr.param).data)}},
+        /*objects=*/{{"mul_buffer", MakeReadonlyObject(muls->data)}},
         /*shared_variables=*/{},
         // Declare workload explicitly because shader depends on gid.z.
         /*workload=*/
-        uint3(static_cast<int>(ctx.input_shapes[0][2]),
-              static_cast<int>(ctx.input_shapes[0][1]),
-              DivideRoundUp(static_cast<int>(ctx.input_shapes[0][3]), 4)),
+        uint3(shape.w, shape.h, IntegralDivideRoundUp(shape.c, 4)),
         /*workgroup=*/uint3(),
         /*source_code=*/"value_0 *= $mul_buffer[gid.z]$;",
         /*input=*/IOStructure::AUTO,
         /*output=*/IOStructure::AUTO,
     };
-    return absl::OkStatus();
   }
 
-  if (absl::holds_alternative<Tensor<HWC, DataType::FLOAT32>>(attr.param)) {
-    *generated_code = {
-        /*parameters=*/{},
-        /*objects=*/
-        {{"hwc_buffer",
-          MakeReadonlyObject(
-              uint3(static_cast<int>(ctx.input_shapes[0][2]),
-                    static_cast<int>(ctx.input_shapes[0][1]),
-                    DivideRoundUp(static_cast<int>(ctx.input_shapes[0][3]), 4)),
-              ConvertToPHWC4(
-                  absl::get<Tensor<HWC, DataType::FLOAT32>>(attr.param)))}},
-        /*shared_variables=*/{},
-        // Declare workload explicitly because shader depends on gid.z.
-        /*workload=*/
-        uint3(static_cast<int>(ctx.input_shapes[0][2]),
-              static_cast<int>(ctx.input_shapes[0][1]),
-              DivideRoundUp(static_cast<int>(ctx.input_shapes[0][3]), 4)),
-        /*workgroup=*/uint3(),
-        /*source_code=*/"value_0 *= $hwc_buffer[gid.x, gid.y, gid.z]$;",
-        /*input=*/IOStructure::AUTO,
-        /*output=*/IOStructure::AUTO,
-    };
-    return absl::OkStatus();
-  }
-
-  return absl::InvalidArgumentError("Unsupported Multiplication case.");
+  return OkStatus();
 }
 
 class Multiply : public NodeShader {
  public:
-  absl::Status GenerateCode(const GenerationContext& ctx,
-                            GeneratedCode* generated_code) const final {
+  Status GenerateCode(const GenerationContext& ctx,
+                      GeneratedCode* generated_code) const final {
     if (IsApplyMaskSupported(ctx)) {
       return GenerateApplyMaskCode(ctx, generated_code);
     } else {

@@ -19,6 +19,7 @@ from __future__ import print_function
 
 import contextlib
 
+from tensorflow.python import _pywrap_tfprof as print_mdl
 from tensorflow.python.framework import dtypes
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import init_ops
@@ -31,7 +32,6 @@ from tensorflow.python.ops import tensor_array_grad  # pylint: disable=unused-im
 from tensorflow.python.ops import variable_scope
 from tensorflow.python.profiler import model_analyzer
 from tensorflow.python.training import gradient_descent
-from tensorflow.python.util import _pywrap_tfprof as print_mdl
 from tensorflow.python.util import compat
 
 

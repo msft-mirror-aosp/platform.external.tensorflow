@@ -15,17 +15,7 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h"
 
-#if defined(_WIN32)
-#define __WINDOWS__
-#endif
-
-#ifdef __WINDOWS__
-#include <windows.h>
-#else
 #include <dlfcn.h>
-#endif
-
-#include <string>
 
 #include "absl/strings/str_cat.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
@@ -34,88 +24,42 @@ namespace tflite {
 namespace gpu {
 namespace cl {
 
-#ifdef __ANDROID__
 #define LoadFunction(function)                                                 \
-  if (use_wrapper) {                                                           \
+  if (is_pixel) {                                                              \
     function = reinterpret_cast<PFN_##function>(loadOpenCLPointer(#function)); \
   } else {                                                                     \
     function = reinterpret_cast<PFN_##function>(dlsym(libopencl, #function));  \
   }
-#elif defined(__WINDOWS__)
-#define LoadFunction(function) \
-  function =                   \
-      reinterpret_cast<PFN_##function>(GetProcAddress(libopencl, #function));
-#else
-#define LoadFunction(function) \
-  function = reinterpret_cast<PFN_##function>(dlsym(libopencl, #function));
-#endif
 
-#ifdef __WINDOWS__
-void LoadOpenCLFunctions(HMODULE libopencl);
-#else
-void LoadOpenCLFunctions(void* libopencl, bool use_wrapper);
-#endif
-
-absl::Status LoadOpenCL() {
-#ifdef __WINDOWS__
-  HMODULE libopencl = LoadLibraryA("OpenCL.dll");
-  if (libopencl) {
-    LoadOpenCLFunctions(libopencl);
-    return absl::OkStatus();
-  } else {
-    DWORD error_code = GetLastError();
-    return absl::UnknownError(absl::StrCat(
-        "Can not open OpenCL library on this device, error code - ",
-        error_code));
-  }
-#else
-  void* libopencl = nullptr;
-#ifdef __ANDROID__
-  // Pixel phone or auto?
-  libopencl = dlopen("libOpenCL-pixel.so", RTLD_NOW | RTLD_LOCAL);
-  if (!libopencl) {
-    libopencl = dlopen("libOpenCL-car.so", RTLD_NOW | RTLD_LOCAL);
-  }
-  if (libopencl) {
-    typedef void (*enableOpenCL_t)();
-    enableOpenCL_t enableOpenCL =
-        reinterpret_cast<enableOpenCL_t>(dlsym(libopencl, "enableOpenCL"));
-    enableOpenCL();
-    LoadOpenCLFunctions(libopencl, true);
-    return absl::OkStatus();
-  }
-#endif
-#ifdef __APPLE__
-  static const char* kClLibName =
-      "/System/Library/Frameworks/OpenCL.framework/OpenCL";
-#else
-  static const char* kClLibName = "libOpenCL.so";
-#endif
-  libopencl = dlopen(kClLibName, RTLD_NOW | RTLD_LOCAL);
+Status LoadOpenCL() {
+  void* libopencl = dlopen("libOpenCL.so", RTLD_NOW | RTLD_LOCAL);
   if (libopencl) {
     LoadOpenCLFunctions(libopencl, false);
-    return absl::OkStatus();
+    return OkStatus();
+  } else {
+    // Pixel phone?
+    libopencl = dlopen("libOpenCL-pixel.so", RTLD_NOW | RTLD_LOCAL);
+    if (libopencl) {
+      typedef void (*enableOpenCL_t)();
+      enableOpenCL_t enableOpenCL =
+          reinterpret_cast<enableOpenCL_t>(dlsym(libopencl, "enableOpenCL"));
+      enableOpenCL();
+      LoadOpenCLFunctions(libopencl, true);
+      return OkStatus();
+    } else {
+      return UnknownError(
+          absl::StrCat("OpenCL library not loaded - ", dlerror()));
+    }
   }
-  // record error
-  std::string error(dlerror());
-  return absl::UnknownError(
-      absl::StrCat("Can not open OpenCL library on this device - ", error));
-#endif
 }
 
-#ifdef __WINDOWS__
-void LoadOpenCLFunctions(HMODULE libopencl) {
-#else
-void LoadOpenCLFunctions(void* libopencl, bool use_wrapper) {
-#ifdef __ANDROID__
+void LoadOpenCLFunctions(void* libopencl, bool is_pixel) {
   typedef void* (*loadOpenCLPointer_t)(const char* name);
   loadOpenCLPointer_t loadOpenCLPointer;
-  if (use_wrapper) {
+  if (is_pixel) {
     loadOpenCLPointer = reinterpret_cast<loadOpenCLPointer_t>(
         dlsym(libopencl, "loadOpenCLPointer"));
   }
-#endif
-#endif
 
   LoadFunction(clGetPlatformIDs);
   LoadFunction(clGetPlatformInfo);
@@ -227,11 +171,6 @@ void LoadOpenCLFunctions(void* libopencl, bool use_wrapper) {
 
   // cl_khr_egl_event extension
   LoadFunction(clCreateEventFromEGLSyncKHR);
-
-  // EGL sharing
-  LoadFunction(clCreateFromEGLImageKHR);
-  LoadFunction(clEnqueueAcquireEGLObjectsKHR);
-  LoadFunction(clEnqueueReleaseEGLObjectsKHR);
 }
 
 // No OpenCL support, do not set function addresses
@@ -338,19 +277,12 @@ PFN_clCreateCommandQueue clCreateCommandQueue;
 PFN_clCreateSampler clCreateSampler;
 PFN_clEnqueueTask clEnqueueTask;
 
-// OpenGL sharing
 PFN_clCreateFromGLBuffer clCreateFromGLBuffer;
 PFN_clCreateFromGLTexture clCreateFromGLTexture;
 PFN_clEnqueueAcquireGLObjects clEnqueueAcquireGLObjects;
 PFN_clEnqueueReleaseGLObjects clEnqueueReleaseGLObjects;
 
-// cl_khr_egl_event extension
 PFN_clCreateEventFromEGLSyncKHR clCreateEventFromEGLSyncKHR;
-
-// EGL sharing
-PFN_clCreateFromEGLImageKHR clCreateFromEGLImageKHR;
-PFN_clEnqueueAcquireEGLObjectsKHR clEnqueueAcquireEGLObjectsKHR;
-PFN_clEnqueueReleaseEGLObjectsKHR clEnqueueReleaseEGLObjectsKHR;
 
 cl_mem CreateImage2DLegacy(cl_context context, cl_mem_flags flags,
                            const cl_image_format* image_format,

@@ -16,11 +16,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_GREEDY_IN_ORDER_ASSIGNMENT_H_
 #define TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_GREEDY_IN_ORDER_ASSIGNMENT_H_
 
-#include <stddef.h>
-
 #include <algorithm>
-#include <cstddef>
-#include <iterator>
 #include <list>
 #include <queue>
 #include <set>
@@ -50,7 +46,7 @@ namespace gpu {
 //
 //   3. Shared object size may increase when tensor requests larger size.
 template <typename TensorSizeT>
-absl::Status GreedyInOrderAssignment(
+Status GreedyInOrderAssignment(
     const std::vector<TensorUsageRecord<TensorSizeT>>& usage_records,
     ObjectsAssignment<TensorSizeT>* assignment,
     const UsageGraph* reallocation_graph = nullptr) {
@@ -115,7 +111,7 @@ absl::Status GreedyInOrderAssignment(
       }
       // best_it can't be equal to pool.end(), because pool is not empty
       if (best_it == pool.end()) {
-        return absl::InternalError(
+        return InternalError(
             "No shared object is found in non-empty pool in "
             "GreedyInOrderAssignment.");
       }
@@ -139,14 +135,14 @@ absl::Status GreedyInOrderAssignment(
           {usage_records[i].last_task, assignment->object_ids[i]});
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 // The same algorithm as above, but for multidimensional case. The only
 // difference is that shared object dimensions can't be increased to be reused
 // for tensor, that is larger (at least by one dimension).
 template <typename TensorSizeT>
-absl::Status GreedyInOrderAssignmentMultidimensional(
+Status GreedyInOrderAssignmentMultidimensional(
     const std::vector<TensorUsageRecord<TensorSizeT>>& usage_records,
     ObjectsAssignment<TensorSizeT>* assignment) {
   size_t num_records = usage_records.size();
@@ -202,7 +198,7 @@ absl::Status GreedyInOrderAssignmentMultidimensional(
           {usage_records[i].last_task, assignment->object_ids[i]});
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace gpu

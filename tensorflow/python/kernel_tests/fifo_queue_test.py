@@ -167,20 +167,20 @@ class FIFOQueueTest(test.TestCase):
       gc.collect()
       # If executing eagerly, deleting the Module should clean up the queue
       # resources.
-      with self.assertRaisesRegex(errors_impl.NotFoundError,
-                                  r"Resource .* does not exist."):
+      with self.assertRaisesRegexp(errors_impl.NotFoundError,
+                                   r"Resource .* does not exist."):
         gen_resource_variable_ops.destroy_resource_op(
             q1_handle, ignore_lookup_error=False)
-      with self.assertRaisesRegex(errors_impl.NotFoundError,
-                                  r"Resource .* does not exist."):
+      with self.assertRaisesRegexp(errors_impl.NotFoundError,
+                                   r"Resource .* does not exist."):
         gen_resource_variable_ops.destroy_resource_op(
             q2_handle, ignore_lookup_error=False)
 
   def testEnqueueDictWithoutNames(self):
     q = data_flow_ops.FIFOQueue(10, dtypes_lib.float32)
-    with self.assertRaisesRegex(ValueError, "must have names"):
+    with self.assertRaisesRegexp(ValueError, "must have names"):
       q.enqueue({"a": 12.0})
-    with self.assertRaisesRegex(ValueError, "must have names"):
+    with self.assertRaisesRegexp(ValueError, "must have names"):
       q.enqueue_many({"a": [12.0, 13.0]})
 
   def testDequeue(self):
@@ -415,9 +415,7 @@ class GPUCompatibleFIFOQueueTests(test.TestCase):
     with test_util.use_gpu():
       q = data_flow_ops.GPUCompatibleFIFOQueue(10, dtypes_lib.float32)
       elems_numpy = [10.0, 20.0, 30.0]
-      # The identity ensures constants are copied to the GPU immediately
-      elems = [array_ops.identity(constant_op.constant(x))
-               for x in elems_numpy]
+      elems = [constant_op.constant(x) for x in elems_numpy]
 
       for x in elems:
         self.evaluate(q.enqueue((x,)))
@@ -458,7 +456,7 @@ class UnconvertedFIFOQueueTests(test.TestCase):
 
       dequeued_elems = []
       for _ in dequeue_counts:
-        dequeued_elems.extend(self.evaluate(dequeued_t))
+        dequeued_elems.extend(dequeued_t.eval())
       self.assertEqual(elems, dequeued_elems)
 
   def testDequeueFromClosedQueue(self):
@@ -475,8 +473,8 @@ class UnconvertedFIFOQueueTests(test.TestCase):
         self.assertEqual([elem], self.evaluate(dequeued_t))
 
       # Expect the operation to fail due to the queue being closed.
-      with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                  "is closed and has insufficient"):
+      with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                   "is closed and has insufficient"):
         self.evaluate(dequeued_t)
 
   def testDoesNotLoseValue(self):
@@ -487,7 +485,7 @@ class UnconvertedFIFOQueueTests(test.TestCase):
 
       enqueue_op.run()
       for _ in range(500):
-        self.assertEqual(self.evaluate(size_t), [1])
+        self.assertEqual(size_t.eval(), [1])
 
   def testSharedQueueSameSession(self):
     with self.cached_session():
@@ -501,23 +499,23 @@ class UnconvertedFIFOQueueTests(test.TestCase):
       q1_size_t = q1.size()
       q2_size_t = q2.size()
 
-      self.assertEqual(self.evaluate(q1_size_t), [1])
-      self.assertEqual(self.evaluate(q2_size_t), [1])
+      self.assertEqual(q1_size_t.eval(), [1])
+      self.assertEqual(q2_size_t.eval(), [1])
 
       self.assertEqual(q2.dequeue().eval(), [10.0])
 
-      self.assertEqual(self.evaluate(q1_size_t), [0])
-      self.assertEqual(self.evaluate(q2_size_t), [0])
+      self.assertEqual(q1_size_t.eval(), [0])
+      self.assertEqual(q2_size_t.eval(), [0])
 
       q2.enqueue((20.0,)).run()
 
-      self.assertEqual(self.evaluate(q1_size_t), [1])
-      self.assertEqual(self.evaluate(q2_size_t), [1])
+      self.assertEqual(q1_size_t.eval(), [1])
+      self.assertEqual(q2_size_t.eval(), [1])
 
       self.assertEqual(q1.dequeue().eval(), [20.0])
 
-      self.assertEqual(self.evaluate(q1_size_t), [0])
-      self.assertEqual(self.evaluate(q2_size_t), [0])
+      self.assertEqual(q1_size_t.eval(), [0])
+      self.assertEqual(q2_size_t.eval(), [0])
 
   def testIncompatibleSharedQueueErrors(self):
     with self.cached_session():
@@ -620,30 +618,30 @@ class UnconvertedFIFOQueueTests(test.TestCase):
           10, dtypes_lib.float32, shapes=((),), names="f")
       # Verify that enqueue() checks that when using names we must enqueue a
       # dictionary.
-      with self.assertRaisesRegex(ValueError, "enqueue a dictionary"):
+      with self.assertRaisesRegexp(ValueError, "enqueue a dictionary"):
         enqueue_op = q.enqueue(10.0)
-      with self.assertRaisesRegex(ValueError, "enqueue a dictionary"):
+      with self.assertRaisesRegexp(ValueError, "enqueue a dictionary"):
         enqueue_op = q.enqueue((10.0,))
       # The dictionary keys must match the queue component names.
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({"x": 12})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({"f": 10.0, "s": "aa"})
       enqueue_op = q.enqueue({"f": 10.0})
       enqueue_op2 = q.enqueue({"f": 20.0})
       enqueue_op3 = q.enqueue({"f": 30.0})
       # Verify that enqueue_many() checks that when using names we must enqueue
       # a dictionary.
-      with self.assertRaisesRegex(ValueError, "enqueue a dictionary"):
+      with self.assertRaisesRegexp(ValueError, "enqueue a dictionary"):
         enqueue_op4 = q.enqueue_many([40.0, 50.0])
       # The dictionary keys must match the queue component names.
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({"x": 12})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({"f": [40.0, 50.0], "s": ["aa", "bb"]})
       enqueue_op4 = q.enqueue_many({"f": [40.0, 50.0]})
       dequeue = q.dequeue()
@@ -667,32 +665,32 @@ class UnconvertedFIFOQueueTests(test.TestCase):
           names=("f", "i", "s"))
       # Verify that enqueue() checks that when using names we must enqueue a
       # dictionary.
-      with self.assertRaisesRegex(ValueError, "enqueue a dictionary"):
+      with self.assertRaisesRegexp(ValueError, "enqueue a dictionary"):
         enqueue_op = q.enqueue((10.0, 123, "aa"))
       # The dictionary keys must match the queue component names.
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({"x": 10.0})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({"i": 12, "s": "aa"})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op = q.enqueue({"i": 123, "s": "aa", "f": 10.0, "x": 10.0})
       enqueue_op = q.enqueue({"i": 123, "s": "aa", "f": 10.0})
       enqueue_op2 = q.enqueue({"i": 124, "s": "bb", "f": 20.0})
       enqueue_op3 = q.enqueue({"i": 125, "s": "cc", "f": 30.0})
       # Verify that enqueue_many() checks that when using names we must enqueue
       # a dictionary.
-      with self.assertRaisesRegex(ValueError, "enqueue a dictionary"):
+      with self.assertRaisesRegexp(ValueError, "enqueue a dictionary"):
         enqueue_op4 = q.enqueue_many(([40.0, 50.0], [126, 127], ["dd", "ee"]))
       # The dictionary keys must match the queue component names.
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({"x": [10.0, 20.0]})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({"i": [12, 12], "s": ["aa", "bb"]})
-      with self.assertRaisesRegex(ValueError, "match names of Queue"):
+      with self.assertRaisesRegexp(ValueError, "match names of Queue"):
         enqueue_op4 = q.enqueue_many({
             "f": [40.0, 50.0],
             "i": [126, 127],
@@ -745,8 +743,8 @@ class UnconvertedFIFOQueueTests(test.TestCase):
       elems_ok = np.array([1] * 4).reshape((2, 2)).astype(np.int32)
       elems_bad = array_ops.placeholder(dtypes_lib.int32)
       enqueue_op = q.enqueue((elems_ok, elems_bad))
-      with self.assertRaisesRegex(errors_impl.InvalidArgumentError,
-                                  r"Expected \[3,3\], got \[3,4\]"):
+      with self.assertRaisesRegexp(errors_impl.InvalidArgumentError,
+                                   r"Expected \[3,3\], got \[3,4\]"):
         sess.run([enqueue_op],
                  feed_dict={elems_bad: np.array([1] * 12).reshape((3, 4))})
 
@@ -758,10 +756,9 @@ class UnconvertedFIFOQueueTests(test.TestCase):
       elems_bad = array_ops.placeholder(dtypes_lib.int32)
       enqueue_op = q.enqueue_many((elems_ok, elems_bad))
       dequeued_t = q.dequeue_many(2)
-      with self.assertRaisesRegex(
-          errors_impl.InvalidArgumentError,
-          "Shape mismatch in tuple component 1. "
-          r"Expected \[2,3,3\], got \[2,3,4\]"):
+      with self.assertRaisesRegexp(errors_impl.InvalidArgumentError,
+                                   "Shape mismatch in tuple component 1. "
+                                   r"Expected \[2,3,3\], got \[2,3,4\]"):
         sess.run([enqueue_op],
                  feed_dict={elems_bad: np.array([1] * 24).reshape((2, 3, 4))})
         self.evaluate(dequeued_t)
@@ -798,7 +795,7 @@ class FIFOQueueParallelTests(test.TestCase):
       # Dequeue every element using a single thread.
       results = []
       for _ in xrange(len(elems)):
-        results.append(self.evaluate(dequeued_t))
+        results.append(dequeued_t.eval())
       self.assertItemsEqual(elems, results)
 
   def testParallelDequeue(self):
@@ -908,28 +905,27 @@ class FIFOQueueParallelTests(test.TestCase):
 
       # The enqueue should start and then block.
       results = []
-      results.append(
-          self.evaluate(deq))  # Will only complete after the enqueue starts.
+      results.append(deq.eval())  # Will only complete after the enqueue starts.
       self.assertEqual(len(enq_done), 1)
       self.assertEqual(self.evaluate(size_op), 5)
 
       for _ in range(3):
-        results.append(self.evaluate(deq))
+        results.append(deq.eval())
 
       time.sleep(0.1)
       self.assertEqual(len(enq_done), 1)
       self.assertEqual(self.evaluate(size_op), 5)
 
       # This dequeue will unblock the thread.
-      results.append(self.evaluate(deq))
+      results.append(deq.eval())
       time.sleep(0.1)
       self.assertEqual(len(enq_done), 2)
       thread.join()
 
       for i in range(5):
-        self.assertEqual(self.evaluate(size_op), 5 - i)
-        results.append(self.evaluate(deq))
-        self.assertEqual(self.evaluate(size_op), 5 - i - 1)
+        self.assertEqual(size_op.eval(), 5 - i)
+        results.append(deq.eval())
+        self.assertEqual(size_op.eval(), 5 - i - 1)
 
       self.assertAllEqual(elem, results)
 
@@ -999,8 +995,8 @@ class FIFOQueueParallelTests(test.TestCase):
         for elem in elems:
           self.assertEqual([elem], self.evaluate(dequeued_t))
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1022,8 +1018,8 @@ class FIFOQueueParallelTests(test.TestCase):
 
       def dequeue():
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1050,8 +1046,8 @@ class FIFOQueueParallelTests(test.TestCase):
       def dequeue():
         self.assertAllEqual(elems, self.evaluate(dequeued_t))
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1078,8 +1074,8 @@ class FIFOQueueParallelTests(test.TestCase):
       def dequeue():
         self.assertAllEqual(elems[:3], self.evaluate(dequeued_t))
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1193,8 +1189,8 @@ class FIFOQueueParallelTests(test.TestCase):
 
       def dequeue():
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1216,8 +1212,8 @@ class FIFOQueueParallelTests(test.TestCase):
 
       def dequeue():
         # Expect the operation to fail due to the queue being closed.
-        with self.assertRaisesRegex(errors_impl.OutOfRangeError,
-                                    "is closed and has insufficient"):
+        with self.assertRaisesRegexp(errors_impl.OutOfRangeError,
+                                     "is closed and has insufficient"):
           self.evaluate(dequeued_t)
 
       dequeue_thread = self.checkedThread(target=dequeue)
@@ -1238,7 +1234,7 @@ class FIFOQueueParallelTests(test.TestCase):
       close_op.run()
 
       # Expect the operation to fail due to the queue being closed.
-      with self.assertRaisesRegex(errors_impl.CancelledError, "is closed"):
+      with self.assertRaisesRegexp(errors_impl.CancelledError, "is closed"):
         enqueue_op.run()
 
   def testEnqueueManyToClosedQueue(self):
@@ -1252,7 +1248,7 @@ class FIFOQueueParallelTests(test.TestCase):
       close_op.run()
 
       # Expect the operation to fail due to the queue being closed.
-      with self.assertRaisesRegex(errors_impl.CancelledError, "is closed"):
+      with self.assertRaisesRegexp(errors_impl.CancelledError, "is closed"):
         enqueue_op.run()
 
   def testBlockingEnqueueToFullQueue(self):
@@ -1407,7 +1403,7 @@ class FIFOQueueParallelTests(test.TestCase):
       for thread in threads:
         thread.join()
 
-      self.assertCountEqual(self.evaluate(dequeued_t), elems * 10)
+      self.assertItemsEqual(dequeued_t.eval(), elems * 10)
 
   def testParallelDequeueMany(self):
     # We need each thread to keep its own device stack or the device scopes
@@ -1706,8 +1702,8 @@ class FIFOQueueWithTimeoutTest(test.TestCase):
 
       # Intentionally do not run any enqueue_ops so that dequeue will block
       # until operation_timeout_in_ms.
-      with self.assertRaisesRegex(errors_impl.DeadlineExceededError,
-                                  "Timed out waiting for notification"):
+      with self.assertRaisesRegexp(errors_impl.DeadlineExceededError,
+                                   "Timed out waiting for notification"):
         self.evaluate(dequeued_t)
 
   def testReusableAfterTimeout(self):
@@ -1716,12 +1712,12 @@ class FIFOQueueWithTimeoutTest(test.TestCase):
       dequeued_t = q.dequeue()
       enqueue_op = q.enqueue(37)
 
-      with self.assertRaisesRegex(errors_impl.DeadlineExceededError,
-                                  "Timed out waiting for notification"):
+      with self.assertRaisesRegexp(errors_impl.DeadlineExceededError,
+                                   "Timed out waiting for notification"):
         sess.run(dequeued_t, options=config_pb2.RunOptions(timeout_in_ms=10))
 
-      with self.assertRaisesRegex(errors_impl.DeadlineExceededError,
-                                  "Timed out waiting for notification"):
+      with self.assertRaisesRegexp(errors_impl.DeadlineExceededError,
+                                   "Timed out waiting for notification"):
         sess.run(dequeued_t, options=config_pb2.RunOptions(timeout_in_ms=10))
 
       self.evaluate(enqueue_op)

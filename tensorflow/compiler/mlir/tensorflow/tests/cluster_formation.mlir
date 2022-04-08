@@ -1,4 +1,4 @@
-// RUN: tf-opt %s -split-input-file -tf-device-cluster-formation | FileCheck %s
+// RUN: tf-opt %s -split-input-file -tf-device-cluster-formation | FileCheck %s -dump-input-on-failure
 
 // Simple case, single device cluster.
 

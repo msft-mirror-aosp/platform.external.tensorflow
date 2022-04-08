@@ -20,7 +20,7 @@ limitations under the License.
 namespace tflite {
 
 // Returns the test id to use to retrieve the acceleration configuration
-// in the acceleration allowlist.
+// in the acceleration whitelist.
 std::string GetCurrentTestId();
 
 }  // namespace tflite

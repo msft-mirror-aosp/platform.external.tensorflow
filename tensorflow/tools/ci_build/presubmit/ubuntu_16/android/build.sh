@@ -25,7 +25,7 @@ set +u
 set -x
 
 function run_build () {
-  export ANDROID_NDK_HOME="/opt/android-ndk-r18b"
+  export ANDROID_NDK_HOME="/opt/android-ndk-r17c"
   export NDK_HOME=$ANDROID_NDK_HOME
   export ANDROID_SDK_HOME="/opt/android-sdk/current"
   export ANDROID_API_LEVEL="23"
@@ -75,7 +75,7 @@ EOF
 }
 
 source tensorflow/tools/ci_build/release/common.sh
-install_bazelisk
+update_bazel_linux
 which bazel
 
 run_build

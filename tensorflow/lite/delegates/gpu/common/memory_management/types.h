@@ -16,9 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_TYPES_H_
 #define TENSORFLOW_LITE_DELEGATES_GPU_COMMON_MEMORY_MANAGEMENT_TYPES_H_
 
-#include <stddef.h>
-
-#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace tflite {

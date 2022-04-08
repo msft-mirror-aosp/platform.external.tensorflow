@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "tensorflow/compiler/xla/service/hlo_computation.h"
 #include "tensorflow/compiler/xla/service/hlo_execution_profile.h"
+#include "tensorflow/compiler/xla/service/hlo_instruction.h"
 #include "tensorflow/compiler/xla/service/stream_pool.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
 
@@ -40,7 +41,7 @@ class HloExecutionProfiler {
   explicit HloExecutionProfiler(bool do_profile, HloExecutionProfile* profile,
                                 se::Stream* stream,
                                 const std::vector<StreamPool::Ptr>& sub_streams,
-                                size_t index);
+                                const HloComputation* computation);
 
   // If profiling is enabled, sets the total cycle count on the profile from the
   // execution timer.
@@ -53,26 +54,18 @@ class HloExecutionProfiler {
   // the time that the computation took to execute in the profile.
   void FinishHloComputation(const HloComputation* computation);
 
-  // If profiling is enabled stops the timer for a (sub)computation with the
-  // given profile index and records the time that the computation took to
-  // execute in the profile.
-  void FinishHloComputation(absl::optional<size_t> profile_index);
-
   // If profiling is enabled, starts a per-operation timer.
   void StartHloInstruction();
 
   // If profiling is enabled, stops the per-operation timer and records the time
-  // that at `profile_index`. Profile indices can be looked up from
-  // HloProfileIndexMap.
-  void FinishHloInstruction(size_t profile_index);
+  // that the hlo_instruction took to execute in the profile.
+  void FinishHloInstruction(const HloInstruction* hlo_instruction);
 
   // Returns a ScopedInstructionProfiler and triggers a call to
   // StartHloInstruction(). Once the returned ScopedInstructionProfiler goes
   // out of scope, it triggers a call to FinishHloInstruction().
-  //
-  // If profile_index < 0, it results in a no-op.
   std::unique_ptr<ScopedInstructionProfiler> MakeScopedInstructionProfiler(
-      absl::optional<int64> profile_index);
+      const HloInstruction* hlo_instruction);
 
  private:
   const bool do_profile_;
@@ -80,11 +73,11 @@ class HloExecutionProfiler {
   HloExecutionProfile* profile_;
   se::Stream* stream_;
   const std::vector<StreamPool::Ptr>& sub_streams_;
-  size_t computation_profile_index_;
+  const HloComputation* computation_;
   std::stack<std::unique_ptr<se::Timer>> timers_;
   // Contains the HLO instructions for which we are currently measuring the
   // time.
-  std::unordered_set<size_t> indices_;
+  std::unordered_set<const HloInstruction*> hlo_instructions_;
   bool finished_execution_ = false;
 };
 
@@ -94,21 +87,21 @@ class HloExecutionProfiler {
 class ScopedInstructionProfiler {
  public:
   ScopedInstructionProfiler(HloExecutionProfiler* profiler,
-                            absl::optional<int64> index)
-      : profiler_(profiler), index_(index) {
-    if (index_.has_value()) {
+                            const HloInstruction* hlo_instruction)
+      : profiler_(profiler), hlo_instruction_(hlo_instruction) {
+    if (hlo_instruction != nullptr) {
       profiler->StartHloInstruction();
     }
   }
   ~ScopedInstructionProfiler() {
-    if (index_.has_value()) {
-      profiler_->FinishHloInstruction(*index_);
+    if (hlo_instruction_ != nullptr) {
+      profiler_->FinishHloInstruction(hlo_instruction_);
     }
   }
 
  private:
   HloExecutionProfiler* profiler_;
-  absl::optional<int64> index_;
+  const HloInstruction* hlo_instruction_;
 };
 
 }  // namespace gpu

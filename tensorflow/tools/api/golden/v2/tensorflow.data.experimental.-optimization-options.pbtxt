@@ -20,10 +20,6 @@ tf_class {
     mtype: "<type \'property\'>"
   }
   member {
-    name: "autotune_ram_budget"
-    mtype: "<type \'property\'>"
-  }
-  member {
     name: "filter_fusion"
     mtype: "<type \'property\'>"
   }
@@ -61,10 +57,6 @@ tf_class {
   }
   member {
     name: "parallel_batch"
-    mtype: "<type \'property\'>"
-  }
-  member {
-    name: "reorder_data_discarding_ops"
     mtype: "<type \'property\'>"
   }
   member {

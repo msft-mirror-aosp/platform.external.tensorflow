@@ -1,12 +1,5 @@
-load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
-
-# buildifier: disable=same-origin-load
 load("//tensorflow/core/kernels/fuzzing:tf_ops_fuzz_target_lib.bzl", "tf_ops_fuzz_target_lib")
-
-# buildifier: disable=same-origin-load
 load("//tensorflow/core/kernels/fuzzing:tf_ops_fuzz_target_lib.bzl", "tf_oss_fuzz_corpus")
-
-# buildifier: disable=same-origin-load
 load("//tensorflow/core/kernels/fuzzing:tf_ops_fuzz_target_lib.bzl", "tf_oss_fuzz_dict")
 
 package(
@@ -23,6 +16,8 @@ cc_library(
         "//tensorflow/core:tensorflow",
     ],
 )
+
+tf_ops_fuzz_target_lib("identity")
 
 tf_ops_fuzz_target_lib("string_to_number")
 

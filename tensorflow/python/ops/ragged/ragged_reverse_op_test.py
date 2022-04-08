@@ -79,10 +79,11 @@ class RaggedReverseOpTest(test_util.TensorFlowTestCase,
     self.assertAllClose(result, expected)
 
   def testErrors(self):
-    self.assertRaisesRegex(
+    self.assertRaisesRegexp(
         TypeError, '`axis` must be a list of int or a constant tensor *',
         ragged_array_ops.reverse,
-        ragged_factory_ops.constant([[1], [2, 3]], ragged_rank=1), [0, None])
+        ragged_factory_ops.constant([[1], [2, 3]], ragged_rank=1),
+        [0, None])
 
 
 if __name__ == '__main__':

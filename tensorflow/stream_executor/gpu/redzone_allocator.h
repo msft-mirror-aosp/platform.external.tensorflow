@@ -22,7 +22,6 @@ limitations under the License.
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
 #include "tensorflow/stream_executor/device_memory_allocator.h"
 #include "tensorflow/stream_executor/gpu/asm_compiler.h"
-#include "tensorflow/stream_executor/gpu/gpu_asm_opts.h"
 
 namespace stream_executor {
 
@@ -39,10 +38,10 @@ namespace stream_executor {
 // memory for cudnn convolutions.
 class RedzoneAllocator : public ScratchAllocator {
  public:
-  static constexpr int64 kDefaultMemoryLimit = 1LL << 32;  // 4GB
-  static constexpr int64 kDefaultRedzoneSize =
+  static const int64 kDefaultMemoryLimit = 1LL << 32;  // 4GB
+  static const int64 kDefaultRedzoneSize =
       1LL << 23;  // 8MiB per side, 16MiB total.
-  static constexpr uint8 kDefaultRedzonePattern = -1;
+  static const uint8 kDefaultRedzonePattern = -1;
   RedzoneAllocator(Stream* stream, DeviceMemoryAllocator* memory_allocator,
                    GpuAsmOpts gpu_compilation_opts_,
                    int64 memory_limit = kDefaultMemoryLimit,
@@ -77,7 +76,7 @@ class RedzoneAllocator : public ScratchAllocator {
 
     std::string RedzoneFailureMsg() const;
 
-    std::string buffer_name = {};
+    string buffer_name = {};
     void* user_buffer_address = nullptr;
     int64 offset = 0;
     uint64 expected_value = 0;
@@ -118,9 +117,6 @@ class RedzoneAllocator : public ScratchAllocator {
   // isn't necessarily just first.size() - 2 * redzone_size_ because when the
   // user allocation size is not a multiple of 4 bytes, we round up the size of
   // the RHS redzone.
-  //
-  // ScratchAllocators need to free all allocated memory on destruction so we
-  // use `OwningDeviceMemory` here.
   std::vector<std::pair<OwningDeviceMemory, int64>> allocated_buffers_;
 
   int64 allocated_bytes_excluding_redzones_ = 0;

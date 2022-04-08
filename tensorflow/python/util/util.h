@@ -19,8 +19,6 @@ limitations under the License.
 
 #include <Python.h>
 
-#include <string>
-
 namespace tensorflow {
 namespace swig {
 
@@ -88,15 +86,6 @@ PyObject* IsNamedtuple(PyObject* o, bool strict);
 //   True if the sequence subclasses mapping.
 bool IsMapping(PyObject* o);
 
-// Returns a true if its input is a collections.MutableMapping.
-//
-// Args:
-//   seq: the input to be checked.
-//
-// Returns:
-//   True if the sequence subclasses mapping.
-bool IsMutableMapping(PyObject* o);
-
 // Returns a true if its input is a (possibly wrapped) tuple.
 //
 // Args:
@@ -114,15 +103,6 @@ bool IsTuple(PyObject* o);
 // Returns:
 //   True if the sequence subclasses mapping.
 bool IsMappingView(PyObject* o);
-
-// Returns a true if its input has a `__tf_dispatch__` attribute.
-//
-// Args:
-//   o: the input to be checked.
-//
-// Returns:
-//   True if `o` has a `__tf_dispatch__` attribute.
-bool IsDispatchable(PyObject* o);
 
 // A version of PyMapping_Keys that works in C++11
 //
@@ -197,7 +177,7 @@ PyObject* SameNamedtuples(PyObject* o1, PyObject* o2);
 //
 // Note that namedtuples with identical name and fields are always considered
 // to have the same shallow structure (even with `check_types=True`).
-// For instance, this code will print `True`:
+// For intance, this code will print `True`:
 //
 // ```python
 // def nt(a, b):
@@ -245,7 +225,7 @@ PyObject* AssertSameStructure(PyObject* o1, PyObject* o2, bool check_types,
 //   nest: an arbitrarily nested structure or a scalar object. Note, numpy
 //       arrays are considered scalars.
 //   expand_composites: If true, then composite tensors (such as
-//       `tf.sparse.SparseTensor` and `tf.RaggedTensor` are flattened into their
+//       `tf.SparseTensor` and `tf.RaggedTensor` are flattened into their
 //       component tensors.
 //
 // Returns:
@@ -281,17 +261,9 @@ PyObject* FlattenForData(PyObject* nested);
 PyObject* AssertSameStructureForData(PyObject* o1, PyObject* o2,
                                      bool check_types);
 
-// Registers a Python object so it can be looked up from c++.  The set of
-// valid names, and the expected values for those names, are listed in
-// the documentation for `RegisteredPyObjects`.  Returns PyNone.
-PyObject* RegisterPyObject(PyObject* name, PyObject* value);
-
-// Variant of RegisterPyObject that requires the object's value to be a type.
+// RegisterType is used to pass PyTypeObject (which is defined in python) for an
+// arbitrary identifier `type_name` into C++.
 PyObject* RegisterType(PyObject* type_name, PyObject* type);
-
-// Returns a borrowed reference to an object that was registered with
-// RegisterPyObject.  (Do not call Py_DECREF on the result).
-PyObject* GetRegisteredPyObject(const std::string& name);
 
 }  // namespace swig
 }  // namespace tensorflow

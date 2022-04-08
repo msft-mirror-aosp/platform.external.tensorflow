@@ -33,7 +33,7 @@ uint64 AlgorithmDesc::hash() const {
   return absl::Hash<decltype(p)>()(p);
 }
 
-std::string AlgorithmDesc::ToString() const {
+string AlgorithmDesc::ToString() const {
   if (tensor_ops_enabled()) {
     return absl::StrCat(algo_id(), "#TC");
   } else {
@@ -48,15 +48,12 @@ bool DnnSupport::GetConvolveAlgorithms(
 }
 
 bool DnnSupport::GetMIOpenConvolveAlgorithms(
-    dnn::ConvolutionKind /*kind*/, dnn::DataType /*element_type*/,
-    Stream* /*stream*/, const dnn::BatchDescriptor& /*input_descriptor*/,
-    DeviceMemoryBase input_data,
+    dnn::ConvolutionKind /*kind*/, Stream* /*stream*/,
+    dnn::DataType /*element_type*/,
+    const dnn::BatchDescriptor& /*input_descriptor*/,
     const dnn::FilterDescriptor& /*filter_descriptor*/,
-    DeviceMemoryBase filter_data,
-    const dnn::BatchDescriptor& /*output_descriptor*/,
-    DeviceMemoryBase output_data,
     const dnn::ConvolutionDescriptor& /*convolution_descriptor*/,
-    ScratchAllocator* scratch_allocator,
+    const dnn::BatchDescriptor& /*output_descriptor*/,
     std::vector<ProfileResult>* /*out_algorithms*/) {
   return false;
 }
@@ -77,7 +74,7 @@ bool DnnSupport::GetConvolveBackwardFilterAlgorithms(
   return false;
 }
 
-std::string QuantizedActivationModeString(QuantizedActivationMode mode) {
+string QuantizedActivationModeString(QuantizedActivationMode mode) {
   switch (mode) {
     case dnn::QuantizedActivationMode::k8Bit:
       return "uint8";
@@ -92,10 +89,8 @@ std::string QuantizedActivationModeString(QuantizedActivationMode mode) {
   return "unknown quantized_activation_mode";
 }
 
-std::string ActivationModeString(ActivationMode mode) {
+string ActivationModeString(ActivationMode mode) {
   switch (mode) {
-    case ActivationMode::kNone:
-      return "none";
     case ActivationMode::kSigmoid:
       return "sigmoid";
     case ActivationMode::kRelu:
@@ -114,7 +109,7 @@ std::string ActivationModeString(ActivationMode mode) {
   return "unknown activation_mode";
 }
 
-std::string ElementwiseOperationString(ElementwiseOperation op) {
+string ElementwiseOperationString(ElementwiseOperation op) {
   switch (op) {
     case ElementwiseOperation::kAdd:
       return "add";
@@ -126,7 +121,7 @@ std::string ElementwiseOperationString(ElementwiseOperation op) {
   return "unknown element wise op";
 }
 
-std::string DataLayoutString(DataLayout layout) {
+string DataLayoutString(DataLayout layout) {
   switch (layout) {
     case DataLayout::kYXDepthBatch:
       return "YXDepthBatch";
@@ -144,7 +139,7 @@ std::string DataLayoutString(DataLayout layout) {
   return "unknown data layout";
 }
 
-std::string FilterLayoutString(FilterLayout layout) {
+string FilterLayoutString(FilterLayout layout) {
   switch (layout) {
     case FilterLayout::kOutputInputYX:
       return "OutputInputYX";
@@ -162,7 +157,7 @@ std::string FilterLayoutString(FilterLayout layout) {
   return "unknown filter layout";
 }
 
-std::string PadAlignmentString(PadAlignment alignment) {
+string PadAlignmentString(PadAlignment alignment) {
   switch (alignment) {
     case PadAlignment::kDefault:
       return "default";
@@ -178,7 +173,7 @@ std::ostream& operator<<(std::ostream& str, dnn::PadAlignment alignment) {
   return str << PadAlignmentString(alignment);
 }
 
-std::string ShortPoolingModeString(PoolingMode mode) {
+string ShortPoolingModeString(PoolingMode mode) {
   switch (mode) {
     case PoolingMode::kMaximum:
       return "Max";
@@ -252,12 +247,12 @@ std::vector<int64> ReorderDims(const std::vector<int64>& input,
 
 // -- AlgorithmConfig
 
-std::string AlgorithmConfig::ToString() const {
-  std::string algo = "none";
+string AlgorithmConfig::ToString() const {
+  string algo = "none";
   if (algorithm().has_value()) {
     algo = algorithm()->ToString();
   }
-  std::string algo_no_scratch = "none";
+  string algo_no_scratch = "none";
   if (algorithm_no_scratch().has_value()) {
     algo_no_scratch = algorithm_no_scratch()->ToString();
   }
@@ -311,8 +306,8 @@ void BatchDescriptor::CloneFrom(const BatchDescriptor& other) {
   quantized_activation_mode_ = other.quantized_activation_mode_;
 }
 
-std::string BatchDescriptor::ToString() const {
-  std::string spatial;
+string BatchDescriptor::ToString() const {
+  string spatial;
   for (int i = 0; i < ndims(); i++) {
     absl::StrAppendFormat(&spatial, "%d ", spatial_size()[i]);
   }
@@ -323,19 +318,19 @@ std::string BatchDescriptor::ToString() const {
       DataLayoutString(layout()));
 }
 
-std::string BatchDescriptor::ToShortString() const {
+string BatchDescriptor::ToShortString() const {
   // All the constituent strings are less than 15 characters, so the
   // small string optimization ensures that there will be at most one
   // heap memory allocation.
-  std::string depth = absl::StrCat("d", feature_map_count());
-  std::string batch = absl::StrCat("b", count());
+  string depth = absl::StrCat("d", feature_map_count());
+  string batch = absl::StrCat("b", count());
 
-  std::string spatial = "s";
+  string spatial = "s";
   for (int i = 0; i < ndims(); i++) {
     absl::StrAppendFormat(&spatial, "%d ", spatial_size()[i]);
   }
 
-  std::string suffix;
+  string suffix;
   if (value_min() != value_max()) {
     absl::StrAppend(&suffix, "[", value_min(), ";", value_max(), "]");
   }
@@ -424,8 +419,8 @@ void FilterDescriptor::CloneFrom(const FilterDescriptor& other) {
   tensor_ = other.tensor_;
 }
 
-std::string FilterDescriptor::ToString() const {
-  std::string desc = absl::StrFormat(
+string FilterDescriptor::ToString() const {
+  string desc = absl::StrFormat(
       "{output_feature_map_count: %d input_feature_map_count: %d "
       "layout: %s shape: ",
       output_feature_map_count(), input_feature_map_count(),
@@ -438,14 +433,14 @@ std::string FilterDescriptor::ToString() const {
   return desc;
 }
 
-std::string FilterDescriptor::ToShortString() const {
+string FilterDescriptor::ToShortString() const {
   // All the constituent strings are less than 15 characters, so the
   // small string optimization ensures that there will be at most one
   // heap memory allocation.
-  std::string od = absl::StrCat("od", output_feature_map_count());
-  std::string id = absl::StrCat("id", input_feature_map_count());
+  string od = absl::StrCat("od", output_feature_map_count());
+  string id = absl::StrCat("id", input_feature_map_count());
 
-  std::string spatial = "s";
+  string spatial = "s";
   for (int i = 0; i < ndims(); i++) {
     absl::StrAppendFormat(&spatial, "%d ", input_filter_dims()[i]);
   }
@@ -496,10 +491,10 @@ ConvolutionDescriptor::ConvolutionDescriptor()
 
 ConvolutionDescriptor::~ConvolutionDescriptor() {}
 
-std::string ConvolutionDescriptor::ToString() const {
-  std::string padding;
-  std::string strides;
-  std::string dilations;
+string ConvolutionDescriptor::ToString() const {
+  string padding;
+  string strides;
+  string dilations;
   for (int i = 0; i < ndims(); i++) {
     absl::StrAppendFormat(&padding, "%d ", this->padding()[i]);
     absl::StrAppendFormat(&strides, "%d ", this->strides()[i]);
@@ -512,8 +507,8 @@ std::string ConvolutionDescriptor::ToString() const {
       padding, PadAlignmentString(pad_alignment()), strides, dilations);
 }
 
-std::string ConvolutionDescriptor::ToShortString() const {
-  std::string desc;
+string ConvolutionDescriptor::ToShortString() const {
+  string desc;
   for (int i = 0; i < ndims(); i++) {
     if (i > 0) absl::StrAppend(&desc, "_");
     absl::StrAppendFormat(&desc, "p%d:%d", i, padding()[i]);
@@ -548,11 +543,11 @@ void PoolingDescriptor::CloneFrom(const PoolingDescriptor& other) {
   propagate_nans_ = other.propagate_nans_;
 }
 
-std::string PoolingDescriptor::ToString() const {
+string PoolingDescriptor::ToString() const {
   const char* mode_string =
       mode_ == dnn::PoolingMode::kMaximum ? "kMaximum" : "kAverage";
 
-  std::string window, strides, padding;
+  string window, strides, padding;
   for (int i = 0; i < ndims_; i++) {
     absl::StrAppendFormat(&window, "%d ", window_[i]);
     absl::StrAppendFormat(&strides, "%d ", strides_[i]);
@@ -566,8 +561,8 @@ std::string PoolingDescriptor::ToString() const {
       mode_string, window, strides, padding, propagate_string);
 }
 
-std::string PoolingDescriptor::ToShortString() const {
-  std::string window, strides, padding;
+string PoolingDescriptor::ToShortString() const {
+  string window, strides, padding;
   for (int i = 0; i < ndims_; i++) {
     absl::StrAppendFormat(&window, "_w%d:%d", i, window_[i]);
     absl::StrAppendFormat(&strides, "_s%d:%d", i, strides_[i]);
@@ -597,14 +592,14 @@ void NormalizeDescriptor::CloneFrom(const NormalizeDescriptor& other) {
   segment_size_ = other.segment_size_;
 }
 
-std::string NormalizeDescriptor::ToString() const {
+string NormalizeDescriptor::ToString() const {
   return absl::StrFormat(
       "{bias: %f range: %d alpha: %f beta: %f wrap_around: %d "
       "segment_size: %d}",
       bias_, range_, alpha_, beta_, wrap_around_, segment_size_);
 }
 
-std::string NormalizeDescriptor::ToShortString() const {
+string NormalizeDescriptor::ToShortString() const {
   return absl::StrCat("bias:", bias_, "_range:", range_, "_alpha:", alpha_,
                       "_beta:", beta_, "_wrap:", wrap_around_,
                       "_size:", segment_size_);
@@ -620,14 +615,16 @@ bool DnnSupport::IsStatusOk(const port::Status& status, bool report_error) {
   return false;
 }
 
-port::Status DnnSupport::DoCtcLoss(
-    Stream* stream, dnn::DataType element_type,
-    const RnnStateTensorDescriptor& probs_desc,
-    const DeviceMemoryBase probs_data, absl::Span<const int> labels_data,
-    absl::Span<const int> labels_lengths_data,
-    absl::Span<const int> input_lengths_data, DeviceMemoryBase costs_data,
-    const RnnStateTensorDescriptor& grads_desc, DeviceMemoryBase grads_data,
-    DeviceMemory<uint8> scratch_memory, int ctc_loss_algo_id) {
+port::Status DnnSupport::DoCtcLoss(Stream* stream, dnn::DataType element_type,
+                                   const RnnStateTensorDescriptor& probs_desc,
+                                   const DeviceMemoryBase probs_data,
+                                   absl::Span<const int> labels_data,
+                                   absl::Span<const int> labels_lengths_data,
+                                   absl::Span<const int> input_lengths_data,
+                                   DeviceMemoryBase costs_data,
+                                   const RnnStateTensorDescriptor& grads_desc,
+                                   DeviceMemoryBase grads_data,
+                                   DeviceMemory<uint8> scratch_memory) {
   return port::UnimplementedError("CtcLoss not implemented");
 }
 

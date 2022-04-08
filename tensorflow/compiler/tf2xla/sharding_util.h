@@ -35,23 +35,15 @@ namespace tensorflow {
 // - a sharding set as per xla::sharding_builder::AssignDevice.
 xla::StatusOr<absl::optional<xla::OpSharding>> ParseShardingFromDevice(
     const string& device_name, int num_cores_per_replica,
-    absl::optional<xla::OpSharding> explicit_sharding = absl::nullopt,
-    absl::optional<xla::OpMetadata> metadata = absl::nullopt);
+    absl::optional<xla::OpSharding> explicit_sharding = absl::nullopt);
 
 xla::StatusOr<absl::optional<xla::OpSharding>> ParseShardingFromDevice(
-    const Node& node, int num_cores_per_replica, bool add_metadata);
+    const Node& node, int num_cores_per_replica);
 
 xla::StatusOr<absl::optional<xla::OpSharding>> ParseShardingFromDevice(
-    const NodeDef& node_def, int num_cores_per_replica, bool add_metadata);
-
-xla::StatusOr<absl::optional<xla::OpSharding>> ParseShardingFromEdgeSource(
-    const Edge& edge, int num_cores_per_replica, bool add_metadata);
+    const NodeDef& node_def, int num_cores_per_replica);
 
 void SetShardingDeviceAssignmentFromNode(const Node& src, Node* dst);
-
-// Get sharding inforamtion from node.
-xla::StatusOr<absl::optional<xla::OpSharding>> GetShardingFromNodeDef(
-    const NodeDef& node_def, bool add_metadata);
 
 }  // namespace tensorflow
 

@@ -15,20 +15,11 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/gpu/common/transformations/fuse_mul_to_conv.h"
 
-#include <any>
-#include <memory>
-#include <string>
-#include <vector>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include "absl/status/status.h"
-#include "tensorflow/lite/delegates/gpu/common/data_type.h"
 #include "tensorflow/lite/delegates/gpu/common/model.h"
-#include "tensorflow/lite/delegates/gpu/common/model_transformer.h"
 #include "tensorflow/lite/delegates/gpu/common/operations.h"
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
-#include "tensorflow/lite/delegates/gpu/common/tensor.h"
 
 using ::testing::FloatNear;
 using ::testing::Pointwise;
@@ -55,7 +46,7 @@ TEST(MergeConvolutionWithMulTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(16);
   mul_tensor.data.resize(16);
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   auto conv_node = graph.NewNode();
@@ -67,11 +58,11 @@ TEST(MergeConvolutionWithMulTest, Smoke) {
 
   ASSERT_TRUE(graph.AddConsumer(conv_node->id, input->id).ok());
 
-  Value* output = nullptr;
+  Value<TensorRef<BHWC>>* output;
   ASSERT_TRUE(AddOutput(&graph, mul_node, &output).ok());
   output->tensor.shape = BHWC(1, 4, 4, 16);
 
-  Value* link1 = nullptr;
+  Value<TensorRef<BHWC>>* link1;
   ASSERT_TRUE(ConnectTwoNodes(&graph, conv_node, mul_node, &link1).ok());
   link1->tensor.shape = BHWC(1, 4, 4, 16);
 
@@ -96,7 +87,7 @@ TEST(MergeMulWithConvolutionTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(8);
   mul_tensor.data.resize(8);
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   Convolution2DAttributes conv_attr;
@@ -118,11 +109,11 @@ TEST(MergeMulWithConvolutionTest, Smoke) {
 
   ASSERT_TRUE(graph.AddConsumer(mul_node->id, input->id).ok());
 
-  Value* output = nullptr;
+  Value<TensorRef<BHWC>>* output;
   ASSERT_TRUE(AddOutput(&graph, conv_node, &output).ok());
   output->tensor.shape = BHWC(1, 4, 4, 16);
 
-  Value* link1 = nullptr;
+  Value<TensorRef<BHWC>>* link1;
   ASSERT_TRUE(ConnectTwoNodes(&graph, mul_node, conv_node, &link1).ok());
   link1->tensor.shape = BHWC(1, 4, 4, 16);
 
@@ -149,7 +140,7 @@ TEST(FuseMulAfterConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseConvolution2DWithMultiply(mul_attr, &attr);
@@ -170,7 +161,7 @@ TEST(FuseMulAfterDepthwiseConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(4);
   mul_tensor.data = {0.5f, 2.0f, 4.0f, 0.25f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseDepthwiseConvolution2DWithMultiply(mul_attr, &attr);
@@ -192,7 +183,7 @@ TEST(FuseMulAfterConvolutionTransposedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseConvolutionTransposedWithMultiply(mul_attr, &attr);
@@ -213,7 +204,7 @@ TEST(FuseMulAfterFullyConnectedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseFullyConnectedWithMultiply(mul_attr, &attr);
@@ -233,7 +224,7 @@ TEST(FuseMulBeforeConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseMultiplyWithConvolution2D(mul_attr, &attr);
@@ -254,7 +245,7 @@ TEST(FuseMulBeforeDepthwiseConvolution2DTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(4);
   mul_tensor.data = {0.5f, 2.0f, 4.0f, 0.25f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseMultiplyWithDepthwiseConvolution2D(mul_attr, &attr);
@@ -276,7 +267,7 @@ TEST(FuseMulBeforeConvolutionTransposedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseMultiplyWithConvolutionTransposed(mul_attr, &attr);
@@ -297,7 +288,7 @@ TEST(FuseMulBeforeFullyConnectedTest, Smoke) {
   Tensor<Linear, DataType::FLOAT32> mul_tensor;
   mul_tensor.shape = Linear(2);
   mul_tensor.data = {0.5f, 2.0f};
-  ElementwiseAttributes mul_attr;
+  MultiplyAttributes mul_attr;
   mul_attr.param = mul_tensor;
 
   FuseMultiplyWithFullyConnected(mul_attr, &attr);

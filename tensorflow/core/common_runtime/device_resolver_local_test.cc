@@ -17,6 +17,7 @@ limitations under the License.
 #include "tensorflow/core/common_runtime/device.h"
 #include "tensorflow/core/common_runtime/device_factory.h"
 #include "tensorflow/core/common_runtime/device_mgr.h"
+#include "tensorflow/core/lib/core/notification.h"
 #include "tensorflow/core/lib/core/status.h"
 #include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/platform/test.h"
@@ -45,27 +46,35 @@ class DeviceResolverLocalTest : public ::testing::Test {
 };
 
 TEST_F(DeviceResolverLocalTest, GetDeviceAttributesKnown) {
-  DeviceAttributes attributes;
-  TF_EXPECT_OK(drl_->GetDeviceAttributes(
-      "/job:localhost/replica:0/task:0/device:CPU:1", &attributes));
-  EXPECT_EQ(attributes.name(), "/job:localhost/replica:0/task:0/device:CPU:1");
+  std::vector<DeviceAttributes> attributes;
+  std::vector<string> devices{"/job:localhost/replica:0/task:0/device:CPU:1",
+                              "/job:localhost/replica:0/task:0/device:CPU:2"};
+  Notification note;
+  Status status;
+  drl_->GetAllDeviceAttributesAsync(devices, /*tasks=*/{}, &attributes,
+                                    [&note, &status](const Status& s) {
+                                      status = s;
+                                      note.Notify();
+                                    });
+  note.WaitForNotification();
+  TF_EXPECT_OK(status);
+  EXPECT_EQ(2, attributes.size());
 }
 
 TEST_F(DeviceResolverLocalTest, GetDeviceAttributesUnknown) {
-  DeviceAttributes attributes;
-  EXPECT_TRUE(errors::IsNotFound(drl_->GetDeviceAttributes(
-      "/job:localhost/replica:0/task:0/device:CPU:9", &attributes)));
-}
-
-TEST_F(DeviceResolverLocalTest, GetAllDeviceAttributes) {
   std::vector<DeviceAttributes> attributes;
-  EXPECT_TRUE(errors::IsInternal(
-      drl_->GetAllDeviceAttributes(/*task*/ "", &attributes)));
-}
-
-TEST_F(DeviceResolverLocalTest, UpdateDeviceAttributes) {
-  std::vector<DeviceAttributes> attributes;
-  EXPECT_TRUE(errors::IsInternal(drl_->UpdateDeviceAttributes(attributes)));
+  // In some builds there may be 1 GPU, but there should never be 9.
+  std::vector<string> devices{"/job:localhost/replica:0/task:0/device:GPU:9"};
+  Notification note;
+  Status status;
+  drl_->GetAllDeviceAttributesAsync(devices, /*tasks=*/{}, &attributes,
+                                    [&note, &status](const Status& s) {
+                                      status = s;
+                                      note.Notify();
+                                    });
+  note.WaitForNotification();
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(0, attributes.size());
 }
 
 }  // namespace

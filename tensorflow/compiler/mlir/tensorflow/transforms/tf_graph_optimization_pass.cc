@@ -16,18 +16,17 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/transforms/tf_graph_optimization_pass.h"
 
 #include "llvm/Support/CommandLine.h"
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Identifier.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/Pass/Pass.h"  // from @llvm-project
-#include "tensorflow/compiler/mlir/tensorflow/dialect_registration.h"
+#include "mlir/IR/Builders.h"  // TF:llvm-project
+#include "mlir/IR/Identifier.h"  // TF:llvm-project
+#include "mlir/IR/Location.h"  // TF:llvm-project
+#include "mlir/Pass/Pass.h"  // TF:llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/translate/export_graphdef.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/import_model.h"
 #include "tensorflow/compiler/mlir/tensorflow/translate/mlir_roundtrip_flags.h"
-#include "tensorflow/core/common_runtime/graph_constructor.h"
 #include "tensorflow/core/common_runtime/optimization_registry.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/graph/graph.h"
+#include "tensorflow/core/graph/graph_constructor.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/protobuf/graph_debug_info.pb.h"
 #include "tensorflow/core/public/session_options.h"
@@ -41,26 +40,20 @@ namespace tensorflow {
 // Optimization Passes and convert back to MLIR.
 // Constraints: This pass expects that all operations in the MLIR module either
 // belong to 'tf' or '_tf' dialect. The output is in '_tf' dialect.
-class GraphOptPass
-    : public mlir::PassWrapper<GraphOptPass,
-                               mlir::OperationPass<mlir::ModuleOp>> {
-  void getDependentDialects(mlir::DialectRegistry& registry) const override {
-    mlir::RegisterAllTensorFlowDialects(registry);
-  }
-
+class GraphOptPass : public mlir::ModulePass<GraphOptPass> {
  public:
   explicit GraphOptPass(std::vector<tensorflow::GraphOptimizationPass*> passes)
       : passes_(std::move(passes)) {}
 
  protected:
-  void runOnOperation() override;
+  void runOnModule() override;
 
   // The passes to run on the module.
   std::vector<GraphOptimizationPass*> passes_;
 };
 
-void GraphOptPass::runOnOperation() {
-  mlir::ModuleOp module_in = getOperation();
+void GraphOptPass::runOnModule() {
+  mlir::ModuleOp module_in = getModule();
   mlir::MLIRContext& ctx = getContext();
 
   // Convert MLIR to Graph
@@ -158,7 +151,7 @@ class GraphOptByNamePass : public GraphOptPass {
       : GraphOptPass(FindRegisteredPassesByName(pass_names)) {}
 
  private:
-  void runOnOperation() override {
+  void runOnModule() override {
     // Verify all passes requested were registered/found.
     for (auto pass_it : llvm::enumerate(passes_)) {
       if (pass_it.value() == nullptr) {
@@ -167,19 +160,19 @@ class GraphOptByNamePass : public GraphOptPass {
         return signalPassFailure();
       }
     }
-    return GraphOptPass::runOnOperation();
+    return GraphOptPass::runOnModule();
   }
 };
 
 }  // namespace tensorflow
 
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+std::unique_ptr<mlir::OpPassBase<mlir::ModuleOp>>
 tensorflow::CreateTensorFlowGraphOptimizationPass(
     std::vector<tensorflow::GraphOptimizationPass*> tf_passes) {
   return std::make_unique<GraphOptPass>(std::move(tf_passes));
 }
 
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+std::unique_ptr<mlir::OpPassBase<mlir::ModuleOp>>
 tensorflow::CreateTensorFlowGraphOptimizationPass(
     const std::vector<std::string>& pass_names) {
   return std::make_unique<GraphOptByNamePass>(pass_names);

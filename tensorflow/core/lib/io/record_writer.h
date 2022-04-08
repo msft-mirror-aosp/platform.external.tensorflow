@@ -21,8 +21,6 @@ limitations under the License.
 #include "tensorflow/core/lib/core/stringpiece.h"
 #include "tensorflow/core/lib/hash/crc32c.h"
 #if !defined(IS_SLIM_BUILD)
-#include "tensorflow/core/lib/io/snappy/snappy_compression_options.h"
-#include "tensorflow/core/lib/io/snappy/snappy_outputbuffer.h"
 #include "tensorflow/core/lib/io/zlib_compression_options.h"
 #include "tensorflow/core/lib/io/zlib_outputbuffer.h"
 #endif  // IS_SLIM_BUILD
@@ -36,22 +34,17 @@ class WritableFile;
 
 namespace io {
 
-struct RecordWriterOptions {
+class RecordWriterOptions {
  public:
-  enum CompressionType {
-    NONE = 0,
-    ZLIB_COMPRESSION = 1,
-    SNAPPY_COMPRESSION = 2
-  };
+  enum CompressionType { NONE = 0, ZLIB_COMPRESSION = 1 };
   CompressionType compression_type = NONE;
 
   static RecordWriterOptions CreateRecordWriterOptions(
       const string& compression_type);
 
+// Options specific to zlib compression.
 #if !defined(IS_SLIM_BUILD)
-  // Options specific to compression.
   tensorflow::io::ZlibCompressionOptions zlib_options;
-  tensorflow::io::SnappyCompressionOptions snappy_options;
 #endif  // IS_SLIM_BUILD
 };
 
@@ -62,14 +55,14 @@ class RecordWriter {
   //  uint32    masked crc of length
   //  byte      data[length]
   //  uint32    masked crc of data
-  static constexpr size_t kHeaderSize = sizeof(uint64) + sizeof(uint32);
-  static constexpr size_t kFooterSize = sizeof(uint32);
+  static const size_t kHeaderSize = sizeof(uint64) + sizeof(uint32);
+  static const size_t kFooterSize = sizeof(uint32);
 
   // Create a writer that will append data to "*dest".
   // "*dest" must be initially empty.
   // "*dest" must remain live while this Writer is in use.
-  explicit RecordWriter(WritableFile* dest, const RecordWriterOptions& options =
-                                                RecordWriterOptions());
+  RecordWriter(WritableFile* dest,
+               const RecordWriterOptions& options = RecordWriterOptions());
 
   // Calls Close() and logs if an error occurs.
   //
@@ -77,9 +70,9 @@ class RecordWriter {
   // implicit Close() call in the destructor.
   ~RecordWriter();
 
-  Status WriteRecord(StringPiece data);
+  Status WriteRecord(StringPiece slice);
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   Status WriteRecord(const absl::Cord& data);
 #endif
 
@@ -98,13 +91,12 @@ class RecordWriter {
   // "header[0,kHeaderSize-1]".  The record-header is based on data[0, n-1].
   inline static void PopulateHeader(char* header, const char* data, size_t n);
 
-  inline static void PopulateHeader(char* header, const absl::Cord& data);
-
   // Utility method to populate TFRecord footers.  Populates record-footer in
   // "footer[0,kFooterSize-1]".  The record-footer is based on data[0, n-1].
   inline static void PopulateFooter(char* footer, const char* data, size_t n);
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
+  inline static void PopulateHeader(char* header, const absl::Cord& data);
   inline static void PopulateFooter(char* footer, const absl::Cord& data);
 #endif
 
@@ -116,7 +108,7 @@ class RecordWriter {
     return crc32c::Mask(crc32c::Value(data, n));
   }
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   inline static uint32 MaskedCrc(const absl::Cord& data) {
     return crc32c::Mask(crc32c::Value(data));
   }
@@ -135,7 +127,7 @@ void RecordWriter::PopulateFooter(char* footer, const char* data, size_t n) {
   core::EncodeFixed32(footer, MaskedCrc(data, n));
 }
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
 void RecordWriter::PopulateHeader(char* header, const absl::Cord& data) {
   core::EncodeFixed64(header + 0, data.size());
   core::EncodeFixed32(header + sizeof(uint64),

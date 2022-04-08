@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <cstdint>
 #include <type_traits>
-
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/allocator.h"
 #include "tensorflow/core/framework/tensor_shape.h"
@@ -53,8 +52,6 @@ namespace batch_util {
 Status CopyElementToSlice(Tensor element, Tensor* parent, int64 index);
 Status CopySliceToElement(const Tensor& parent, Tensor* element, int64 index);
 Status MaybeMoveSliceToElement(Tensor* parent, Tensor* element, int64 index);
-Status CopyContiguousSlices(const Tensor& src, int64 src_offset,
-                            int64 dst_offset, int64 num_slices, Tensor* dst);
 }  // namespace batch_util
 
 /// @ingroup core
@@ -157,12 +154,6 @@ class Tensor {
   /// Acquires a ref on buf that belongs to this Tensor.
   Tensor(DataType type, const TensorShape& shape, TensorBuffer* buf);
 
-  /// \brief Creates a tensor with the input datatype, shape and buf.
-  ///
-  /// Takes an ownership of the bufffer from the reference counted pointer.
-  Tensor(DataType type, const TensorShape& shape,
-         core::RefCountPtr<TensorBuffer> buf);
-
   /// \brief Creates an empty Tensor of the given data type.
   ///
   /// Like Tensor(), returns a 1-dimensional, 0-element Tensor with
@@ -244,15 +235,9 @@ class Tensor {
   Tensor(const Tensor& other);
 
   /// \brief Move constructor. After this call, <other> is safely destructible
-  /// can be assigned to, and IsInitialized() can be called and will return
-  /// false. Other calls on <other> (e.g. shape manipulation) are not valid.
+  /// and can be assigned to, but other calls on it (e.g. shape manipulation)
+  /// are not valid.
   Tensor(Tensor&& other);
-
-  // Explicitly delete constructor that take a pointer (except char*)
-  // so that the pointer doesn't get implicitly cast to bool.
-  template <typename T, typename std::enable_if<!std::is_same<T, char>::value,
-                                                T>::type* = nullptr>
-  explicit Tensor(T* t) = delete;
 
   ~Tensor();
 
@@ -586,19 +571,19 @@ class Tensor {
       int64 begin) const;
 
   /// Render the first `max_entries` values in `*this` into a string.
-  std::string SummarizeValue(int64 max_entries, bool print_v2 = false) const;
+  string SummarizeValue(int64 max_entries, bool print_v2 = false) const;
 
   /// A human-readable summary of the tensor suitable for debugging.
   // `num_values` is the number of actual data values in the tensor
   // included in the message. If the tensor might be resident in
   // GPU/TPU memory use DeviceSafeDebugString instead.
-  std::string DebugString(int num_values) const;
-  std::string DebugString() const { return DebugString(3); }
+  string DebugString(int num_values) const;
+  string DebugString() const { return DebugString(3); }
 
   // Variant of DebugString() that should be used for possibly non-CPU tensors.
   // If the tensor is not resident on CPU, we can't read its values as
   // DebugString() does.
-  std::string DeviceSafeDebugString() const;
+  string DeviceSafeDebugString() const;
 
   /// Fill in the `TensorDescription` proto with metadata about the
   /// tensor that is useful for monitoring and debugging.
@@ -616,7 +601,6 @@ class Tensor {
   ///
   /// REQUIRES: `DataTypeCanUseMemcpy(dtype())`.
   StringPiece tensor_data() const;
-  void* data() const;
 
   /// Copy the other tensor into this tensor, reshape it and reinterpret the
   /// buffer's datatype. If Status::OK() is returned, the two tensors now share
@@ -687,9 +671,6 @@ class Tensor {
   friend Status batch_util::MaybeMoveSliceToElement(
       Tensor* parent, Tensor* element,
       int64 index);  // For access to base<T>().
-  friend Status batch_util::CopyContiguousSlices(
-      const Tensor& src, int64 src_offset, int64 dst_offset, int64 num_slices,
-      Tensor* dst);  // For access to base<T>().
 
   bool CanUseDMA() const;
 
@@ -703,19 +684,7 @@ class Tensor {
     set_dtype(dt);
   }
 
-  inline void CopyFromInternal(const Tensor& other, const TensorShape& shape) {
-    DCHECK_EQ(shape.num_elements(), other.NumElements());
-    // Data type will be overwritten if this == &other, since dtype is part of
-    // shape.
-    DataType other_dtype = other.dtype();
-    shape_ = shape;
-    set_dtype(other_dtype);
-    if (buf_ != other.buf_) {
-      if (buf_) buf_->Unref();
-      buf_ = other.buf_;
-      if (buf_) buf_->Ref();
-    }
-  }
+  void CopyFromInternal(const Tensor& other, const TensorShape& shape);
 
   template <typename T>
   T* base() const;

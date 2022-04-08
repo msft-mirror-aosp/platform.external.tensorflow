@@ -18,7 +18,9 @@ limitations under the License.
 #include "tensorflow/core/util/stats_calculator.h"
 #include "tensorflow/lite/tools/benchmark/benchmark_tflite_model.h"
 
+#ifdef __cplusplus
 extern "C" {
+#endif  // __cplusplus
 
 // -----------------------------------------------------------------------------
 // C APIs corresponding to tflite::benchmark::BenchmarkResults type.
@@ -177,4 +179,6 @@ void TfLiteBenchmarkTfLiteModelAddListener(
   return benchmark_model->benchmark_model->AddListener(listener->adapter.get());
 }
 
-}  // extern "C"
+#ifdef __cplusplus
+}
+#endif  // __cplusplus

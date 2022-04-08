@@ -58,14 +58,11 @@ Graph* TruncatedNormal(int64 n) {
   return g;
 }
 
-#define BM_RNG(DEVICE, RNG)                                                \
-  void BM_##DEVICE##_##RNG(::testing::benchmark::State& state) {           \
-    const int arg = state.range(0);                                        \
-                                                                           \
-    test::Benchmark(#DEVICE, RNG(arg), /*old_benchmark_api*/ false)        \
-        .Run(state);                                                       \
-    state.SetItemsProcessed(static_cast<int64>(state.iterations()) * arg); \
-  }                                                                        \
+#define BM_RNG(DEVICE, RNG)                                   \
+  void BM_##DEVICE##_##RNG(int iters, int arg) {              \
+    testing::ItemsProcessed(static_cast<int64>(iters) * arg); \
+    test::Benchmark(#DEVICE, RNG(arg)).Run(iters);            \
+  }                                                           \
   BENCHMARK(BM_##DEVICE##_##RNG)->Range(1 << 20, 8 << 20);
 
 BM_RNG(cpu, RandomUniform);
@@ -87,48 +84,60 @@ Tensor VecAlphas(int64 n) {
   return alphas;
 }
 
-void BM_cpu_RandomGamma(::testing::benchmark::State& state) {
-  const int nsamp = state.range(0);
-  const int nalpha = state.range(1);
-
+void BM_cpu_RandomGamma(int iters, int nsamp, int nalpha) {
+  testing::ItemsProcessed(static_cast<int64>(iters) * nsamp * nalpha);
   Graph* g = new Graph(OpRegistry::Global());
   test::graph::RandomGamma(g, test::graph::Constant(g, VecShape(nsamp)),
                            test::graph::Constant(g, VecAlphas(nalpha)));
-  test::Benchmark("cpu", g, /*old_benchmark_api*/ false).Run(state);
-  state.SetItemsProcessed(static_cast<int64>(state.iterations()) * nsamp *
-                          nalpha);
+  test::Benchmark("cpu", g).Run(iters);
 }
 BENCHMARK(BM_cpu_RandomGamma)->RangePair(1 << 14, 4 << 15, 2, 50);
 
-void BM_PhiloxRandom(::testing::benchmark::State& state) {
+void BM_PhiloxRandom(int iters) {
   // Fill 2M random numbers
   int count = 2 << 20;
+
+  testing::ItemsProcessed(static_cast<int64>(iters) * count);
+
   random::PhiloxRandom gen(0x12345);
 
-  for (auto s : state) {
+  int val = 1;
+  for (int i = 0; i < iters; ++i) {
     for (int j = 0; j < count; j += 4) {
       /// each invocation of gen() returns 128-bit samples
       auto samples = gen();
-      tensorflow::testing::DoNotOptimize(samples);
+
+      // use the result trivially so the compiler does not optimize it away
+      val ^= samples[0] ^ samples[1] ^ samples[2] ^ samples[3];
     }
   }
-  state.SetItemsProcessed(static_cast<int64>(state.iterations()) * count);
+
+  // A anchor point to make sure the compiler does not cut corners
+  CHECK(val) << val;
 }
 BENCHMARK(BM_PhiloxRandom);
 
-void BM_StdMTRandom(::testing::benchmark::State& state) {
+void BM_StdMTRandom(int iters) {
   // Fill 2M random numbers
   int count = 2 << 20;
+
+  testing::ItemsProcessed(static_cast<int64>(iters) * count);
+
   std::mt19937 gen(0x12345);
 
-  for (auto s : state) {
+  uint_fast32_t val = 1;
+  for (int i = 0; i < iters; ++i) {
     for (int j = 0; j < count; ++j) {
       /// each invocation of gen() returns 32-bit sample
       uint_fast32_t sample = gen();
-      tensorflow::testing::DoNotOptimize(sample);
+
+      // use the result trivially so the compiler does not optimize it away
+      val ^= sample;
     }
   }
-  state.SetItemsProcessed(static_cast<int64>(state.iterations()) * count);
+
+  // A anchor point to make sure the compiler does not cut corners
+  CHECK(val) << val;
 }
 BENCHMARK(BM_StdMTRandom);
 

@@ -41,10 +41,10 @@ Status DebugStripper::Optimize(Cluster* cluster, const GrapplerItem& item,
 
   *output = item.graph;
   for (NodeDef& node : *output->mutable_node()) {
-    if (IsAssert(node) || node.op() == "PrintV2") {
+    if (IsAssert(node)) {
       // Convert this node into a no-op.
       node.set_op("NoOp");
-      EraseRegularNodeAttributes(&node);
+      node.clear_attr();
       // Convert all its inputs into control dependency, which will then
       // be optimized away by dependency optimizer.
       for (string& inp : *node.mutable_input()) {
@@ -52,7 +52,7 @@ Status DebugStripper::Optimize(Cluster* cluster, const GrapplerItem& item,
           inp = AsControlDependency(NodeName(inp));
         }
       }
-    } else if (IsCheckNumerics(node) || node.op() == "Print") {
+    } else if (IsCheckNumerics(node) || IsPrint(node)) {
       // Replace with Identity op which will be pruned later.
       node.set_op("Identity");
       // Only preserve T attribute.
@@ -63,7 +63,7 @@ Status DebugStripper::Optimize(Cluster* cluster, const GrapplerItem& item,
       node.mutable_attr()->swap(new_attr);
       // As Identity op only takes one input, mark redundant inputs as control
       // input.
-      for (int i = 1, end = node.input_size(); i < end; ++i) {
+      for (size_t i = 1; i < node.input_size(); ++i) {
         if (!IsControlInput(node.input(i))) {
           *node.mutable_input(i) = AsControlDependency(NodeName(node.input(i)));
         }

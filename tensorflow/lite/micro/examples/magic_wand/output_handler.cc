@@ -18,20 +18,17 @@ limitations under the License.
 void HandleOutput(tflite::ErrorReporter* error_reporter, int kind) {
   // light (red: wing, blue: ring, green: slope)
   if (kind == 0) {
-    TF_LITE_REPORT_ERROR(
-        error_reporter,
+    error_reporter->Report(
         "WING:\n\r*         *         *\n\r *       * *       "
         "*\n\r  *     *   *     *\n\r   *   *     *   *\n\r    * *       "
         "* *\n\r     *         *\n\r");
   } else if (kind == 1) {
-    TF_LITE_REPORT_ERROR(
-        error_reporter,
+    error_reporter->Report(
         "RING:\n\r          *\n\r       *     *\n\r     *         *\n\r "
         "   *           *\n\r     *         *\n\r       *     *\n\r      "
         "    *\n\r");
   } else if (kind == 2) {
-    TF_LITE_REPORT_ERROR(
-        error_reporter,
+    error_reporter->Report(
         "SLOPE:\n\r        *\n\r       *\n\r      *\n\r     *\n\r    "
         "*\n\r   *\n\r  *\n\r * * * * * * * *\n\r");
   }

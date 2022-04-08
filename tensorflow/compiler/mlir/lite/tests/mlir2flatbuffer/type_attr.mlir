@@ -3,9 +3,8 @@
 // CHECK: {
 // CHECK:   version: 3,
 // CHECK:   operator_codes: [ {
-// CHECK:     deprecated_builtin_code: 32,
-// CHECK:     custom_code: "SomeOperation",
-// CHECK:     builtin_code: CUSTOM
+// CHECK:     builtin_code: CUSTOM,
+// CHECK:     custom_code: "SomeOperation"
 // CHECK:   } ],
 // CHECK:   subgraphs: [ {
 // CHECK:     tensors: [ {

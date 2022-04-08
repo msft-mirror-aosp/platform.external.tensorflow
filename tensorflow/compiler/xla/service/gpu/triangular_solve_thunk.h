@@ -38,12 +38,12 @@ namespace gpu {
 // Thread-compatible.
 class TriangularSolveThunk : public Thunk {
  public:
-  TriangularSolveThunk(ThunkInfo thunk_info,
-                       const TriangularSolveOptions& options,
+  TriangularSolveThunk(const TriangularSolveOptions& options,
                        const BufferAllocation::Slice& a_buffer,
                        const BufferAllocation::Slice& b_buffer,
                        PrimitiveType type, int64 batch_size, int64 m, int64 n,
-                       int64 a_batch_stride, int64 b_batch_stride);
+                       int64 a_batch_stride, int64 b_batch_stride,
+                       const HloInstruction* hlo);
 
   TriangularSolveThunk(const TriangularSolveThunk&) = delete;
   TriangularSolveThunk& operator=(const TriangularSolveThunk&) = delete;

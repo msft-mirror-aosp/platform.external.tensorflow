@@ -210,9 +210,6 @@ TEST(XlaJitCompiledCpuFunction, Sum) {
   EXPECT_EQ(function.LookupResultIndex("x_name"), -1);
   EXPECT_EQ(function.LookupResultIndex("y_name"), -1);
 
-  EXPECT_EQ(0, function.num_variables());
-  EXPECT_EQ(function.LookupVariableIndex("x"), -1);
-
   // Check program shape.
   using xla::ShapeUtil;
   const xla::Shape s32 = ShapeUtil::MakeShape(xla::S32, {});
@@ -254,14 +251,6 @@ TEST(XlaJitCompiledCpuFunction, SumVariable) {
   EXPECT_EQ(function.error_msg(), "");
   EXPECT_EQ(*static_cast<int32*>(function.result_data(0)), 100);
   EXPECT_EQ(*static_cast<int32*>(function.result_data(1)), 420);
-
-  // Check name to index lookups.
-  EXPECT_TRUE(function.HasNameIndices());
-
-  EXPECT_EQ(2, function.num_args());
-
-  EXPECT_EQ(1, function.num_variables());
-  EXPECT_EQ(function.LookupVariableIndex("myvar"), 1);
 
   // Check program shape.
   using xla::ShapeUtil;

@@ -174,11 +174,6 @@ bool DeviceNameUtils::ParseFullName(StringPiece fullname, ParsedName* p) {
   return true;
 }
 
-bool DeviceNameUtils::ParseFullOrLocalName(StringPiece fullname,
-                                           ParsedName* p) {
-  return ParseFullName(fullname, p) || ParseLocalName(fullname, p);
-}
-
 namespace {
 
 void CompleteName(const DeviceNameUtils::ParsedName& parsed_basename,
@@ -585,9 +580,7 @@ std::vector<string> DeviceNameUtils::GetLocalNamesForDeviceMappings(
     return errors::Internal("Could not parse device name ", device_name);
   }
   device.type = "CPU";
-  device.has_type = true;
   device.id = 0;
-  device.has_id = true;
   *host_device_name = DeviceNameUtils::ParsedNameToString(device);
   return Status::OK();
 }

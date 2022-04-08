@@ -29,21 +29,16 @@ limitations under the License.
 
 namespace tensorflow {
 
-using CPUDevice = Eigen::ThreadPoolDevice;
-
-template <typename Device>
 class SparseReshapeOp : public OpKernel {
  public:
   explicit SparseReshapeOp(OpKernelConstruction* context) : OpKernel(context) {}
 
   void Compute(OpKernelContext* context) override {
-    ReshapeSparseTensor<Device>(context, context->input(0), context->input(1),
-                                context->input(2), 0 /* output indices index */,
-                                1 /* output shape index */);
+    Reshape(context, context->input(0), context->input(1), context->input(2),
+            0 /* output indices index */, 1 /* output shape index */);
   }
 };
 
 REGISTER_KERNEL_BUILDER(Name("SparseReshape").Device(DEVICE_CPU),
-                        SparseReshapeOp<CPUDevice>)
-
+                        SparseReshapeOp)
 }  // namespace tensorflow

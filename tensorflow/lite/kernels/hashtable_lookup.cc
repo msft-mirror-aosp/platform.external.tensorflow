@@ -31,14 +31,18 @@ limitations under the License.
 //   Each item indicates whether the corresponding lookup has a returned value.
 //   0 for missing key, 1 for found key.
 
-#include <stdint.h>
-
+#include <cassert>
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <limits>
 
+#include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
 #include "tensorflow/lite/string_util.h"
 
 namespace tflite {
@@ -55,18 +59,15 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_EQ(context, NumInputs(node), 3);
   TF_LITE_ENSURE_EQ(context, NumOutputs(node), 2);
 
-  const TfLiteTensor* lookup;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &lookup));
+  const TfLiteTensor* lookup = GetInput(context, node, 0);
   TF_LITE_ENSURE_EQ(context, NumDimensions(lookup), 1);
   TF_LITE_ENSURE_EQ(context, lookup->type, kTfLiteInt32);
 
-  const TfLiteTensor* key;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 1, &key));
+  const TfLiteTensor* key = GetInput(context, node, 1);
   TF_LITE_ENSURE_EQ(context, NumDimensions(key), 1);
   TF_LITE_ENSURE_EQ(context, key->type, kTfLiteInt32);
 
-  const TfLiteTensor* value;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 2, &value));
+  const TfLiteTensor* value = GetInput(context, node, 2);
   TF_LITE_ENSURE(context, NumDimensions(value) >= 1);
   TF_LITE_ENSURE_EQ(context, SizeOfDimension(key, 0),
                     SizeOfDimension(value, 0));
@@ -74,14 +75,12 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     TF_LITE_ENSURE_EQ(context, NumDimensions(value), 1);
   }
 
-  TfLiteTensor* hits;
-  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 1, &hits));
+  TfLiteTensor* hits = GetOutput(context, node, 1);
   TF_LITE_ENSURE_EQ(context, hits->type, kTfLiteUInt8);
   TfLiteIntArray* hitSize = TfLiteIntArrayCreate(1);
   hitSize->data[0] = SizeOfDimension(lookup, 0);
 
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output));
+  TfLiteTensor* output = GetOutput(context, node, 0);
   TF_LITE_ENSURE_EQ(context, value->type, output->type);
 
   TfLiteStatus status = kTfLiteOk;
@@ -93,23 +92,18 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     }
     status = context->ResizeTensor(context, output, outputSize);
   }
-  if (context->ResizeTensor(context, hits, hitSize) != kTfLiteOk) {
+  if (context->ResizeTensor(context, hits, hitSize) == kTfLiteError) {
     status = kTfLiteError;
   }
   return status;
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-  TfLiteTensor* output;
-  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output));
-  TfLiteTensor* hits;
-  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 1, &hits));
-  const TfLiteTensor* lookup;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &lookup));
-  const TfLiteTensor* key;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 1, &key));
-  const TfLiteTensor* value;
-  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 2, &value));
+  TfLiteTensor* output = GetOutput(context, node, 0);
+  TfLiteTensor* hits = GetOutput(context, node, 1);
+  const TfLiteTensor* lookup = GetInput(context, node, 0);
+  const TfLiteTensor* key = GetInput(context, node, 1);
+  const TfLiteTensor* value = GetInput(context, node, 2);
 
   const int num_rows = SizeOfDimension(value, 0);
   const int row_bytes = value->bytes / num_rows;

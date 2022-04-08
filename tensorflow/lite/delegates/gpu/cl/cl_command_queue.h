@@ -20,18 +20,43 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/time/time.h"
 #include "tensorflow/lite/delegates/gpu/cl/cl_context.h"
 #include "tensorflow/lite/delegates/gpu/cl/cl_device.h"
 #include "tensorflow/lite/delegates/gpu/cl/cl_event.h"
 #include "tensorflow/lite/delegates/gpu/cl/cl_kernel.h"
 #include "tensorflow/lite/delegates/gpu/cl/opencl_wrapper.h"
 #include "tensorflow/lite/delegates/gpu/common/status.h"
-#include "tensorflow/lite/delegates/gpu/common/task/profiling_info.h"
 #include "tensorflow/lite/delegates/gpu/common/types.h"
 
 namespace tflite {
 namespace gpu {
 namespace cl {
+
+struct ProfilingInfo {
+  struct DispatchInfo {
+    std::string label;
+    absl::Duration duration;
+  };
+
+  std::vector<DispatchInfo> dispatches;
+
+  absl::Duration GetTotalTime() const;
+
+  // Returns report (string of lines delimited by \n)
+  // This method uses GPU counters and measure GPU time only.
+  // Report has next structure:
+  // Per kernel timing(K kernels):
+  //   conv2d 3.2ms
+  //   ...
+  // --------------------
+  // Accumulated time per operation type:
+  //   conv2d - 14.5ms
+  //   ....
+  // --------------------
+  // Ideal total time: 23.4ms // Total time for all kernels
+  std::string GetDetailedReport() const;
+};
 
 // A wrapper around opencl command queue
 class CLCommandQueue {
@@ -49,24 +74,22 @@ class CLCommandQueue {
 
   cl_command_queue queue() const { return queue_; }
 
-  virtual absl::Status Dispatch(const CLKernel& kernel,
-                                const int3& work_groups_count,
-                                const int3& work_group_size);
+  virtual Status DispatchImplicit(const CLKernel& kernel, int3 grid,
+                                  int3 work_group_size);
 
-  absl::Status Dispatch(const CLKernel& kernel, const int3& work_groups_count,
-                        const int3& work_group_size, CLEvent* event);
+  Status EnqueueEvent(CLEvent* event);
 
-  absl::Status EnqueueEvent(CLEvent* event);
+  Status DispatchImplicit(const CLKernel& kernel, int3 grid,
+                          int3 work_group_size, CLEvent* event);
 
-  absl::Status EnqueueWriteImage(cl_mem memory, int3 region, const void* data);
-  absl::Status EnqueueReadImage(cl_mem memory, int3 region, void* data);
+  Status EnqueueWriteImage(cl_mem memory, int3 region, const void* data);
+  Status EnqueueReadImage(cl_mem memory, int3 region, void* data);
 
-  absl::Status EnqueueWriteBuffer(cl_mem memory, size_t size_in_bytes,
-                                  const void* data);
-  absl::Status EnqueueReadBuffer(cl_mem memory, size_t size_in_bytes,
-                                 void* data);
+  Status EnqueueWriteBuffer(cl_mem memory, size_t size_in_bytes,
+                            const void* data);
+  Status EnqueueReadBuffer(cl_mem memory, size_t size_in_bytes, void* data);
 
-  absl::Status WaitForCompletion();
+  Status WaitForCompletion();
 
  protected:
   void Release();
@@ -86,15 +109,14 @@ class ProfilingCommandQueue : public CLCommandQueue {
   ProfilingCommandQueue(const ProfilingCommandQueue&) = delete;
   ProfilingCommandQueue& operator=(const ProfilingCommandQueue&) = delete;
 
-  absl::Status Dispatch(const CLKernel& kernel, const int3& work_groups_count,
-                        const int3& work_group_size) override;
+  Status DispatchImplicit(const CLKernel& kernel, int3 grid,
+                          int3 work_group_size) override;
 
   // will write index for fastest work_group among work_group_sizes
-  absl::Status GetBestWorkGroupIndex(const CLKernel& kernel,
-                                     const GpuInfo& gpu_info,
-                                     const std::vector<int3>& work_groups_count,
-                                     const std::vector<int3>& work_group_sizes,
-                                     int* index);
+  Status GetBestWorkGroupIndex(const CLKernel& kernel,
+                               const DeviceInfo& device_info, const int3& grid,
+                               const std::vector<int3>& work_group_sizes,
+                               int* index);
 
   // call ResetMeasurements() to start new seriese of measurements
   void ResetMeasurements();
@@ -102,9 +124,9 @@ class ProfilingCommandQueue : public CLCommandQueue {
   double GetQueueExecutionTimeMs() const;
 
   // Difference from GetQueueExecutionTimeMs is that this number doesn't include
-  // time between kernels(kernels launches or preparing) on GPU. Usually, this
+  // time between kernels(kernels launchs or preparing) on GPU. Usually, this
   // time should be 5-10% better than GetQueueExecutionTimeMs, because 5-10%
-  // spend on something else(maybe kernels launches or preparing)
+  // spend on something else(maybe kernels launchs or preparing)
   double GetSumOfEventsTimeMs() const;
 
   // This label will be used for all subsequent dispatches.
@@ -117,13 +139,12 @@ class ProfilingCommandQueue : public CLCommandQueue {
   std::string current_label_;
 };
 
-absl::Status CreateCLCommandQueue(const CLDevice& device,
-                                  const CLContext& context,
-                                  CLCommandQueue* result);
+Status CreateCLCommandQueue(const CLDevice& device, const CLContext& context,
+                            CLCommandQueue* result);
 
-absl::Status CreateProfilingCommandQueue(const CLDevice& device,
-                                         const CLContext& context,
-                                         ProfilingCommandQueue* result);
+Status CreateProfilingCommandQueue(const CLDevice& device,
+                                   const CLContext& context,
+                                   ProfilingCommandQueue* result);
 
 }  // namespace cl
 }  // namespace gpu

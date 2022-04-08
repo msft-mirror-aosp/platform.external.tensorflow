@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//go:generate bash generate.sh
+
 // Command genop generates a Go source file with functions for TensorFlow ops.
 package main
 

@@ -1,6 +1,7 @@
 load(
     "//tensorflow/core/platform:build_config.bzl",
-    "tf_proto_library",
+    "tf_proto_library_cc",
+    "tf_proto_library_py",
 )
 load(
     "//tensorflow:tensorflow.bzl",
@@ -14,14 +15,14 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-tf_proto_library(
+tf_proto_library_cc(
     name = "types_proto",
     srcs = ["types.proto"],
     cc_api_version = 2,
     visibility = ["//visibility:public"],
 )
 
-tf_proto_library(
+tf_proto_library_cc(
     name = "toco_flags_proto",
     srcs = ["toco_flags.proto"],
     cc_api_version = 2,
@@ -29,10 +30,36 @@ tf_proto_library(
     visibility = ["//visibility:public"],
 )
 
-tf_proto_library(
+tf_proto_library_cc(
     name = "model_flags_proto",
     srcs = ["model_flags.proto"],
     cc_api_version = 2,
+    protodeps = [":types_proto"],
+    visibility = ["//visibility:public"],
+)
+
+tf_proto_library_py(
+    name = "types_proto",
+    srcs = [
+        "types.proto",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+tf_proto_library_py(
+    name = "toco_flags_proto",
+    srcs = [
+        "toco_flags.proto",
+    ],
+    protodeps = [":types_proto"],
+    visibility = ["//visibility:public"],
+)
+
+tf_proto_library_py(
+    name = "model_flags_proto",
+    srcs = [
+        "model_flags.proto",
+    ],
     protodeps = [":types_proto"],
     visibility = ["//visibility:public"],
 )
@@ -145,7 +172,6 @@ cc_library(
         "//tensorflow/core:framework_lite",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
-        "@com_google_absl//absl/status",
         "@com_google_protobuf//:protobuf_headers",
     ],
 )
@@ -297,18 +323,24 @@ cc_library(
         "tensorflow_util.h",
         "toco_tooling.h",
     ],
-    copts = tf_copts(),
+    copts = tf_copts() + select({
+        "//tensorflow:macos": ["-DTOCO_SUPPORT_PORTABLE_PROTOS=0"],
+        "//conditions:default": [],
+    }),
     visibility = ["//visibility:public"],
     deps = [
         ":graph_transformations",
         ":model",
         ":model_flags_proto_cc",
+        ":types_proto_cc",
         ":runtime",
-        ":toco_flags_proto_cc",
         ":toco_graphviz_dump_options",
+        ":toco_flags_proto_cc",
         ":toco_port",
         ":tooling_util",
-        ":types_proto_cc",
+        "@com_google_protobuf//:protobuf_headers",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
         "//tensorflow/core:core_cpu_lib",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
@@ -316,10 +348,10 @@ cc_library(
         "//tensorflow/lite/toco/tensorflow_graph_matching:resolve_cluster",
         "//tensorflow/lite/toco/tflite:export",
         "//tensorflow/lite/toco/tflite:import",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-        "@com_google_protobuf//:protobuf_headers",
-    ],
+    ] + select({
+        # Placeholder for internal macOS rule.
+        "//conditions:default": [],
+    }),
 )
 
 tf_cc_test(
@@ -488,19 +520,3 @@ tf_cc_test(
         "@com_google_googletest//:gtest",
     ],
 )
-
-# copybara:uncomment_begin(google-only)
-# py_proto_library(
-#     name = "model_flags_proto_py",
-#     api_version = 2,
-#     visibility = ["//visibility:public"],
-#     deps = [":model_flags_proto"],
-# )
-#
-# py_proto_library(
-#     name = "toco_flags_proto_py",
-#     api_version = 2,
-#     visibility = ["//visibility:public"],
-#     deps = [":toco_flags_proto"],
-# )
-# copybara:uncomment_end

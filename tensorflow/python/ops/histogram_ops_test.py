@@ -88,19 +88,20 @@ class HistogramFixedWidthTest(test.TestCase):
   @test_util.run_deprecated_v1
   def test_with_invalid_value_range(self):
     values = [-1.0, 0.0, 1.5, 2.0, 5.0, 15]
-    with self.assertRaisesRegex(ValueError,
-                                "Shape must be rank 1 but is rank 0"):
+    with self.assertRaisesRegexp(
+        ValueError, "Shape must be rank 1 but is rank 0"):
       histogram_ops.histogram_fixed_width(values, 1.0)
-    with self.assertRaisesRegex(ValueError, "Dimension must be 2 but is 3"):
+    with self.assertRaisesRegexp(ValueError, "Dimension must be 2 but is 3"):
       histogram_ops.histogram_fixed_width(values, [1.0, 2.0, 3.0])
 
   @test_util.run_deprecated_v1
   def test_with_invalid_nbins(self):
     values = [-1.0, 0.0, 1.5, 2.0, 5.0, 15]
-    with self.assertRaisesRegex(ValueError,
-                                "Shape must be rank 0 but is rank 1"):
+    with self.assertRaisesRegexp(
+        ValueError, "Shape must be rank 0 but is rank 1"):
       histogram_ops.histogram_fixed_width(values, [1.0, 5.0], nbins=[1, 2])
-    with self.assertRaisesRegex(ValueError, "Requires nbins > 0"):
+    with self.assertRaisesRegexp(
+        ValueError, "Requires nbins > 0"):
       histogram_ops.histogram_fixed_width(values, [1.0, 5.0], nbins=-5)
 
   def test_empty_input_gives_all_zero_counts(self):
@@ -109,7 +110,7 @@ class HistogramFixedWidthTest(test.TestCase):
     value_range = [0.0, 5.0]
     values = []
     expected_bin_counts = [0, 0, 0, 0, 0]
-    with self.session():
+    with self.session(use_gpu=True):
       hist = histogram_ops.histogram_fixed_width(values, value_range, nbins=5)
       self.assertEqual(dtypes.int32, hist.dtype)
       self.assertAllClose(expected_bin_counts, self.evaluate(hist))
@@ -120,7 +121,7 @@ class HistogramFixedWidthTest(test.TestCase):
     value_range = [0.0, 5.0]
     values = [-1.0, 0.0, 1.5, 2.0, 5.0, 15]
     expected_bin_counts = [2, 1, 1, 0, 2]
-    with self.session():
+    with self.session(use_gpu=True):
       hist = histogram_ops.histogram_fixed_width(
           values, value_range, nbins=5, dtype=dtypes.int64)
       self.assertEqual(dtypes.int64, hist.dtype)
@@ -132,7 +133,7 @@ class HistogramFixedWidthTest(test.TestCase):
     value_range = np.float64([0.0, 5.0])
     values = np.float64([-1.0, 0.0, 1.5, 2.0, 5.0, 15])
     expected_bin_counts = [2, 1, 1, 0, 2]
-    with self.session():
+    with self.session(use_gpu=True):
       hist = histogram_ops.histogram_fixed_width(values, value_range, nbins=5)
       self.assertEqual(dtypes.int32, hist.dtype)
       self.assertAllClose(expected_bin_counts, self.evaluate(hist))
@@ -143,7 +144,7 @@ class HistogramFixedWidthTest(test.TestCase):
     value_range = [0.0, 5.0]
     values = [[-1.0, 0.0, 1.5], [2.0, 5.0, 15]]
     expected_bin_counts = [2, 1, 1, 0, 2]
-    with self.session():
+    with self.session(use_gpu=True):
       hist = histogram_ops.histogram_fixed_width(values, value_range, nbins=5)
       self.assertEqual(dtypes.int32, hist.dtype)
       self.assertAllClose(expected_bin_counts, self.evaluate(hist))
@@ -154,7 +155,7 @@ class HistogramFixedWidthTest(test.TestCase):
     values = [[-1.0, 0.0, 1.5], [2.0, 5.0, 15]]
     expected_bin_counts = [2, 1, 1, 0, 2]
     placeholder = array_ops.placeholder(dtypes.int32)
-    with self.session():
+    with self.session(use_gpu=True):
       hist = histogram_ops.histogram_fixed_width(values, value_range, nbins=5)
       self.assertAllEqual(hist.shape.as_list(), (5,))
       self.assertEqual(dtypes.int32, hist.dtype)
@@ -162,7 +163,7 @@ class HistogramFixedWidthTest(test.TestCase):
 
       hist = histogram_ops.histogram_fixed_width(
           values, value_range, nbins=placeholder)
-      self.assertEqual(hist.shape.ndims, 1)
+      self.assertEquals(hist.shape.ndims, 1)
       self.assertIs(hist.shape.dims[0].value, None)
       self.assertEqual(dtypes.int32, hist.dtype)
       self.assertAllClose(expected_bin_counts, hist.eval({placeholder: 5}))

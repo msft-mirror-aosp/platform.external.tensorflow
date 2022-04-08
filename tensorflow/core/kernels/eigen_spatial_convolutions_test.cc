@@ -1376,7 +1376,7 @@ TEST(EigenSpatialConvolutionsTest, SpatialConvContractionMapper) {
 }
 
 template <typename T>
-static void PackRhsHelper(::testing::benchmark::State& state,
+static void PackRhsHelper(int iters,
                           /* Input dimensions: */
                           int input_batches, int input_cols, int input_rows,
                           int input_depth,
@@ -1392,6 +1392,9 @@ static void PackRhsHelper(::testing::benchmark::State& state,
                           Index block_rows, Index block_cols) {
   // Set random seed for benchmark repeatability.
   srand(12345);
+
+  tensorflow::testing::UseRealTime();
+  tensorflow::testing::StopTiming();
 
   using Dimensions = Eigen::DSizes<Eigen::Index, 4>;
 
@@ -1544,7 +1547,8 @@ static void PackRhsHelper(::testing::benchmark::State& state,
     return (idx / packet_size) * packet_size;
   };
 
-  for (auto s : state) {
+  tensorflow::testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     int input_idx =
         num_inputs == 1 ? 1 : internal::random<int>(0, num_inputs - 1);
 
@@ -1567,15 +1571,15 @@ static void PackRhsHelper(::testing::benchmark::State& state,
         input_mappers[input_idx].getSubMapper(depth_offset, col_offset);
     pack_rhs(packed.data() + packed_offset, sub_mapper, depth, cols);
   }
-
-  state.SetLabel(
+  tensorflow::testing::StopTiming();
+  tensorflow::testing::SetLabel(
       absl::StrCat("patch: ", patch_rows, "x", patch_cols, " D", patch_depth,
                    "; num_patches=", num_patches, " patch_size=", patch_size,
                    " num_inputs=", num_inputs, " padding=", padding));
 }
 
 template <typename T>
-static void PackLhsHelper(::testing::benchmark::State& state,
+static void PackLhsHelper(int iters,
                           /* Input dimensions: */
                           int input_depth,
                           /* Filter (kernel) dimensions: */
@@ -1587,6 +1591,9 @@ static void PackLhsHelper(::testing::benchmark::State& state,
 
   eigen_assert(block_rows <= filter_count);
   eigen_assert(block_cols <= input_depth * filter_rows * filter_cols);
+
+  tensorflow::testing::UseRealTime();
+  tensorflow::testing::StopTiming();
 
   using Dimensions = Eigen::DSizes<Eigen::Index, 4>;
 
@@ -1709,7 +1716,8 @@ static void PackLhsHelper(::testing::benchmark::State& state,
   const Index max_row = filter_count;
   const Index max_col = filter_rows * filter_cols * input_depth;
 
-  for (auto s : state) {
+  tensorflow::testing::StartTiming();
+  for (int i = 0; i < iters; ++i) {
     int filter_idx =
         num_filters == 1 ? 1 : internal::random<int>(0, num_filters - 1);
 
@@ -1735,7 +1743,8 @@ static void PackLhsHelper(::testing::benchmark::State& state,
     pack_lhs(packed.data() + packed_offset, sub_mapper, cols, rows);
 #endif
   }
-  state.SetLabel(absl::StrCat(
+  tensorflow::testing::StopTiming();
+  tensorflow::testing::SetLabel(absl::StrCat(
       "filter: count=", filter_count, " dims=", filter_rows, "x", filter_cols,
       "; input: depth=", input_depth, "; num_filers=", num_filters));
 }
@@ -1768,14 +1777,12 @@ static void PackLhsHelper(::testing::benchmark::State& state,
 
 #define BM_PackRhs(T, N, H, W, C, FC, FH, FW, PAD, SH, SW, ISH, ISW, BR, BC)  \
   static void BM_RHS_NAME(PackRhs, T, N, H, W, C, FC, FH, FW, PAD, SH, SW,    \
-                          ISH, ISW, BR,                                       \
-                          BC)(::testing::benchmark::State & state) {          \
-    PackRhsHelper<T>(state, N, H, W, C, FC, FH, FW, PADDING_##PAD, SH, SW,    \
+                          ISH, ISW, BR, BC)(int iters) {                      \
+    PackRhsHelper<T>(iters, N, H, W, C, FC, FH, FW, PADDING_##PAD, SH, SW,    \
                      ISH, ISW, BR, BC);                                       \
   }                                                                           \
   BENCHMARK(BM_RHS_NAME(PackRhs, T, N, H, W, C, FC, FH, FW, PAD, SH, SW, ISH, \
-                        ISW, BR, BC))                                         \
-      ->UseRealTime()
+                        ISW, BR, BC))
 
 // Number of input channel (input depth) it equal to the number of patch
 // channels (patch depth).
@@ -2012,12 +2019,11 @@ BM_PackRhs(/*type*/ qint8,                 //
 #define BM_LHS_NAME(prefix, T, C, FC, FH, FW, BR, BC) \
   BM_CONCAT(BM_##prefix##_##T##_##C##_FC##FC##_##FH##x##FW, _B##BR##x##BC)
 
-#define BM_PackLhs(T, C, FC, FH, FW, BR, BC)                         \
-  static void BM_LHS_NAME(PackLhs, T, C, FC, FH, FW, BR,             \
-                          BC)(::testing::benchmark::State & state) { \
-    PackLhsHelper<T>(state, C, FC, FH, FW, BR, BC);                  \
-  }                                                                  \
-  BENCHMARK(BM_LHS_NAME(PackLhs, T, C, FC, FH, FW, BR, BC))->UseRealTime()
+#define BM_PackLhs(T, C, FC, FH, FW, BR, BC)                              \
+  static void BM_LHS_NAME(PackLhs, T, C, FC, FH, FW, BR, BC)(int iters) { \
+    PackLhsHelper<T>(iters, C, FC, FH, FW, BR, BC);                       \
+  }                                                                       \
+  BENCHMARK(BM_LHS_NAME(PackLhs, T, C, FC, FH, FW, BR, BC))
 
 // Number of input channel (input depth) it equal to the number of patch
 // channels (patch depth).

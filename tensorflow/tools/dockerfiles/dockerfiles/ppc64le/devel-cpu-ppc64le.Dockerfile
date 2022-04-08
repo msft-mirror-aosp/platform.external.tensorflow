@@ -54,44 +54,51 @@ ARG CHECKOUT_TF_SRC=0
 RUN chmod a+w /etc/passwd /etc/group
 RUN test "${CHECKOUT_TF_SRC}" -eq 1 && git clone https://github.com/tensorflow/tensorflow.git /tensorflow_src || true
 
+ARG USE_PYTHON_3_NOT_2
+# TODO(angerson) Completely remove Python 2 support
+ARG _PY_SUFFIX=${USE_PYTHON_3_NOT_2:+3}
+ARG PYTHON=python${_PY_SUFFIX}
+ARG PIP=pip${_PY_SUFFIX}
+
 # See http://bugs.python.org/issue19846
 ENV LANG C.UTF-8
 
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip
+    ${PYTHON} \
+    ${PYTHON}-pip
 
-RUN python3 -m pip --no-cache-dir install --upgrade \
-    "pip<20.3" \
+RUN ${PIP} --no-cache-dir install --upgrade \
+    pip \
     setuptools
 
 # Some TF tools expect a "python" binary
-RUN ln -s $(which python3) /usr/local/bin/python
+RUN ln -s $(which ${PYTHON}) /usr/local/bin/python
 
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
     openjdk-8-jdk \
-    python3-dev \
+    ${PYTHON}-dev \
     virtualenv \
     swig
 
-RUN python3 -m pip --no-cache-dir install \
+RUN ${PIP} --no-cache-dir install \
     Pillow \
     h5py \
     keras_preprocessing \
     matplotlib \
     mock \
-    'numpy<1.19.0' \
+    numpy \
     scipy \
     sklearn \
     pandas \
     portpicker \
+    && test "${USE_PYTHON_3_NOT_2}" -eq 1 && true || ${PIP} --no-cache-dir install \
     enum34
 
-# Build and install bazel
-ENV BAZEL_VERSION 3.7.2
+ # Build and install bazel
+ENV BAZEL_VERSION 0.15.0
 WORKDIR /
 RUN mkdir /bazel && \
     cd /bazel && \

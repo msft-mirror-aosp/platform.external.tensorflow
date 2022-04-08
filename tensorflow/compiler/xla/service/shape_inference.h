@@ -105,14 +105,12 @@ class ShapeInference {
                                                  const Shape& output_grad_shape,
                                                  int64 feature_index);
 
-  // Infers the shape produced by applying the given convolutional filter (rhs)
-  // to lhs in the way specified by the fields on window. An optional
-  // preferred_element_type can be specified to upcast the element type.
+  // Infers the shape produced by applying the given convolutional
+  // filter (rhs) to lhs in the way specified by the fields on window.
   static StatusOr<Shape> InferConvolveShape(
       const Shape& lhs, const Shape& rhs, int64 feature_group_count,
       int64 batch_group_count, const Window& window,
-      const ConvolutionDimensionNumbers& dimension_numbers,
-      absl::optional<PrimitiveType> preferred_element_type);
+      const ConvolutionDimensionNumbers& dimension_numbers);
 
   // Infers the shape produced by the given FFT type on the given operand.
   static StatusOr<Shape> InferFftShape(const Shape& in, FftType fft_type,
@@ -124,12 +122,6 @@ class ShapeInference {
 
   // Infers the shape produced by the given triangular solve operation.
   static StatusOr<Shape> InferCholeskyShape(const Shape& a);
-
-  // Infers the shape produced by an all-gather with the given operand shape,
-  // concat dimension, and shard count.
-  static StatusOr<Shape> InferAllGatherShape(const Shape& operand_shape,
-                                             int64 all_gather_dimension,
-                                             int64 shard_count);
 
   // Infers the shape produced by a cross replica sum with the given operand
   // shapes.
@@ -166,17 +158,10 @@ class ShapeInference {
   static StatusOr<Shape> InferReduceWindowShape(
       const Shape& operand_shape, const Shape& init_value, const Window& window,
       const ProgramShape& to_apply_shape);
+
   static StatusOr<Shape> InferReduceWindowShape(const Shape& operand_shape,
                                                 const Shape& init_value,
                                                 const Window& window);
-  static StatusOr<Shape> InferReduceWindowShape(
-      absl::Span<const Shape* const> operands,
-      absl::Span<const Shape* const> init_values, const Window& window,
-      const ProgramShape& to_apply_shape);
-
-  static StatusOr<Shape> InferReduceWindowShape(
-      absl::Span<const Shape*> operands, absl::Span<const Shape*> init_values,
-      const Window& window);
 
   // Infers the shape produced by scattering the given source shape to the
   // selected indices of each window on the operand shape.
@@ -250,15 +235,6 @@ class ShapeInference {
                                            absl::Span<const int64> new_sizes,
                                            int64 inferred_dimension);
 
-  // Infers the shape produced by a dynamic reshape operation from the element
-  // type of its operand and the new dimension sizes specified. The result shape
-  // will have dynamic dimensions as specific in `dim_is_dynamic` and bound
-  // `new_size_bounds`.
-  static StatusOr<Shape> InferDynamicReshapeShape(
-      const Shape& operand, absl::Span<const Shape* const> dim_size_shapes,
-      absl::Span<const int64> new_size_bounds,
-      const std::vector<bool>& dims_are_dynamic);
-
   // Infers the shape produced by a transpose operation from the element type of
   // its operand and its dimensions field.
   static StatusOr<Shape> InferTransposeShape(
@@ -300,12 +276,10 @@ class ShapeInference {
       absl::Span<const Shape* const> arg_shapes, const ProgramShape& to_apply);
 
   // Helper that infers the shape produced by performing a dot operation with
-  // the given LHS and RHS shapes. An optional preferred_element_type can be
-  // specified to upcast the element type.
+  // the given LHS and RHS shapes.
   static StatusOr<Shape> InferDotOpShape(
       const Shape& lhs, const Shape& rhs,
-      const DotDimensionNumbers& dimension_numbers,
-      absl::optional<PrimitiveType> preferred_element_type);
+      const DotDimensionNumbers& dimension_numbers);
 
   // Helper that infers the shape of the tensor produced by a gather operation
   // with the given input shape, gather indices shape and gather dimension
@@ -323,13 +297,10 @@ class ShapeInference {
       const Shape& updates_shape, const ProgramShape& to_apply_shape,
       const ScatterDimensionNumbers& scatter_dim_numbers);
 
-  // Helper that validates the given input shape to GetDimensionSize.
   static StatusOr<Shape> InferGetDimensionSizeShape(const Shape& shape,
                                                     int64 dimension);
 
-  // Helper that validates the given input shape to SetDimensionSize.
-  static StatusOr<Shape> InferSetDimensionSizeShape(const Shape& operand_shape,
-                                                    const Shape& val_shape,
+  static StatusOr<Shape> InferSetDimensionSizeShape(const Shape& shape,
                                                     int64 dimension);
 
   // Helper function for creating a Window proto from user-supplied data.

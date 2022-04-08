@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_XLA_SERVICE_GPU_FFT_THUNK_H_
 #define TENSORFLOW_COMPILER_XLA_SERVICE_GPU_FFT_THUNK_H_
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/types/optional.h"
 #include "tensorflow/compiler/xla/service/buffer_assignment.h"
 #include "tensorflow/compiler/xla/service/gpu/buffer_allocations.h"
@@ -63,11 +62,11 @@ class FftThunk : public Thunk {
  public:
   // Constructs a thunk for launching an FFT on a stream.
   // Semantics of null hlo_instruction argument are as in Thunk.
-  FftThunk(ThunkInfo thunk_info, FftType fft_type,
-           absl::Span<const int64> fft_length,
+  FftThunk(FftType fft_type, absl::Span<const int64> fft_length,
            const BufferAllocation::Slice& input_buffer,
            const BufferAllocation::Slice& output_buffer,
-           const Shape& input_shape, const Shape& output_shape);
+           const Shape& input_shape, const Shape& output_shape,
+           const HloInstruction* hlo);
 
   FftThunk(const FftThunk&) = delete;             // Cannot share fft_plan_
   FftThunk& operator=(const FftThunk&) = delete;  // Cannot share fft_plan_
@@ -81,14 +80,7 @@ class FftThunk : public Thunk {
 
   float scale_factor_;
 
-  // One plan per device ordinal.
-  absl::Mutex mu_;
-  struct FftPlan {
-    absl::Mutex mu;
-    std::unique_ptr<se::fft::Plan> plan;
-  };
-  absl::flat_hash_map<int, std::unique_ptr<FftPlan>> fft_plans_
-      ABSL_GUARDED_BY(mu_);
+  std::unique_ptr<se::fft::Plan> fft_plan_;
 
   const BufferAllocation::Slice input_buffer_;
   const BufferAllocation::Slice output_buffer_;

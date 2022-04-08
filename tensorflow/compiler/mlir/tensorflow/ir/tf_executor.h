@@ -21,13 +21,13 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_TENSORFLOW_IR_TF_EXECUTOR_H_
 #define TENSORFLOW_COMPILER_MLIR_TENSORFLOW_IR_TF_EXECUTOR_H_
 
-#include "mlir/Dialect/Traits.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
-#include "mlir/IR/Dialect.h"  // from @llvm-project
-#include "mlir/IR/Matchers.h"  // from @llvm-project
-#include "mlir/IR/OpImplementation.h"  // from @llvm-project
+#include "mlir/Dialect/Traits.h"  // TF:llvm-project
+#include "mlir/IR/Attributes.h"  // TF:llvm-project
+#include "mlir/IR/Builders.h"  // TF:llvm-project
+#include "mlir/IR/Dialect.h"  // TF:llvm-project
+#include "mlir/IR/Matchers.h"  // TF:llvm-project
+#include "mlir/IR/OpImplementation.h"  // TF:llvm-project
+#include "mlir/IR/StandardTypes.h"  // TF:llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_types.h"
 
 namespace mlir {
@@ -35,7 +35,6 @@ namespace tf_executor {
 
 class TensorFlowExecutorDialect : public Dialect {
  public:
-  static StringRef getDialectNamespace() { return "tf_executor"; }
   explicit TensorFlowExecutorDialect(MLIRContext *context);
 
   // Parses a type registered to this dialect.
@@ -45,23 +44,44 @@ class TensorFlowExecutorDialect : public Dialect {
   void printType(Type type, DialectAsmPrinter &os) const override;
 };
 
+namespace TFTypes {
+enum Kind {
+  Control = Type::FIRST_TENSORFLOW_EXECUTOR_TYPE,
+  Token,
+};
+}  // namespace TFTypes
+
 // The Control type is a token-like value that models control dependencies from
 // TensorFlow graphs.
-class ControlType : public Type::TypeBase<ControlType, Type, TypeStorage> {
+class ControlType : public Type::TypeBase<ControlType, Type> {
  public:
   using Base::Base;
+
+  static ControlType get(MLIRContext *context) {
+    return Base::get(context, TFTypes::Control);
+  }
+
+  // Support method to enable LLVM-style type casting.
+  static bool kindof(unsigned kind) { return kind == TFTypes::Control; }
 };
 
-class TokenType : public Type::TypeBase<TokenType, Type, TypeStorage> {
+class TokenType : public Type::TypeBase<TokenType, Type> {
  public:
   using Base::Base;
-};
 
-}  // namespace tf_executor
-}  // namespace mlir
+  static TokenType get(MLIRContext *context) {
+    return Base::get(context, TFTypes::Token);
+  }
+
+  // Support method to enable LLVM-style type casting.
+  static bool kindof(unsigned kind) { return kind == TFTypes::Token; }
+};
 
 // Declares the operations for this dialect using the generated header.
 #define GET_OP_CLASSES
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_executor.h.inc"
+
+}  // namespace tf_executor
+}  // namespace mlir
 
 #endif  // TENSORFLOW_COMPILER_MLIR_TENSORFLOW_IR_TF_EXECUTOR_H_

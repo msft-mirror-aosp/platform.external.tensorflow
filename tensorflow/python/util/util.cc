@@ -24,30 +24,20 @@ limitations under the License.
 #include "tensorflow/core/lib/strings/strcat.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/mutex.h"
-#include "tensorflow/python/lib/core/safe_pyobject_ptr.h"
+#include "tensorflow/python/lib/core/safe_ptr.h"
 
 namespace tensorflow {
 namespace swig {
 
-namespace {
-string PyObjectToString(PyObject* o);
-}  // namespace
-
-std::unordered_map<string, PyObject*>* RegisteredPyObjectMap() {
+std::unordered_map<string, PyObject*>* PythonTypesMap() {
   static auto* m = new std::unordered_map<string, PyObject*>();
   return m;
 }
 
-PyObject* GetRegisteredPyObject(const string& name) {
-  const auto* m = RegisteredPyObjectMap();
-  auto it = m->find(name);
-  if (it == m->end()) {
-    PyErr_SetString(PyExc_TypeError,
-                    tensorflow::strings::StrCat("No object with name ", name,
-                                                " has been registered.")
-                        .c_str());
-    return nullptr;
-  }
+PyObject* GetRegisteredType(const string& key) {
+  auto* m = PythonTypesMap();
+  auto it = m->find(key);
+  if (it == m->end()) return nullptr;
   return it->second;
 }
 
@@ -59,35 +49,26 @@ PyObject* RegisterType(PyObject* type_name, PyObject* type) {
                         .c_str());
     return nullptr;
   }
-  return RegisterPyObject(type_name, type);
-}
 
-PyObject* RegisterPyObject(PyObject* name, PyObject* value) {
   string key;
-  if (PyBytes_Check(name)) {
-    key = PyBytes_AsString(name);
+  if (PyBytes_Check(type_name)) {
+    key = PyBytes_AsString(type_name);
+  }
 #if PY_MAJOR_VERSION >= 3
-  } else if (PyUnicode_Check(name)) {
-    key = PyUnicode_AsUTF8(name);
+  if (PyUnicode_Check(type_name)) {
+    key = PyUnicode_AsUTF8(type_name);
+  }
 #endif
-  } else {
+
+  if (PythonTypesMap()->find(key) != PythonTypesMap()->end()) {
     PyErr_SetString(PyExc_TypeError, tensorflow::strings::StrCat(
-                                         "Expected name to be a str, got",
-                                         PyObjectToString(name))
+                                         "Type already registered for ", key)
                                          .c_str());
     return nullptr;
   }
 
-  auto* m = RegisteredPyObjectMap();
-  if (m->find(key) != m->end()) {
-    PyErr_SetString(PyExc_TypeError, tensorflow::strings::StrCat(
-                                         "Value already registered for ", key)
-                                         .c_str());
-    return nullptr;
-  }
-
-  Py_INCREF(value);
-  m->emplace(key, value);
+  Py_INCREF(type);
+  PythonTypesMap()->emplace(key, type);
 
   Py_RETURN_NONE;
 }
@@ -208,14 +189,14 @@ class CachedTypeCheck {
   std::function<int(PyObject*)> ternary_predicate_;
   mutex type_to_sequence_map_mu_;
   std::unordered_map<PyTypeObject*, bool> type_to_sequence_map_
-      TF_GUARDED_BY(type_to_sequence_map_mu_);
+      GUARDED_BY(type_to_sequence_map_mu_);
 };
 
 // Returns 1 if 'obj' is an instance of 'type_name'
 // Returns 0 otherwise.
 // Returns -1 if an error occurred (e.g., if 'type_name' is not registered.)
 int IsInstanceOfRegisteredType(PyObject* obj, const char* type_name) {
-  PyObject* type_obj = GetRegisteredPyObject(type_name);
+  PyObject* type_obj = GetRegisteredType(type_name);
   if (TF_PREDICT_FALSE(type_obj == nullptr)) {
     PyErr_SetString(PyExc_RuntimeError,
                     tensorflow::strings::StrCat(
@@ -235,16 +216,6 @@ int IsInstanceOfRegisteredType(PyObject* obj, const char* type_name) {
 int IsMappingHelper(PyObject* o) {
   static auto* const check_cache = new CachedTypeCheck([](PyObject* to_check) {
     return IsInstanceOfRegisteredType(to_check, "Mapping");
-  });
-  if (PyDict_Check(o)) return true;
-  return check_cache->CachedLookup(o);
-}
-
-// Returns 1 if `o` is considered a mutable mapping for the purposes of
-// Flatten(). Returns 0 otherwise. Returns -1 if an error occurred.
-int IsMutableMappingHelper(PyObject* o) {
-  static auto* const check_cache = new CachedTypeCheck([](PyObject* to_check) {
-    return IsInstanceOfRegisteredType(to_check, "MutableMapping");
   });
   if (PyDict_Check(o)) return true;
   return check_cache->CachedLookup(o);
@@ -357,16 +328,6 @@ int IsSequenceHelper(PyObject* o) {
     if (is_instance == -1) return -1;
 
     return static_cast<int>(is_instance != 0 && !IsString(to_check));
-  });
-  return check_cache->CachedLookup(o);
-}
-
-// Returns 1 if `o`'s class has a `__tf_dispatch__` attribute.
-// Returns 0 otherwise.
-int IsDispatchableHelper(PyObject* o) {
-  static auto* const check_cache = new CachedTypeCheck([](PyObject* to_check) {
-    return PyObject_HasAttrString(
-        reinterpret_cast<PyObject*>(to_check->ob_type), "__tf_dispatch__");
   });
   return check_cache->CachedLookup(o);
 }
@@ -542,8 +503,7 @@ class AttrsValueIterator : public ValueIterator {
 };
 
 bool IsSparseTensorValueType(PyObject* o) {
-  PyObject* sparse_tensor_value_type =
-      GetRegisteredPyObject("SparseTensorValue");
+  PyObject* sparse_tensor_value_type = GetRegisteredType("SparseTensorValue");
   if (TF_PREDICT_FALSE(sparse_tensor_value_type == nullptr)) {
     return false;
   }
@@ -760,9 +720,9 @@ bool AssertSameStructureHelper(
 
     // We treat two different namedtuples with identical name and fields
     // as having the same type.
-    const PyObject* o1_tuple = IsNamedtuple(o1, false);
+    const PyObject* o1_tuple = IsNamedtuple(o1, true);
     if (o1_tuple == nullptr) return false;
-    const PyObject* o2_tuple = IsNamedtuple(o2, false);
+    const PyObject* o2_tuple = IsNamedtuple(o2, true);
     if (o2_tuple == nullptr) {
       Py_DECREF(o1_tuple);
       return false;
@@ -917,7 +877,6 @@ bool AssertSameStructureHelper(
 
 bool IsSequence(PyObject* o) { return IsSequenceHelper(o) == 1; }
 bool IsMapping(PyObject* o) { return IsMappingHelper(o) == 1; }
-bool IsMutableMapping(PyObject* o) { return IsMutableMappingHelper(o) == 1; }
 bool IsMappingView(PyObject* o) { return IsMappingViewHelper(o) == 1; }
 bool IsAttrs(PyObject* o) { return IsAttrsHelper(o) == 1; }
 bool IsTensor(PyObject* o) { return IsTensorHelper(o) == 1; }
@@ -927,7 +886,6 @@ bool IsResourceVariable(PyObject* o) {
 }
 bool IsVariable(PyObject* o) { return IsVariableHelper(o) == 1; }
 bool IsIndexedSlices(PyObject* o) { return IsIndexedSlicesHelper(o) == 1; }
-bool IsDispatchable(PyObject* o) { return IsDispatchableHelper(o) == 1; }
 
 bool IsTuple(PyObject* o) {
   tensorflow::Safe_PyObjectPtr wrapped;

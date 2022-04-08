@@ -91,7 +91,8 @@ string HloValue::ToShortString() const {
   return absl::StrFormat(
       "<%d %s%s%s%s>", id(), instruction()->name(),
       instruction()->shape().IsTuple() ? index().ToString() : "",
-      is_phi() ? " (phi)" : "", has_color() ? StrCat(" @", color()) : "");
+      is_phi() ? " (phi)" : "",
+      has_color() ? StrCat(" @", color().value()) : "");
 }
 
 string HloValue::ToString(int indent) const {

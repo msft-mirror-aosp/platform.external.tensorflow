@@ -44,27 +44,22 @@ typedef TTypes<float>::Tensor::Index Index;
   template void ReduceFunctor<GPUDevice, REDUCER>::FillIdentity( \
       const GPUDevice& d, TTypes<T>::Vec out, const REDUCER& reducer);
 
-#define SINGLE_ARG(...) __VA_ARGS__
-
 #define DEFINE_FOR_TYPE_AND_R(T, R) \
-  DEFINE(T, SINGLE_ARG(R), 1, 1);   \
-  DEFINE(T, SINGLE_ARG(R), 2, 1);   \
-  DEFINE(T, SINGLE_ARG(R), 3, 1);   \
-  DEFINE(T, SINGLE_ARG(R), 3, 2);   \
-  DEFINE_IDENTITY(T, SINGLE_ARG(R))
+  DEFINE(T, R, 1, 1);               \
+  DEFINE(T, R, 2, 1);               \
+  DEFINE(T, R, 3, 1);               \
+  DEFINE(T, R, 3, 2);               \
+  DEFINE_IDENTITY(T, R)
 
-#define DEFINE_FOR_ALL_REDUCERS(T)                                         \
-  DEFINE_FOR_TYPE_AND_R(T, Eigen::internal::SumReducer<T>);                \
-  DEFINE_FOR_TYPE_AND_R(T, functor::MeanReducer<T>);                       \
-  DEFINE_FOR_TYPE_AND_R(T, functor::EuclideanNormReducer<T>);              \
-  DEFINE_FOR_TYPE_AND_R(                                                   \
-      T, SINGLE_ARG(Eigen::internal::MinReducer<T, Eigen::PropagateNaN>)); \
-  DEFINE_FOR_TYPE_AND_R(                                                   \
-      T, SINGLE_ARG(Eigen::internal::MaxReducer<T, Eigen::PropagateNaN>)); \
+#define DEFINE_FOR_ALL_REDUCERS(T)                            \
+  DEFINE_FOR_TYPE_AND_R(T, Eigen::internal::SumReducer<T>);   \
+  DEFINE_FOR_TYPE_AND_R(T, functor::MeanReducer<T>);          \
+  DEFINE_FOR_TYPE_AND_R(T, functor::EuclideanNormReducer<T>); \
+  DEFINE_FOR_TYPE_AND_R(T, Eigen::internal::MinReducer<T>);   \
+  DEFINE_FOR_TYPE_AND_R(T, Eigen::internal::MaxReducer<T>);   \
   DEFINE_FOR_TYPE_AND_R(T, Eigen::internal::ProdReducer<T>)
 
 DEFINE_FOR_ALL_REDUCERS(double);
-#undef SINGLE_ARG
 #undef DEFINE_FOR_ALL_REDUCERS
 #undef DEFINE_FOR_TYPE_AND_R
 #undef DEFINE

@@ -1,4 +1,3 @@
-load("//tensorflow:tensorflow.bzl", "filegroup")
 load("//tensorflow/compiler/mlir:glob_lit_test.bzl", "glob_lit_tests")
 
 licenses(["notice"])
@@ -6,6 +5,9 @@ licenses(["notice"])
 glob_lit_tests(
     data = [":test_utilities"],
     driver = "@llvm-project//mlir:run_lit.sh",
+    tags_override = {
+        "preserve-entry-func-names.mlir": ["nomac"],  # TODO(b/148403706): flaky on Mac, to be fixed.
+    },
     test_file_exts = ["mlir"],
 )
 

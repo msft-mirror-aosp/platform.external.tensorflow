@@ -25,27 +25,28 @@ from tensorflow.python.platform import test
 
 class ConditionalExpressionsTest(converter_testing.TestCase):
 
-  def assertTransformedEquivalent(self, f, *inputs):
-    tr = self.transform(f, conditional_expressions)
-    self.assertEqual(f(*inputs), tr(*inputs))
+  def assertTransformedEquivalent(self, test_fn, *inputs):
+    ns = {}
+    with self.converted(test_fn, conditional_expressions, ns) as result:
+      self.assertEqual(test_fn(*inputs), result.test_fn(*inputs))
 
   def test_basic(self):
 
-    def f(x):
+    def test_fn(x):
       return 1 if x else 0
 
-    self.assertTransformedEquivalent(f, 0)
-    self.assertTransformedEquivalent(f, 3)
+    self.assertTransformedEquivalent(test_fn, 0)
+    self.assertTransformedEquivalent(test_fn, 3)
 
   def test_nested_orelse(self):
 
-    def f(x):
+    def test_fn(x):
       y = x * x if x > 0 else x if x else 1
       return y
 
-    self.assertTransformedEquivalent(f, -2)
-    self.assertTransformedEquivalent(f, 0)
-    self.assertTransformedEquivalent(f, 2)
+    self.assertTransformedEquivalent(test_fn, -2)
+    self.assertTransformedEquivalent(test_fn, 0)
+    self.assertTransformedEquivalent(test_fn, 2)
 
 
 if __name__ == '__main__':

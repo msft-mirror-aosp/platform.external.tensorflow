@@ -24,7 +24,7 @@ limitations under the License.
 #include <vector>
 
 #include <gtest/gtest.h>
-#include "ruy/context.h"  // from @ruy
+#include "tensorflow/lite/experimental/ruy/context.h"
 #include "tensorflow/lite/kernels/cpu_backend_context.h"
 #include "tensorflow/lite/kernels/internal/optimized/cpu_check.h"
 #include "tensorflow/lite/kernels/internal/optimized/depthwiseconv_3x3_filter_common.h"
@@ -98,8 +98,8 @@ struct TestParam {
     const TestParam param(info.param);
     return absl::Substitute(
         "invocation_$0_quantization_$1_stride_$2_pad_$3_depth_mult_$4",
-        static_cast<int>(param.forced_invocation),
-        static_cast<int>(param.quantization_type), param.test_stride,
+        static_cast<int>(param.quantization_type),
+        static_cast<int>(param.forced_invocation), param.test_stride,
         param.test_pad, param.test_depth_multiplier);
   }
 
@@ -398,25 +398,6 @@ inline void DispatchDepthwiseConvImpl<QuantizationType::kPerChannelInt8>(
           << " output_width = " << output_shape.Dims(2)
           << " output_height = " << output_shape.Dims(1);
 
-      // Call kernel optimized for depthwise convolutions using 3x3 filters.
-      switch (test_param.output_rounding) {
-        case DepthwiseConvOutputRounding::kUpward:
-          optimized_ops::depthwise_conv::DepthwiseConv3x3FilterPerChannel<
-              DepthwiseConvOutputRounding::kUpward>(
-              params, params.output_multiplier_per_channel,
-              params.output_shift_per_channel, input_shape, input_data,
-              filter_shape, filter_data, bias_shape, bias_data, output_shape,
-              output_data,
-              /*thread_start=*/0,
-              /*thread_end=*/output_shape.Dims(1), /*thread_dim=*/1);
-          return;
-        case DepthwiseConvOutputRounding::kAwayFromZero:
-        default:
-          // Error case, unsupported. This break sends execution down to
-          // comparison with DepthwiseConvImplementation::kNone later that
-          // reports failure.
-          break;
-      }
 #endif
       break;
     }
@@ -426,23 +407,7 @@ inline void DispatchDepthwiseConvImpl<QuantizationType::kPerChannelInt8>(
       // call this code.
 #if defined(__aarch64__) && !defined(GOOGLE_L4T) && defined(__ANDROID__) && \
     defined(__clang__)
-      DotProduct3x3KernelType kernel_type =
-          optimized_ops::depthwise_conv::CategorizeDotProductKernel<
-              QuantizationType::kPerChannelInt8>(
-              input_shape, filter_shape, output_shape, params,
-              params.output_shift_per_channel);
-
-      ASSERT_NE(kernel_type, DotProduct3x3KernelType::kNone)
-          << "Kernel type = " << static_cast<int>(kernel_type);
-
-      optimized_ops::depthwise_conv::DepthwiseConvDotProduct3x3Impl<
-          DepthwiseConvImplementation::kUseNeon3x3DotProduct,
-          quantization_type>(
-          params, input_shape, input_data, filter_shape, filter_data,
-          bias_shape, bias_data, output_shape, output_data,
-          /*thread_start=*/0,
-          /*thread_end=*/output_shape.Dims(1), /*thread_dim=*/1);
-      return;
+      // TODO(b/148145875): Implement ASM code for int8 per-channel.
 #endif
       break;
     }
@@ -477,12 +442,9 @@ inline void DispatchDepthwiseConvImpl<QuantizationType::kPerChannelInt8>(
 #endif
     }
     case DepthwiseConvImplementation::kUseGenericKernel: {
-      EXPECT_NE(params.output_multiplier_per_channel, nullptr);
-      EXPECT_NE(params.output_shift_per_channel, nullptr);
       DispatchDepthwiseConvGeneral<quantization_type>(
           params, input_shape, input_data, filter_shape, filter_data,
-          bias_shape, bias_data, params.output_shift_per_channel,
-          params.output_multiplier_per_channel, output_shape, output_data,
+          bias_shape, bias_data, nullptr, nullptr, output_shape, output_data,
           /*thread_start=*/0,
           /*thread_end=*/output_shape.Dims(1), /*thread_dim=*/1);
       return;
@@ -509,16 +471,15 @@ inline void DispatchDepthwiseConvImpl<QuantizationType::kPerChannelInt8>(
       << " buffer need = " << input_shape.Dims(3) * input_shape.Dims(2) * 6
       << " input_offset = " << params.input_offset;
 
-  EXPECT_NE(params.output_multiplier_per_channel, nullptr);
-  EXPECT_NE(params.output_shift_per_channel, nullptr);
-
+#if 0
+  // TODO(b/148145875): Implement dispatch to per-channel.
   CpuBackendContext backend_context;
   backend_context.SetMaxNumThreads(test_param.num_threads);
-  optimized_integer_ops::DepthwiseConvPerChannel(
-      params, params.output_multiplier_per_channel,
-      params.output_shift_per_channel, input_shape, input_data, filter_shape,
-      filter_data, bias_shape, bias_data, output_shape, output_data,
-      &backend_context);
+  optimized_ops::DepthwiseConv<
+      typename QuantizationTypeImpl<quantization_type>::ExternalType, int32>(
+      params, input_shape, input_data, filter_shape, filter_data, bias_shape,
+      bias_data, output_shape, output_data, &backend_context);
+#endif
 }
 
 template <QuantizationType quantization_type>
@@ -1074,9 +1035,13 @@ void TestOneDepthwiseConv3x3Filter(
 void TestOneNeonDot3x3(const TestParam& test_param) {
 #if defined(__aarch64__) && !defined(GOOGLE_L4T) && defined(__ANDROID__) && \
     defined(__clang__)
-  CpuFlags cpu_flags;
-  GetCpuFlags(&cpu_flags);
-  const bool has_dot_product_instructions = cpu_flags.neon_dotprod;
+  CpuBackendContext backend_context;
+  ruy::Context* ruy_context = backend_context.ruy_context();
+  const auto ruy_paths = ruy_context != nullptr
+                             ? ruy_context->GetRuntimeEnabledPaths()
+                             : ruy::Path::kNone;
+  const bool has_dot_product_instructions =
+      (ruy_paths & ruy::Path::kNeonDotprod) != ruy::Path::kNone;
   if (test_param.forced_invocation ==
           DepthwiseConvImplementation::kUseNeon3x3DotProduct &&
       !has_dot_product_instructions) {
@@ -1089,7 +1054,7 @@ void TestOneNeonDot3x3(const TestParam& test_param) {
 }
 
 TEST(TestDepthwiseConv, TestDepthwiseConv) {
-  const int kTestsToRun = 1000;
+  const int kTestsToRun = 10 * 1000;
   for (int i = 0; i < kTestsToRun; i++) {
     TestOneDepthwiseConv(DepthwiseConvImplementation::kNone,
                          DepthwiseConvOutputRounding::kAwayFromZero);
@@ -1098,7 +1063,7 @@ TEST(TestDepthwiseConv, TestDepthwiseConv) {
 
 // Run basic coverage test against the generic kernel.
 TEST(TestDepthwiseConv, TestGenericKernel) {
-  const int kTestsToRun = 1000;
+  const int kTestsToRun = 10 * 1000;
   for (int i = 0; i < kTestsToRun; i++) {
     TestOneDepthwiseConv(DepthwiseConvImplementation::kUseGenericKernel,
                          DepthwiseConvOutputRounding::kAwayFromZero);
@@ -1107,7 +1072,7 @@ TEST(TestDepthwiseConv, TestGenericKernel) {
 
 #if defined(__aarch64__) && !defined(GOOGLE_L4T)
 TEST(TestDepthwiseConv, TestNeon3x3FilterAway) {
-  const int kTestsToRun = 500;
+  const int kTestsToRun = 1000;
   for (int i = 0; i < kTestsToRun; i++) {
     TestOneDepthwiseConv3x3Filter(DepthwiseConvImplementation::kUseNeon3x3,
                                   DepthwiseConvOutputRounding::kAwayFromZero);
@@ -1115,7 +1080,7 @@ TEST(TestDepthwiseConv, TestNeon3x3FilterAway) {
 }
 
 TEST(TestDepthwiseConv, TestNeon3x3FilterUpward) {
-  const int kTestsToRun = 500;
+  const int kTestsToRun = 1000;
   for (int i = 0; i < kTestsToRun; i++) {
     TestOneDepthwiseConv3x3Filter(DepthwiseConvImplementation::kUseNeon3x3,
                                   DepthwiseConvOutputRounding::kUpward);
@@ -1148,7 +1113,7 @@ INSTANTIATE_TEST_SUITE_P(
     Neon3x3KernelAway, DepthwiseConvTest,
     testing::Combine(
         Values(DepthwiseConvImplementation::kUseNeon3x3),  // forced_invocation
-        Values(500),                                       // tests_to_run
+        Values(1000),                                      // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),     // quantization_type
         Bool(),                                            // test_stride
         Values(false),                                     // test_pad
@@ -1163,23 +1128,8 @@ INSTANTIATE_TEST_SUITE_P(
     Neon3x3KernelUpward, DepthwiseConvTest,
     testing::Combine(
         Values(DepthwiseConvImplementation::kUseNeon3x3),  // forced_invocation
-        Values(500),                                       // tests_to_run
+        Values(1000),                                      // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),     // quantization_type
-        Bool(),                                            // test_stride
-        Values(false),                                     // test_pad
-        Values(false),                                 // test_depth_multiplier
-        Values(DepthwiseConvOutputRounding::kUpward),  // output_rounding
-        Values(1),                                     // num_threads
-        Values(false)                                  // loose_tolerance
-        ),
-    TestParam::TestNameSuffix);
-
-INSTANTIATE_TEST_SUITE_P(
-    Neon3x3KernelUpwardPerChannel, DepthwiseConvTest,
-    testing::Combine(
-        Values(DepthwiseConvImplementation::kUseNeon3x3),  // forced_invocation
-        Values(500),                                       // tests_to_run
-        Values(QuantizationType::kPerChannelInt8),         // quantization_type
         Bool(),                                            // test_stride
         Values(false),                                     // test_pad
         Values(false),                                 // test_depth_multiplier
@@ -1209,27 +1159,11 @@ INSTANTIATE_TEST_SUITE_P(
     TestParam::TestNameSuffix);
 
 INSTANTIATE_TEST_SUITE_P(
-    GenericKernelPerChannel, DepthwiseConvTest,
-    testing::Combine(
-        Values(DepthwiseConvImplementation::
-                   kUseGenericKernel),              // forced_invocation
-        Values(100),                                // tests_to_run
-        Values(QuantizationType::kPerChannelInt8),  // quantization_type
-        Bool(),                                     // test_stride
-        Bool(),                                     // test_pad
-        Bool(),                                     // test_depth_multiplier
-        Values(DepthwiseConvOutputRounding::kAwayFromZero),  // output_rounding
-        Values(1),                                           // num_threads
-        Values(false)                                        // loose_tolerance
-        ),
-    TestParam::TestNameSuffix);
-
-INSTANTIATE_TEST_SUITE_P(
     CModel, DepthwiseConvTest,
     testing::Combine(
         Values(DepthwiseConvImplementation::
                    kUseCModel3x3DotProduct),            // forced_invocation
-        Values(200),                                    // tests_to_run
+        Values(1000),                                   // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),  // quantization_type
         Bool(),                                         // test_stride
         Bool(),                                         // test_pad
@@ -1245,7 +1179,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         Values(DepthwiseConvImplementation::
                    kUseUnwound3x3DotProduct),           // forced_invocation
-        Values(200),                                    // tests_to_run
+        Values(1000),                                   // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),  // quantization_type
         Bool(),                                         // test_stride
         Bool(),                                         // test_pad
@@ -1265,7 +1199,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         Values(DepthwiseConvImplementation::
                    kUseIntrinsics3x3DotProduct),        // forced_invocation
-        Values(200),                                    // tests_to_run
+        Values(1000),                                   // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),  // quantization_type
         Bool(),                                         // test_stride
         Bool(),                                         // test_pad
@@ -1285,7 +1219,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         Values(DepthwiseConvImplementation::
                    kUseIntrinsics3x3DotProduct),       // forced_invocation
-        Values(200),                                   // tests_to_run
+        Values(1000),                                  // tests_to_run
         Values(QuantizationType::kPerChannelInt8),     // quantization_type
         Bool(),                                        // test_stride
         Bool(),                                        // test_pad
@@ -1306,7 +1240,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Combine(
         Values(DepthwiseConvImplementation::
                    kUseNeon3x3DotProduct),              // forced_invocation
-        Values(200),                                    // tests_to_run
+        Values(1000),                                   // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),  // quantization_type
         Bool(),                                         // test_stride
         Bool(),                                         // test_pad
@@ -1317,29 +1251,13 @@ INSTANTIATE_TEST_SUITE_P(
         ),
     TestParam::TestNameSuffix);
 
-INSTANTIATE_TEST_SUITE_P(
-    NeonAsmPerChannel, DepthwiseConvTest,
-    testing::Combine(
-        Values(DepthwiseConvImplementation::
-                   kUseNeon3x3DotProduct),             // forced_invocation
-        Values(200),                                   // tests_to_run
-        Values(QuantizationType::kPerChannelInt8),     // quantization_type
-        Bool(),                                        // test_stride
-        Bool(),                                        // test_pad
-        Bool(),                                        // test_depth_multiplier
-        Values(DepthwiseConvOutputRounding::kUpward),  // output_rounding
-        Values(1),                                     // num_threads
-        Values(false)                                  // loose_tolerance
-        ),
-    TestParam::TestNameSuffix);
-
 // Apply the 3x3 tests through the dispatch.
 // Also test multi-threading. This assumes upward rounding.
 INSTANTIATE_TEST_SUITE_P(
     Dispatch3x3, DepthwiseConvTest,
     testing::Combine(
         Values(DepthwiseConvImplementation::kNone),     // forced_invocation
-        Values(200),                                    // tests_to_run
+        Values(1000),                                   // tests_to_run
         Values(QuantizationType::kNonPerChannelUint8),  // quantization_type
         Bool(),                                         // test_stride
         Bool(),                                         // test_pad
@@ -1347,21 +1265,6 @@ INSTANTIATE_TEST_SUITE_P(
         Values(DepthwiseConvOutputRounding::kUpward),   // output_rounding
         Values(4),                                      // num_threads
         Values(false)                                   // loose_tolerance
-        ),
-    TestParam::TestNameSuffix);
-
-INSTANTIATE_TEST_SUITE_P(
-    Dispatch3x3PerChannel, DepthwiseConvTest,
-    testing::Combine(
-        Values(DepthwiseConvImplementation::kNone),    // forced_invocation
-        Values(200),                                   // tests_to_run
-        Values(QuantizationType::kPerChannelInt8),     // quantization_type
-        Bool(),                                        // test_stride
-        Bool(),                                        // test_pad
-        Bool(),                                        // test_depth_multiplier
-        Values(DepthwiseConvOutputRounding::kUpward),  // output_rounding
-        Values(4),                                     // num_threads
-        Values(false)                                  // loose_tolerance
         ),
     TestParam::TestNameSuffix);
 #endif

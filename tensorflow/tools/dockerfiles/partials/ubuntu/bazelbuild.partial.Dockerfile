@@ -3,25 +3,26 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     openjdk-8-jdk \
-    python3-dev \
+    ${PYTHON}-dev \
     virtualenv \
     swig
 
-RUN python3 -m pip --no-cache-dir install \
+RUN ${PIP} --no-cache-dir install \
     Pillow \
     h5py \
     keras_preprocessing \
     matplotlib \
     mock \
-    'numpy<1.19.0' \
+    numpy \
     scipy \
     sklearn \
     pandas \
     portpicker \
+    && test "${USE_PYTHON_3_NOT_2}" -eq 1 && true || ${PIP} --no-cache-dir install \
     enum34
 
-# Build and install bazel
-ENV BAZEL_VERSION 3.7.2
+ # Build and install bazel
+ENV BAZEL_VERSION 0.15.0
 WORKDIR /
 RUN mkdir /bazel && \
     cd /bazel && \

@@ -17,22 +17,17 @@ limitations under the License.
 
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/path.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/test.h"
 
 namespace tensorflow {
-namespace {
 
-string DataDependencyPath() {
-  return io::JoinPath("tensorflow", "core", "platform", "resource_loader.h");
-}
+const char kDataDependencyPath[] = "tensorflow/core/platform/resource_loader.h";
 
 TEST(ResourceLoaderTest, FindsAndOpensFile) {
-  string filepath = GetDataDependencyFilepath(DataDependencyPath());
+  string filepath = GetDataDependencyFilepath(kDataDependencyPath);
   Status s = Env::Default()->FileExists(filepath);
   EXPECT_TRUE(s.ok()) << "No file found at this location: " << filepath;
 }
 
-}  // namespace
 }  // namespace tensorflow

@@ -39,41 +39,42 @@ limitations under the License.
 #include "tensorflow/core/kernels/fill_functor.h"
 #include "tensorflow/core/platform/macros.h"
 
+#ifdef TENSORFLOW_USE_SYCL
+#include "tensorflow/core/common_runtime/sycl/sycl_util.h"
+#endif  // TENSORFLOW_USE_SYCL
 
 namespace tensorflow {
 
 namespace {
 
-NodeDef StripTensorDataFromNodeDef(OpKernelConstruction* ctx) {
+std::unique_ptr<const NodeDef> StripTensorDataFromNodeDef(
+    OpKernelConstruction* ctx) {
+#ifndef __ANDROID__
+  DCHECK_EQ(NodeDef::descriptor()->field_count(), 6)
+      << "The NodeDef format has changed, and the attr-stripping code may need "
+      << "to be updated.";
+#endif
   const NodeDef& original = ctx->def();
-  if (std::is_base_of<protobuf::Message, NodeDef>()) {
-    DCHECK_EQ(reinterpret_cast<const protobuf::Message*>(&original)
-                  ->GetDescriptor()
-                  ->field_count(),
-              6)
-        << "The NodeDef format has changed, and the attr-stripping code may "
-           "need to be updated.";
-  }
-  NodeDef ret;
-  ret.set_name(original.name());
-  ret.set_op(original.op());
-  ret.set_device(original.device());
+  NodeDef* ret = new NodeDef;
+  ret->set_name(original.name());
+  ret->set_op(original.op());
+  ret->set_device(original.device());
   // Strip the "value" attr from the returned NodeDef.
   // NOTE(mrry): The present implementation of `OpKernel::OpKernel()` only uses
   // attrs that affect the cardinality of list-typed inputs and outputs, so it
   // is safe to drop other attrs from the NodeDef.
-  AddNodeAttr("dtype", ctx->output_type(0), &ret);
-  MergeDebugInfo(original, &ret);
-  return ret;
+  AddNodeAttr("dtype", ctx->output_type(0), ret);
+  MergeDebugInfo(original, ret);
+  return std::unique_ptr<const NodeDef>(ret);
 }
 
 }  // namespace
 
 ConstantOp::ConstantOp(OpKernelConstruction* ctx)
-    : OpKernel(ctx, StripTensorDataFromNodeDef(ctx), false),
+    : OpKernel(ctx, StripTensorDataFromNodeDef(ctx)),
       tensor_(ctx->output_type(0)) {
   const TensorProto* proto = nullptr;
-  ScopedMemoryDebugAnnotation op_annotation(name_view().data());
+  MEMDEBUG_CACHE_OP(ctx->def().name().c_str());
   OP_REQUIRES_OK(ctx, ctx->GetAttr("value", &proto));
   OP_REQUIRES_OK(ctx, ctx->device()->MakeTensorFromProto(
                           *proto, AllocatorAttributes(), &tensor_));
@@ -94,7 +95,6 @@ void ConstantOp::Compute(OpKernelContext* ctx) {
 ConstantOp::~ConstantOp() {}
 
 REGISTER_KERNEL_BUILDER(Name("Const").Device(DEVICE_CPU), ConstantOp);
-REGISTER_KERNEL_BUILDER(Name("Const").Device(DEVICE_TPU_SYSTEM), ConstantOp);
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
     (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
@@ -124,9 +124,33 @@ REGISTER_KERNEL(GPU, Variant);
 #undef REGISTER_KERNEL
 #endif
 
+#ifdef TENSORFLOW_USE_SYCL
+#define REGISTER_SYCL_KERNEL(D, TYPE)                                 \
+  REGISTER_KERNEL_BUILDER(                                            \
+      Name("Const").Device(DEVICE_##D).TypeConstraint<TYPE>("dtype"), \
+      ConstantOp);
+REGISTER_SYCL_KERNEL(SYCL, float);
+REGISTER_SYCL_KERNEL(SYCL, double);
+REGISTER_SYCL_KERNEL(SYCL, uint8);
+REGISTER_SYCL_KERNEL(SYCL, int8);
+REGISTER_SYCL_KERNEL(SYCL, qint8);
+REGISTER_SYCL_KERNEL(SYCL, uint16);
+REGISTER_SYCL_KERNEL(SYCL, int16);
+REGISTER_SYCL_KERNEL(SYCL, qint16);
+REGISTER_SYCL_KERNEL(SYCL, quint16);
+REGISTER_SYCL_KERNEL(SYCL, uint32);
+REGISTER_SYCL_KERNEL(SYCL, qint32);
+REGISTER_SYCL_KERNEL(SYCL, int64);
+REGISTER_SYCL_KERNEL(SYCL, uint64);
+REGISTER_SYCL_KERNEL(SYCL, bool);
+#undef REGISTER_SYCL_KERNEL
+#endif
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
 typedef Eigen::GpuDevice GPUDevice;
+#ifdef TENSORFLOW_USE_SYCL
+typedef Eigen::SyclDevice SYCLDevice;
+#endif  // TENSORFLOW_USE_SYCL
 
 template <typename Device, typename T, typename Index>
 class FillOp : public OpKernel {
@@ -185,11 +209,28 @@ TF_CALL_ALL_TYPES(REGISTER_CPU_KERNEL);
 // the conversion from uint8 to quint8.
 REGISTER_KERNEL(CPU, quint8);
 REGISTER_KERNEL(CPU, quint16);
-REGISTER_KERNEL(CPU, qint8);
-REGISTER_KERNEL(CPU, qint16);
-REGISTER_KERNEL(CPU, qint32);
+REGISTER_KERNEL(CPU, uint32);
 #undef REGISTER_CPU_KERNEL
 
+#ifdef TENSORFLOW_USE_SYCL
+REGISTER_KERNEL(SYCL, float);
+REGISTER_KERNEL(SYCL, double);
+REGISTER_KERNEL(SYCL, uint8);
+REGISTER_KERNEL(SYCL, int8);
+REGISTER_KERNEL(SYCL, uint16);
+REGISTER_KERNEL(SYCL, int16);
+REGISTER_KERNEL(SYCL, int64);
+
+REGISTER_KERNEL_BUILDER(Name("Fill")
+                            .Device(DEVICE_SYCL)
+                            .TypeConstraint<int32>("T")
+                            .TypeConstraint<int32>("index_type")
+                            .HostMemory("dims")
+                            .HostMemory("value")
+                            .HostMemory("output"),
+                        FillOp<CPUDevice, int32, int32>);
+#undef REGISTER_KERNEL_SYCL
+#endif  // TENSORFLOW_USE_SYCL
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
     (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
@@ -264,6 +305,17 @@ TF_CALL_POD_STRING_TYPES(REGISTER_CPU);
 REGISTER_CPU(Variant);
 #undef REGISTER_CPU
 
+#ifdef TENSORFLOW_USE_SYCL
+REGISTER_KERNEL(bool, SYCL);
+REGISTER_KERNEL(float, SYCL);
+REGISTER_KERNEL(double, SYCL);
+REGISTER_KERNEL(int64, SYCL);
+REGISTER_KERNEL_BUILDER(Name("ZerosLike")
+                            .Device(DEVICE_SYCL)
+                            .TypeConstraint<int32>("T")
+                            .HostMemory("y"),
+                        ZerosLikeOp<CPUDevice, int32>);
+#endif  // TENSORFLOW_USE_SYCL
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
     (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
@@ -309,6 +361,15 @@ class OnesLikeOp : public OpKernel {
 TF_CALL_POD_TYPES(REGISTER_CPU);
 #undef REGISTER_CPU
 
+#ifdef TENSORFLOW_USE_SYCL
+REGISTER_KERNEL(float, SYCL);
+REGISTER_KERNEL(bool, SYCL);
+REGISTER_KERNEL_BUILDER(Name("OnesLike")
+                            .Device(DEVICE_SYCL)
+                            .TypeConstraint<int32>("T")
+                            .HostMemory("y"),
+                        OnesLikeOp<CPUDevice, int32>);
+#endif  // TENSORFLOW_USE_SYCL
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
     (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)

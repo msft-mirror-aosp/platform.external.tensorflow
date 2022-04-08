@@ -12,11 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#if CUBLAS_VER_MAJOR >= 11
-#include "third_party/gpus/cuda/include/cublas_v2.h"
-#else
 #include "third_party/gpus/cuda/include/cublas.h"
-#endif
 #include "third_party/gpus/cuda/include/cuda.h"
 #include "tensorflow/stream_executor/lib/env.h"
 #include "tensorflow/stream_executor/platform/dso_loader.h"
@@ -61,14 +57,11 @@ cublasStatus_t GetSymbolNotFoundError() { return CUBLAS_STATUS_INTERNAL_ERROR; }
 typedef enum {} cublasMath_t;
 #endif
 
-#if CUDA_VERSION < 10000
+// Parameter constness changed in cuBLAS 9.2
+#if CUDA_VERSION < 9020
 #include "tensorflow/stream_executor/cuda/cublas_9_0.inc"
 #elif CUDA_VERSION < 10010
 #include "tensorflow/stream_executor/cuda/cublas_10_0.inc"
-#elif CUDA_VERSION < 10020
-#include "tensorflow/stream_executor/cuda/cublas_10_1.inc"
-#elif CUDA_VERSION < 11000
-#include "tensorflow/stream_executor/cuda/cublas_10_2.inc"
 #else
-#include "tensorflow/stream_executor/cuda/cublas_11_0.inc"
+#include "tensorflow/stream_executor/cuda/cublas_10_1.inc"
 #endif

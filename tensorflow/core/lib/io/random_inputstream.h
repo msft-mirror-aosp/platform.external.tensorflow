@@ -35,7 +35,7 @@ class RandomAccessInputStream : public InputStreamInterface {
 
   Status ReadNBytes(int64 bytes_to_read, tstring* result) override;
 
-#if defined(TF_CORD_SUPPORT)
+#if defined(PLATFORM_GOOGLE)
   Status ReadNBytes(int64 bytes_to_read, absl::Cord* result) override;
 #endif
 

@@ -19,7 +19,6 @@ from __future__ import print_function
 
 import gzip
 import os
-import pathlib
 import zlib
 
 from absl.testing import parameterized
@@ -187,15 +186,6 @@ class TFRecordDatasetTest(test_base.DatasetTestBase, parameterized.TestCase):
     dataset = readers.TFRecordDataset(files, num_parallel_reads=4)
     self.assertDatasetProduces(
         dataset, expected_output=expected_output * 10, assert_items_equal=True)
-
-  @combinations.generate(test_base.default_test_combinations())
-  def testDatasetPathlib(self):
-    files = [pathlib.Path(self.test_filenames[0])]
-
-    expected_output = [self._record(0, i) for i in range(self._num_records)]
-    ds = readers.TFRecordDataset(files)
-    self.assertDatasetProduces(
-        ds, expected_output=expected_output, assert_items_equal=True)
 
 
 if __name__ == "__main__":

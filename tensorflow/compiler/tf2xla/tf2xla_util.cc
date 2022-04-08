@@ -143,7 +143,7 @@ Status ReplaceArgUsageWithConstNode(
       usages.push_back({e->dst()->id(), e->dst_input()});
     }
 
-    for (int i = 0, end = usages.size(); i < end; i++) {
+    for (int i = 0; i < usages.size(); i++) {
       // Make a copy of `usage_node`, and change its input to const node.
       Node* usage_node = g->FindNodeId(usages[i].dst_node_id);
       NodeDef replace_def = usage_node->def();
@@ -158,7 +158,7 @@ Status ReplaceArgUsageWithConstNode(
 
       // Later entries in `usages` might have `usage_node` as dst node, but
       // `usage_node` is removed. Replace such entries with `replace_node`.
-      for (int j = i + 1, end = usages.size(); j < end; j++) {
+      for (int j = i + 1; j < usages.size(); j++) {
         if (usages[j].dst_node_id == usages[i].dst_node_id) {
           usages[j].dst_node_id = replace_node->id();
         }
@@ -199,16 +199,12 @@ Status PropagateConstIntoFuncAttr(
       fld->UniqueFunctionName(absl::StrCat(func_attr.name(), "_const_"));
   TF_RETURN_IF_ERROR(
       GraphToFunctionDef(*func_graph, new_func_name, &replace_fdef));
-  TF_RETURN_IF_ERROR(fld->AddFunctionDef(
-      replace_fdef, lookup_fld->GetStackTraces(func_attr.name())));
+  TF_RETURN_IF_ERROR(fld->AddFunctionDef(replace_fdef));
 
   // Change the node to use rewritten function.
   func_attr.set_name(new_func_name);
   n->ClearAttr(attr_name);
   n->AddAttr(attr_name, func_attr);
-
-  TF_RETURN_IF_ERROR(fld->AddFunctionDef(
-      replace_fdef, lookup_fld->GetStackTraces(func_attr.name())));
 
   // Copy associated functions.
   TF_RETURN_IF_ERROR(CopyAssociatedFunctions(func_graph, lookup_fld, fld));
@@ -306,7 +302,6 @@ Status PropagateConstIntoWhileNode(Graph* g, Node* while_node,
 
 }  // namespace
 
-const char kTpuReplicateAttrName[] = "_tpu_replicate";
 const char kXlaOutsideCompilationAttrName[] = "_xla_outside_compilation";
 
 Status ValidateConfig(const tf2xla::Config& config) {
@@ -407,7 +402,7 @@ Status AddPlaceholdersForFeeds(
     // TODO(shikharagarwal): Add original node information.
     NodeDef* d = graph_def->add_node();
     d->set_name(info.placeholder_name);
-    d->set_op("Placeholder");
+    d->set_op("PlaceholderV2");
     auto& attr_map = *d->mutable_attr();
     attr_map["dtype"].set_type(info.data_type);
     *attr_map["shape"].mutable_shape() = info.feed->shape();
@@ -507,8 +502,7 @@ Status SetNodeShardingFromNeighbors(Node* n, bool out_edges) {
         absl::optional<xla::OpSharding> sharding,
         ParseShardingFromDevice(
             *possible_match,
-            /*num_cores_per_replica=*/std::numeric_limits<int32>::max(),
-            /*add_metadata=*/false));
+            /*num_cores_per_replica=*/std::numeric_limits<int32>::max()));
     if (sharding && sharding->type() == xla::OpSharding::MAXIMAL) {
       const int core_annotation = sharding.value().tile_assignment_devices(0);
       if (core == -1 || core > core_annotation) {
@@ -627,7 +621,7 @@ Status RewriteAssociatedFunction(
       NodeDebugInfo debug_info(*node);
       NodeDefBuilder builder(node->name(), rewritten_function_name, fld,
                              &debug_info);
-      for (const auto& attr : node->attrs()) {
+      for (auto attr : node->attrs()) {
         builder.Attr(attr.first, attr.second);
       }
       for (int i = 0; i < node->num_inputs(); i++) {
@@ -701,7 +695,7 @@ Status CachedFunctionHandles::GetOrInstantiate(
 
 Status CachedFunctionHandles::ReleaseAllHandles() {
   Status result;
-  for (const auto& iter : handles_) {
+  for (auto iter : handles_) {
     result.Update(flr_->ReleaseHandle(iter.second));
   }
   handles_.clear();

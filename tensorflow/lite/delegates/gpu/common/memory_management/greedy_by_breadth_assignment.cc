@@ -16,13 +16,12 @@ limitations under the License.
 #include "tensorflow/lite/delegates/gpu/common/memory_management/greedy_by_breadth_assignment.h"
 
 #include <algorithm>
-#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <set>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "tensorflow/lite/delegates/gpu/common/memory_management/internal.h"
-#include "tensorflow/lite/delegates/gpu/common/memory_management/types.h"
 
 namespace tflite {
 namespace gpu {
@@ -47,7 +46,7 @@ struct TaskBreadthWithId {
 
 }  // namespace
 
-absl::Status GreedyByBreadthAssignment(
+Status GreedyByBreadthAssignment(
     const std::vector<TensorUsageRecord<size_t>>& usage_records,
     ObjectsAssignment<size_t>* assignment) {
   std::vector<TaskProfile> task_profiles = CalculateTaskProfiles(usage_records);
@@ -134,10 +133,10 @@ absl::Status GreedyByBreadthAssignment(
   // In the end all tensors must be assigned to some objects.
   for (const auto& obj_id : assignment->object_ids) {
     if (obj_id == kNotAssigned) {
-      return absl::InternalError("Error while calculating the assignment.");
+      return InternalError("Error while calculating the assignment.");
     }
   }
-  return absl::OkStatus();
+  return OkStatus();
 }
 
 }  // namespace gpu

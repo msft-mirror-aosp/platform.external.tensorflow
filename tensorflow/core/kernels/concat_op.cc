@@ -35,6 +35,9 @@ typedef Eigen::ThreadPoolDevice CPUDevice;
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 typedef Eigen::GpuDevice GPUDevice;
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#ifdef TENSORFLOW_USE_SYCL
+typedef Eigen::SyclDevice SYCLDevice;
+#endif  // TENSORFLOW_USE_SYCL
 
 enum AxisArgumentName { NAME_IS_AXIS, NAME_IS_CONCAT_DIM };
 
@@ -45,60 +48,53 @@ class ConcatBaseOp : public OpKernel {
   typedef std::vector<std::unique_ptr<typename TTypes<T, 2>::ConstMatrix>>
       ConstMatrixVector;
 
-  explicit ConcatBaseOp(OpKernelConstruction* c)
-      : OpKernel(c),
-        axis_attribute_name_(AxisArgName == NAME_IS_AXIS
-                                 ? "axis"
-                                 : AxisArgName == NAME_IS_CONCAT_DIM
-                                       ? "concat_dim"
-                                       : "<invalid>") {
-    int unused;
-    OP_REQUIRES_OK(
-        c, InputRange(axis_attribute_name_, &axis_input_index_, &unused));
-    OP_REQUIRES_OK(c, InputRange("values", &values_input_start_index_,
-                                 &values_input_end_index_));
-  }
+  explicit ConcatBaseOp(OpKernelConstruction* c) : OpKernel(c) {}
 
   void Compute(OpKernelContext* c) override {
-    const Tensor& concat_dim_tensor = c->input(axis_input_index_);
-
+    const Tensor* concat_dim_tensor;
+    const char* axis_attribute_name =
+        AxisArgName == NAME_IS_AXIS
+            ? "axis"
+            : AxisArgName == NAME_IS_CONCAT_DIM ? "concat_dim" : "<invalid>";
+    OP_REQUIRES_OK(c, c->input(axis_attribute_name, &concat_dim_tensor));
     // TODO(rmlarsen): Disallow legacy use of length-1 vectors as scalars.
     OP_REQUIRES(c,
-                (TensorShapeUtils::IsScalar(concat_dim_tensor.shape()) ||
-                 (TensorShapeUtils::IsVector(concat_dim_tensor.shape()) &&
-                  concat_dim_tensor.shape().dim_size(0) == 1)),
+                (TensorShapeUtils::IsScalar(concat_dim_tensor->shape()) ||
+                 (TensorShapeUtils::IsVector(concat_dim_tensor->shape()) &&
+                  concat_dim_tensor->shape().dim_size(0) == 1)),
                 errors::InvalidArgument(
-                    axis_attribute_name_,
+                    axis_attribute_name,
                     " tensor should be a scalar integer, but got shape ",
-                    concat_dim_tensor.shape().DebugString()));
+                    concat_dim_tensor->shape().DebugString()));
     int64 concat_dim;
     // In case of ConcatV2, "axis" could be int32 or int64
     if (AxisArgName == NAME_IS_AXIS) {
       OP_REQUIRES(
           c,
-          (concat_dim_tensor.dtype() == DT_INT32 ||
-           concat_dim_tensor.dtype() == DT_INT64),
-          errors::InvalidArgument(axis_attribute_name_,
+          (concat_dim_tensor->dtype() == DT_INT32 ||
+           concat_dim_tensor->dtype() == DT_INT64),
+          errors::InvalidArgument(axis_attribute_name,
                                   " tensor should be int32 or int64, but got ",
-                                  DataTypeString(concat_dim_tensor.dtype())));
+                                  DataTypeString(concat_dim_tensor->dtype())));
     } else {
-      OP_REQUIRES(c, (concat_dim_tensor.dtype() == DT_INT32),
+      OP_REQUIRES(c, (concat_dim_tensor->dtype() == DT_INT32),
                   errors::InvalidArgument(
-                      axis_attribute_name_, " tensor should be int32, but got ",
-                      DataTypeString(concat_dim_tensor.dtype())));
+                      axis_attribute_name, " tensor should be int32, but got ",
+                      DataTypeString(concat_dim_tensor->dtype())));
     }
-    if (concat_dim_tensor.dtype() == DT_INT32) {
+    if (concat_dim_tensor->dtype() == DT_INT32) {
       concat_dim =
-          internal::SubtleMustCopy(concat_dim_tensor.scalar<int32>()());
+          internal::SubtleMustCopy(concat_dim_tensor->scalar<int32>()());
     } else {
       concat_dim =
-          internal::SubtleMustCopy(concat_dim_tensor.scalar<int64>()());
+          internal::SubtleMustCopy(concat_dim_tensor->scalar<int64>()());
     }
 
-    const int N = values_input_end_index_ - values_input_start_index_;
-    const Tensor& first_input = c->input(values_input_start_index_);
-    const int input_dims = first_input.dims();
-    const TensorShape& input_shape = first_input.shape();
+    OpInputList values;
+    OP_REQUIRES_OK(c, c->input_list("values", &values));
+    const int N = values.size();
+    const int input_dims = values[0].dims();
+    const TensorShape& input_shape = values[0].shape();
 
     int32 axis = concat_dim < 0 ? concat_dim + input_dims : concat_dim;
     // concat_dim==0 allows concatenating a list of scalars into a vector.
@@ -120,7 +116,7 @@ class ConcatBaseOp : public OpKernel {
     }
     int64 output_concat_dim = 0;
     for (int i = 0; i < N; ++i) {
-      const auto& in = c->input(values_input_start_index_ + i);
+      const auto& in = values[i];
       OP_REQUIRES(
           c, in.dims() == input_dims,
           errors::InvalidArgument(
@@ -141,7 +137,7 @@ class ConcatBaseOp : public OpKernel {
       if (in.NumElements() > 0) {
         int64 inputs_flat_dim1 = in.NumElements() / inputs_flat_dim0;
         inputs_flat.emplace_back(new typename TTypes<T, 2>::ConstMatrix(
-            in.template shaped<T, 2>({inputs_flat_dim0, inputs_flat_dim1})));
+            in.shaped<T, 2>({inputs_flat_dim0, inputs_flat_dim1})));
       }
       // TODO(rmlarsen): Remove check once !allow_legacy_scalars()?
       output_concat_dim += in.dims() > 0 ? in.dim_size(axis) : 1;
@@ -165,15 +161,15 @@ class ConcatBaseOp : public OpKernel {
         return;
       }
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#ifdef TENSORFLOW_USE_SYCL
+      if (std::is_same<Device, SYCLDevice>::value) {
+        ConcatSYCL<T>(c->eigen_sycl_device(), inputs_flat, &output_flat);
+        return;
+      }
+#endif  // TENSORFLOW_USE_SYCL
       ConcatCPU<T>(c->device(), inputs_flat, &output_flat);
     }
   }
-
- private:
-  const char* const axis_attribute_name_;
-  int axis_input_index_;
-  int values_input_start_index_;
-  int values_input_end_index_;
 };
 
 template <typename Device, typename T>
@@ -199,6 +195,8 @@ REGISTER_CONCAT(qint8);
 REGISTER_CONCAT(quint16);
 REGISTER_CONCAT(qint16);
 REGISTER_CONCAT(qint32);
+REGISTER_CONCAT(uint32);
+REGISTER_CONCAT(uint64);
 
 #undef REGISTER_CONCAT
 
@@ -216,9 +214,13 @@ REGISTER_CONCAT(qint32);
                               .HostMemory("axis"),       \
                           ConcatV2Op<GPUDevice, type>)
 
-TF_CALL_INTEGRAL_TYPES_NO_INT32(REGISTER_GPU);
-TF_CALL_bfloat16(REGISTER_GPU);
-TF_CALL_GPU_ALL_TYPES(REGISTER_GPU);
+TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
+REGISTER_GPU(bfloat16);
+TF_CALL_uint8(REGISTER_GPU);
+TF_CALL_complex64(REGISTER_GPU);
+TF_CALL_complex128(REGISTER_GPU);
+TF_CALL_int64(REGISTER_GPU);
+REGISTER_GPU(bool);
 #undef REGISTER_GPU
 
 // A special GPU kernel for int32.
@@ -241,6 +243,38 @@ REGISTER_KERNEL_BUILDER(Name("ConcatV2")
 
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
+#ifdef TENSORFLOW_USE_SYCL
+#define REGISTER_SYCL(type)                              \
+  REGISTER_KERNEL_BUILDER(Name("Concat")                 \
+                              .Device(DEVICE_SYCL)       \
+                              .TypeConstraint<type>("T") \
+                              .HostMemory("concat_dim"), \
+                          ConcatOp<SYCLDevice, type>)    \
+  REGISTER_KERNEL_BUILDER(Name("ConcatV2")               \
+                              .Device(DEVICE_SYCL)       \
+                              .TypeConstraint<type>("T") \
+                              .HostMemory("axis"),       \
+                          ConcatV2Op<SYCLDevice, type>)
+
+TF_CALL_GPU_NUMBER_TYPES_NO_HALF(REGISTER_SYCL);
+
+REGISTER_KERNEL_BUILDER(Name("Concat")
+                            .Device(DEVICE_SYCL)
+                            .TypeConstraint<int32>("T")
+                            .HostMemory("concat_dim")
+                            .HostMemory("values")
+                            .HostMemory("output"),
+                        ConcatOp<CPUDevice, int32>);
+REGISTER_KERNEL_BUILDER(Name("ConcatV2")
+                            .Device(DEVICE_SYCL)
+                            .TypeConstraint<int32>("T")
+                            .HostMemory("values")
+                            .HostMemory("axis")
+                            .HostMemory("output"),
+                        ConcatV2Op<CPUDevice, int32>);
+
+#undef REGISTER_SYCL
+#endif  // TENSORFLOW_USE_SYCL
 
 class ConcatOffsetOp : public OpKernel {
  public:
@@ -328,4 +362,12 @@ REGISTER_KERNEL_BUILDER(Name("ConcatOffset")
                             .HostMemory("offset"),
                         ConcatOffsetOp);
 
+#ifdef TENSORFLOW_USE_SYCL
+REGISTER_KERNEL_BUILDER(Name("ConcatOffset")
+                            .Device(DEVICE_SYCL)
+                            .HostMemory("concat_dim")
+                            .HostMemory("shape")
+                            .HostMemory("offset"),
+                        ConcatOffsetOp);
+#endif  // TENSORFLOW_USE_SYCL
 }  // namespace tensorflow

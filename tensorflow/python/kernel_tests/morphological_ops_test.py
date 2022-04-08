@@ -22,7 +22,7 @@ import numpy as np
 
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import test_util
-from tensorflow.python.ops import gradient_checker_v2
+from tensorflow.python.ops import gradient_checker
 from tensorflow.python.ops import nn_ops
 import tensorflow.python.ops.nn_grad  # pylint: disable=unused-import
 from tensorflow.python.platform import test
@@ -199,33 +199,32 @@ class DilationTest(test.TestCase):
     np.random.seed(1)  # Make it reproducible.
     image = np.random.random_sample(image_shape).astype(np.float32)
     kernel = np.random.random_sample(kernel_shape).astype(np.float32)
+    image_init = np.random.random_sample(image_shape).astype(np.float32)
+    kernel_init = np.random.random_sample(kernel_shape).astype(np.float32)
 
     strides = [1] + strides + [1]
     rates = [1] + rates + [1]
 
-    image_tensor = constant_op.constant(image, shape=image_shape, name="input")
-    kernel_tensor = constant_op.constant(
-        kernel, shape=kernel_shape, name="filter")
-
-    def compute_dilation2d(image_tensor, kernel_tensor):
-      return nn_ops.dilation2d(
+    with self.cached_session(use_gpu=use_gpu):
+      image_tensor = constant_op.constant(
+          image, shape=image_shape, name="input")
+      kernel_tensor = constant_op.constant(
+          kernel, shape=kernel_shape, name="filter")
+      out_tensor = nn_ops.dilation2d(
           image_tensor,
           kernel_tensor,
           strides=strides,
           rates=rates,
           padding=padding,
           name="dilation2d")
+      out_shape = self.evaluate(out_tensor).shape
 
-    with test_util.device(use_gpu=use_gpu):
-      with self.cached_session():
-        # Small delta is necessary for argmax to remain the same.
-        err1 = gradient_checker_v2.max_error(
-            *gradient_checker_v2.compute_gradient(
-                lambda x: compute_dilation2d(x, kernel_tensor), [image_tensor]))
-        err2 = gradient_checker_v2.max_error(
-            *gradient_checker_v2.compute_gradient(
-                lambda x: compute_dilation2d(image_tensor, x), [kernel_tensor]))
-        err = max(err1, err2)
+      # Small delta is necessary for argmax to remain the same.
+      err = gradient_checker.compute_gradient_error(
+          [image_tensor, kernel_tensor], [image_shape, kernel_shape],
+          out_tensor,
+          out_shape, [image_init, kernel_init],
+          delta=1e-3)
 
     print("Dilation gradient error = %f" % err)
     self.assertLess(err, 1e-4)
@@ -293,6 +292,7 @@ class DilationTest(test.TestCase):
         padding="SAME",
         use_gpu=use_gpu)
 
+  @test_util.run_deprecated_v1
   def testDilationGrad(self):
     for use_gpu in True, False:
       self._testDilationGradValidPadding_1x1x1(use_gpu)
@@ -475,33 +475,32 @@ class ErosionTest(test.TestCase):
     np.random.seed(1)  # Make it reproducible.
     image = np.random.random_sample(image_shape).astype(np.float32)
     kernel = np.random.random_sample(kernel_shape).astype(np.float32)
+    image_init = np.random.random_sample(image_shape).astype(np.float32)
+    kernel_init = np.random.random_sample(kernel_shape).astype(np.float32)
 
     strides = [1] + strides + [1]
     rates = [1] + rates + [1]
 
-    image_tensor = constant_op.constant(image, shape=image_shape, name="input")
-    kernel_tensor = constant_op.constant(
-        kernel, shape=kernel_shape, name="filter")
-
-    def compute_erosion2d(image_tensor, kernel_tensor):
-      return nn_ops.erosion2d(
+    with self.cached_session(use_gpu=use_gpu):
+      image_tensor = constant_op.constant(
+          image, shape=image_shape, name="input")
+      kernel_tensor = constant_op.constant(
+          kernel, shape=kernel_shape, name="filter")
+      out_tensor = nn_ops.erosion2d(
           image_tensor,
           kernel_tensor,
           strides=strides,
           rates=rates,
           padding=padding,
           name="erosion2d")
+      out_shape = self.evaluate(out_tensor).shape
 
-    with test_util.device(use_gpu=use_gpu):
-      with self.cached_session():
-        # Small delta is necessary for argmax to remain the same.
-        err1 = gradient_checker_v2.max_error(
-            *gradient_checker_v2.compute_gradient(
-                lambda x: compute_erosion2d(x, kernel_tensor), [image_tensor]))
-        err2 = gradient_checker_v2.max_error(
-            *gradient_checker_v2.compute_gradient(
-                lambda x: compute_erosion2d(image_tensor, x), [kernel_tensor]))
-        err = max(err1, err2)
+      # Small delta is necessary for argmax to remain the same.
+      err = gradient_checker.compute_gradient_error(
+          [image_tensor, kernel_tensor], [image_shape, kernel_shape],
+          out_tensor,
+          out_shape, [image_init, kernel_init],
+          delta=1e-3)
 
     print("Erosion gradient error = %f" % err)
     self.assertLess(err, 1e-4)
@@ -569,6 +568,7 @@ class ErosionTest(test.TestCase):
         padding="SAME",
         use_gpu=use_gpu)
 
+  @test_util.run_deprecated_v1
   def testErosionGrad(self):
     for use_gpu in True, False:
       self._testErosionGradValidPadding_1x1x1(use_gpu)

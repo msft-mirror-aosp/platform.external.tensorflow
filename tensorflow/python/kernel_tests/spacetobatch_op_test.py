@@ -101,19 +101,19 @@ class SpaceToBatchTest(test.TestCase, PythonOpImpl):
   """
 
   def _testPad(self, inputs, paddings, block_size, outputs):
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       # outputs = space_to_batch(inputs)
       x_tf = self.space_to_batch(
           math_ops.cast(inputs, dtypes.float32),
           paddings,
           block_size=block_size)
-      self.assertAllEqual(x_tf, outputs)
+      self.assertAllEqual(x_tf.eval(), outputs)
       # inputs = batch_to_space(outputs)
       x_tf = self.batch_to_space(
           math_ops.cast(outputs, dtypes.float32),
           paddings,
           block_size=block_size)
-      self.assertAllEqual(x_tf, inputs)
+      self.assertAllEqual(x_tf.eval(), inputs)
 
   def _testOne(self, inputs, block_size, outputs):
     paddings = np.zeros((2, 2), dtype=np.int32)
@@ -205,11 +205,11 @@ class SpaceToBatchNDTest(test.TestCase):
         # outputs = space_to_batch(inputs)
         x_tf = array_ops.space_to_batch_nd(
             math_ops.cast(inputs, dtypes.float32), block_shape, paddings)
-        self.assertAllEqual(x_tf, outputs)
+        self.assertAllEqual(x_tf.eval(), outputs)
         # inputs = batch_to_space(outputs)
         x_tf = array_ops.batch_to_space_nd(
             math_ops.cast(outputs, dtypes.float32), block_shape, paddings)
-        self.assertAllEqual(x_tf, inputs)
+        self.assertAllEqual(x_tf.eval(), inputs)
 
   def _testDirect(self, input_shape, block_shape, paddings):
     inputs = np.arange(np.prod(input_shape), dtype=np.float32)
@@ -327,8 +327,8 @@ class SpaceToBatchSpaceToDepth(test.TestCase, PythonOpImpl):
         array_ops.space_to_depth(
             array_ops.transpose(x, [3, 1, 2, 0]), block_size=block_size),
         [3, 1, 2, 0])
-    with self.session():
-      self.assertAllEqual(y1, y2)
+    with self.session(use_gpu=True):
+      self.assertAllEqual(y1.eval(), y2.eval())
 
 
 class SpaceToBatchSpaceToDepthCpp(SpaceToBatchSpaceToDepth, CppOpImpl):
@@ -374,7 +374,7 @@ class SpaceToBatchErrorHandlingTest(test.TestCase, PythonOpImpl):
     block_size = 10
     with self.assertRaises(ValueError):
       out_tf = self.space_to_batch(x_np, paddings, block_size)
-      self.evaluate(out_tf)
+      out_tf.eval()
 
   @test_util.run_deprecated_v1
   def testBlockSizeNotDivisibleWidth(self):
@@ -526,7 +526,7 @@ class SpaceToBatchGradientTest(test.TestCase, PythonOpImpl):
   # Check the gradients.
   def _checkGrad(self, x, paddings, block_size):
     assert 4 == x.ndim
-    with self.cached_session():
+    with self.cached_session(use_gpu=True):
       tf_x = ops.convert_to_tensor(x)
       tf_y = self.space_to_batch(tf_x, paddings, block_size)
       epsilon = 1e-5

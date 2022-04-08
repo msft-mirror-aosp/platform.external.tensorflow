@@ -15,11 +15,11 @@ limitations under the License.
 
 #include "Python.h"
 #include "absl/types/optional.h"
-#include "pybind11/chrono.h"
-#include "pybind11/complex.h"
-#include "pybind11/functional.h"
-#include "pybind11/pybind11.h"
-#include "pybind11/stl.h"
+#include "include/pybind11/chrono.h"
+#include "include/pybind11/complex.h"
+#include "include/pybind11/functional.h"
+#include "include/pybind11/pybind11.h"
+#include "include/pybind11/stl.h"
 #include "tensorflow/c/c_api.h"
 #include "tensorflow/c/c_api_experimental.h"
 #include "tensorflow/c/c_api_internal.h"
@@ -71,7 +71,7 @@ TF_Buffer* ProtoStringToTFBuffer(PyObject* input) {
 tensorflow::NameVector ConvertPyListToNameVector(
     const std::vector<py::bytes>& py_vector) {
   tensorflow::NameVector temp;
-  for (size_t i = 0; i < py_vector.size(); ++i) {
+  for (int i = 0; i < py_vector.size(); ++i) {
     const char* string_elem = PyBytes_AsString(py_vector.at(i).ptr());
     temp.push_back(string_elem);
   }
@@ -166,7 +166,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
           return out_handle;
         });
   m.def("_TF_SetTarget", TF_SetTarget);
-  m.def("_TF_SetConfig", [](TF_SessionOptions* options, py::bytes proto) {
+  m.def("_TF_SetConfig", [](TF_SessionOptions* options, py::str proto) {
     tensorflow::Safe_TF_StatusPtr status =
         tensorflow::make_safe(TF_NewStatus());
     tensorflow::Safe_TF_BufferPtr buf =
@@ -231,7 +231,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
     // Create a python list from InlinedVector
     py::list py_list;
-    for (size_t i = 0; i < result.size(); ++i) {
+    for (int i = 0; i < result.size(); ++i) {
       py_list.append(py::cast(result[i]));
     }
 
@@ -296,7 +296,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
           // Convert shapes nested vector
           std::vector<std::vector<int64_t>> shapes_local;
-          for (size_t i = 0; i < shapes.size(); ++i) {
+          for (int i = 0; i < shapes.size(); ++i) {
             std::vector<int64_t> dims;
             std::vector<int64_t> item =
                 shapes[i].has_value() ? shapes[i].value() : dims;
@@ -377,7 +377,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
           auto result = tensorflow::TF_TryEvaluateConstant_wrapper(
               graph, output, status.get());
           tensorflow::MaybeRaiseRegisteredFromTFStatus(status.get());
-          return tensorflow::PyoOrThrow(result);
+          return tensorflow::pyo_or_throw(result);
         });
 
   m.def("ExtendSession", [](TF_Session* session) {
@@ -398,7 +398,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
   });
 
   m.def("SetHandleShapeAndType",
-        [](TF_Graph* graph, TF_Output output, py::bytes proto) {
+        [](TF_Graph* graph, TF_Output output, py::str proto) {
           tensorflow::Safe_TF_StatusPtr status =
               tensorflow::make_safe(TF_NewStatus());
           tensorflow::Safe_TF_BufferPtr buf =
@@ -455,11 +455,11 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
       PyErr_SetString(PyExc_MemoryError, "Failed to create a list.");
       throw py::error_already_set();
     }
-    for (size_t i = 0; i < py_outputs.size(); ++i) {
+    for (int i = 0; i < py_outputs.size(); ++i) {
       PyList_SET_ITEM(result, i, py_outputs.at(i));
     }
 
-    return tensorflow::PyoOrThrow(result);
+    return tensorflow::pyo_or_throw(result);
   });
 
   // Do not release GIL.
@@ -505,11 +505,11 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
       PyErr_SetString(PyExc_MemoryError, "Failed to create a list.");
       throw py::error_already_set();
     }
-    for (size_t i = 0; i < py_outputs.size(); ++i) {
+    for (int i = 0; i < py_outputs.size(); ++i) {
       PyList_SET_ITEM(result, i, py_outputs.at(i));
     }
 
-    return tensorflow::PyoOrThrow(result);
+    return tensorflow::pyo_or_throw(result);
   });
 
   // Do not release GIL.
@@ -539,8 +539,8 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
     // Return out_values
     py::list py_list;
-    for (size_t i = 0; i < out_values.size(); ++i) {
-      py::object obj = tensorflow::Pyo(out_values.at(i));
+    for (int i = 0; i < out_values.size(); ++i) {
+      py::object obj = tensorflow::pyo(out_values.at(i));
       py_list.append(obj);
     }
     return py_list;
@@ -610,11 +610,11 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
           // bool.
           // Acquire GIL for returning output returning.
           pybind11::gil_scoped_acquire acquire;
-          return tensorflow::Pyo(PyLong_FromLongLong(value));
+          return tensorflow::pyo(PyLong_FromLongLong(value));
         });
 
   m.def("TF_SetAttrValueProto", [](TF_OperationDescription* desc,
-                                   const char* attr_name, py::bytes proto) {
+                                   const char* attr_name, py::str proto) {
     tensorflow::Safe_TF_StatusPtr status =
         tensorflow::make_safe(TF_NewStatus());
     tensorflow::Safe_TF_BufferPtr buf =
@@ -667,13 +667,13 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
   m.def("TF_NewBuffer", TF_NewBuffer, py::return_value_policy::reference);
   m.def("TF_GetBuffer", [](TF_Buffer* buf) {
     TF_Buffer buffer = TF_GetBuffer(buf);
-    return tensorflow::PyoOrThrow(PyBytes_FromStringAndSize(
+    return tensorflow::pyo_or_throw(PyBytes_FromStringAndSize(
         reinterpret_cast<const char*>(buffer.data), buffer.length));
   });
   m.def("TF_DeleteBuffer", &TF_DeleteBuffer);
   m.def(
       "TF_NewBufferFromString",
-      [](py::bytes buffer_as_string) {
+      [](py::str buffer_as_string) {
         tensorflow::Safe_TF_BufferPtr buf = tensorflow::make_safe(
             ProtoStringToTFBuffer(buffer_as_string.ptr()));
         return TF_NewBufferFromString(buf.get()->data, buf.get()->length);
@@ -711,38 +711,21 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
       },
       py::return_value_policy::reference);
 
-  m.def(
-      "TF_LoadPluggableDeviceLibrary",
-      [](const char* library_filename) {
-        tensorflow::Safe_TF_StatusPtr status =
-            tensorflow::make_safe(TF_NewStatus());
-        auto output =
-            TF_LoadPluggableDeviceLibrary(library_filename, status.get());
-        tensorflow::MaybeRaiseRegisteredFromTFStatus(status.get());
-        return output;
-      },
-      py::return_value_policy::reference);
-
   m.def("TF_GetOpList", [](TF_Library* lib_handle) {
     TF_Buffer output_buffer = TF_GetOpList(lib_handle);
-    return tensorflow::PyoOrThrow(PyBytes_FromStringAndSize(
+    return tensorflow::pyo_or_throw(PyBytes_FromStringAndSize(
         reinterpret_cast<const char*>(output_buffer.data),
         output_buffer.length));
   });
 
   m.def("TF_DeleteLibraryHandle", TF_DeleteLibraryHandle,
         py::call_guard<py::gil_scoped_release>());
-
-  m.def("TF_PluggableDeviceLibraryHandle",
-        TF_DeletePluggableDeviceLibraryHandle,
-        py::call_guard<py::gil_scoped_release>());
-
   m.def("TF_AddControlInput", TF_AddControlInput);
   m.def(
       "TF_AddInputList", [](TF_OperationDescription* desc, py::handle& inputs) {
         std::vector<TF_Output> vec;
         size_t size = PyList_Size(inputs.ptr());
-        for (size_t i = 0; i < size; ++i) {
+        for (int i = 0; i < size; ++i) {
           TF_Output item = py::cast<TF_Output>(PyList_GetItem(inputs.ptr(), i));
           vec.push_back(item);
         }
@@ -807,7 +790,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
         // Returns a (TF_Operation*, int pos) tuple.
         py::tuple result_tuple = py::make_tuple(
-            py::cast(output), tensorflow::Pyo(PyLong_FromSize_t(pos)));
+            py::cast(output), tensorflow::pyo(PyLong_FromSize_t(pos)));
         return result_tuple;
       },
       py::return_value_policy::reference);
@@ -870,7 +853,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
         py::call_guard<py::gil_scoped_release>());
 
   m.def("TF_FunctionSetAttrValueProto",
-        [](TF_Function* func, const char* attr_name, py::bytes proto) {
+        [](TF_Function* func, const char* attr_name, py::str proto) {
           tensorflow::Safe_TF_StatusPtr status =
               tensorflow::make_safe(TF_NewStatus());
           tensorflow::Safe_TF_BufferPtr buf =
@@ -904,7 +887,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
   m.def(
       "TF_FunctionImportFunctionDef",
-      [](py::bytes proto) {
+      [](py::str proto) {
         tensorflow::Safe_TF_StatusPtr status =
             tensorflow::make_safe(TF_NewStatus());
         tensorflow::Safe_TF_BufferPtr buf =
@@ -1008,7 +991,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
 
   m.def(
       "TF_NewServer",
-      [](py::bytes proto) {
+      [](py::str proto) {
         tensorflow::Safe_TF_StatusPtr status =
             tensorflow::make_safe(TF_NewStatus());
         tensorflow::Safe_TF_BufferPtr buf =
@@ -1111,7 +1094,7 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
           py::gil_scoped_release release;
           TF_OperationGetAttrBool(oper, attr_name, &value, status.get());
           tensorflow::MaybeRaiseRegisteredFromTFStatusWithGIL(status.get());
-          return tensorflow::Pyo(PyBool_FromLong(value));
+          return tensorflow::pyo(PyBool_FromLong(value));
         });
 
   m.def("TF_NewStatus", TF_NewStatus, py::return_value_policy::reference);
@@ -1170,13 +1153,6 @@ PYBIND11_MODULE(_pywrap_tf_session, m) {
     // the Windows import will not load the libraries necessarily
     // in order. b/145559202
     return "TensorHandle";
-  });
-
-  m.def("TF_RegisterFilesystemPlugin", [](const char* plugin_filename) {
-    tensorflow::Safe_TF_StatusPtr status =
-        tensorflow::make_safe(TF_NewStatus());
-    TF_RegisterFilesystemPlugin(plugin_filename, status.get());
-    tensorflow::MaybeRaiseRegisteredFromTFStatus(status.get());
   });
 
   py::enum_<TF_DataType>(m, "TF_DataType")

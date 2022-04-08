@@ -105,11 +105,6 @@ class InspectUtilsTest(test.TestCase):
     self.assertTrue(inspect_utils.islambda(lambda x: x))
     self.assertFalse(inspect_utils.islambda(test_fn))
 
-  def test_islambda_renamed_lambda(self):
-    l = lambda x: 1
-    l.__name__ = 'f'
-    self.assertTrue(inspect_utils.islambda(l))
-
   def test_isnamedtuple(self):
     nt = collections.namedtuple('TestNamedTuple', ['a', 'b'])
 
@@ -257,21 +252,6 @@ class InspectUtilsTest(test.TestCase):
   def test_getnamespace_globals(self):
     ns = inspect_utils.getnamespace(factory)
     self.assertEqual(ns['free_function'], free_function)
-
-  def test_getnamespace_closure_with_undefined_var(self):
-    if False:  # pylint:disable=using-constant-test
-      a = 1
-
-    def test_fn():
-      return a
-
-    ns = inspect_utils.getnamespace(test_fn)
-    self.assertNotIn('a', ns)
-
-    a = 2
-    ns = inspect_utils.getnamespace(test_fn)
-
-    self.assertEqual(ns['a'], 2)
 
   def test_getnamespace_hermetic(self):
 
@@ -591,26 +571,20 @@ class InspectUtilsTest(test.TestCase):
     self.assertTrue(inspect_utils.isconstructor(AbcSubclass))
 
   def test_getfutureimports_functions(self):
-    imps = inspect_utils.getfutureimports(basic_definitions.function_with_print)
-    self.assertIn('absolute_import', imps)
-    self.assertIn('division', imps)
-    self.assertIn('print_function', imps)
-    self.assertNotIn('generators', imps)
+    self.assertEqual(
+        inspect_utils.getfutureimports(basic_definitions.function_with_print),
+        ('absolute_import', 'division', 'print_function', 'with_statement'))
 
   def test_getfutureimports_lambdas(self):
-    imps = inspect_utils.getfutureimports(basic_definitions.simple_lambda)
-    self.assertIn('absolute_import', imps)
-    self.assertIn('division', imps)
-    self.assertIn('print_function', imps)
-    self.assertNotIn('generators', imps)
+    self.assertEqual(
+        inspect_utils.getfutureimports(basic_definitions.simple_lambda),
+        ('absolute_import', 'division', 'print_function', 'with_statement'))
 
   def test_getfutureimports_methods(self):
-    imps = inspect_utils.getfutureimports(
-        basic_definitions.SimpleClass.method_with_print)
-    self.assertIn('absolute_import', imps)
-    self.assertIn('division', imps)
-    self.assertIn('print_function', imps)
-    self.assertNotIn('generators', imps)
+    self.assertEqual(
+        inspect_utils.getfutureimports(
+            basic_definitions.SimpleClass.method_with_print),
+        ('absolute_import', 'division', 'print_function', 'with_statement'))
 
 
 if __name__ == '__main__':

@@ -126,8 +126,6 @@ class UnicodeDecodeTest(test_util.TensorFlowTestCase,
       {"texts": [["Hi", "there"], ["", u"\U0001f60a"]], "ragged_rank": 0},
       {"texts": [["Hi", "there", ""], [u"😊"]], "ragged_rank": 1},
       {"texts": [[[u"😊", u"🤠🧐"], []], [[u"🤓👻🤖"]]], "ragged_rank": 2},
-      {"texts": [[[u"😊"], [u"🤠🧐"]], [[u"🤓👻🤖"]]], "ragged_rank": 1},
-      {"texts": [[[u"😊"], [u"🤠🧐"]], [[u"🤓"], [u"👻"]]], "ragged_rank": 0},
       {"texts": []}
   ])  # pyformat: disable
   def testBasicDecode(self, texts, ragged_rank=None):
@@ -386,7 +384,7 @@ class UnicodeDecodeTest(test_util.TensorFlowTestCase,
            exception=(ValueError, errors.InvalidArgumentError)),
   ])  # pyformat: disable
   def testExceptions(self, exception=None, message=None, **args):
-    with self.assertRaisesRegex(exception, message):
+    with self.assertRaisesRegexp(exception, message):
       self.evaluate(ragged_string_ops.unicode_decode(**args))
 
   def testUnknownRankError(self):
@@ -394,7 +392,7 @@ class UnicodeDecodeTest(test_util.TensorFlowTestCase,
       return
     s = array_ops.placeholder(dtypes.string)
     message = "Rank of `input` must be statically known."
-    with self.assertRaisesRegex(ValueError, message):
+    with self.assertRaisesRegexp(ValueError, message):
       self.evaluate(ragged_string_ops.unicode_decode(s, input_encoding="UTF-8"))
 
   @parameterized.parameters([
@@ -710,7 +708,7 @@ class UnicodeSplitTest(test_util.TensorFlowTestCase,
            exception=(ValueError, errors.InvalidArgumentError)),
   ])  # pyformat: disable
   def testExceptions(self, exception=None, message=None, **args):
-    with self.assertRaisesRegex(exception, message):
+    with self.assertRaisesRegexp(exception, message):
       self.evaluate(ragged_string_ops.unicode_split(**args))
 
   def testUnknownRankError(self):
@@ -718,7 +716,7 @@ class UnicodeSplitTest(test_util.TensorFlowTestCase,
       return
     s = array_ops.placeholder(dtypes.string)
     message = "Rank of `input` must be statically known."
-    with self.assertRaisesRegex(ValueError, message):
+    with self.assertRaisesRegexp(ValueError, message):
       self.evaluate(ragged_string_ops.unicode_decode(s, input_encoding="UTF-8"))
 
 

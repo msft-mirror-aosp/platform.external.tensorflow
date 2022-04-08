@@ -14,9 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/compiler/xla/service/maybe_owning_device_memory.h"
-
 #include "absl/types/variant.h"
-
 namespace xla {
 
 tensorflow::se::DeviceMemoryBase MaybeOwningDeviceMemory::AsDeviceMemoryBase()
@@ -38,12 +36,6 @@ MaybeOwningDeviceMemory::Release() {
     return {};
   }
   return std::move(absl::get<tensorflow::se::OwningDeviceMemory>(mem_));
-}
-
-const tensorflow::se::OwningDeviceMemory*
-MaybeOwningDeviceMemory::AsOwningDeviceMemory() const {
-  return HasOwnership() ? &absl::get<tensorflow::se::OwningDeviceMemory>(mem_)
-                        : nullptr;
 }
 
 }  // namespace xla

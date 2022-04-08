@@ -1,4 +1,9 @@
 op {
   graph_op_name: "Acos"
-  visibility: HIDDEN
+  endpoint {
+    name: "math.acos"
+  }
+  endpoint {
+    name: "acos"
+  }
 }

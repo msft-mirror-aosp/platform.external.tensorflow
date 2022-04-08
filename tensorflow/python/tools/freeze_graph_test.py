@@ -21,8 +21,6 @@ from __future__ import print_function
 import os
 import re
 
-from absl.testing import parameterized
-
 from tensorflow.core.example import example_pb2
 from tensorflow.core.framework import graph_pb2
 from tensorflow.core.protobuf import saver_pb2
@@ -48,7 +46,7 @@ from tensorflow.python.tools import freeze_graph
 from tensorflow.python.training import saver as saver_lib
 
 
-class FreezeGraphTest(test_util.TensorFlowTestCase, parameterized.TestCase):
+class FreezeGraphTest(test_util.TensorFlowTestCase):
 
   def _testFreezeGraph(self, saver_write_version):
 
@@ -126,7 +124,7 @@ class FreezeGraphTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         feature_value])
     return example.SerializeToString()
 
-  def _writeDummySavedModel(self, path, feature_name, tags):
+  def _writeDummySavedModel(self, path, feature_name):
     """Writes a classifier with two input features to the given path."""
     with ops.Graph().as_default():
       examples = array_ops.placeholder(dtypes.string, name="input_node")
@@ -153,12 +151,11 @@ class FreezeGraphTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         builder = saved_model_builder.SavedModelBuilder(path)
         builder.add_meta_graph_and_variables(
             sess,
-            tags,
+            [tag_constants.SERVING],
             signature_def_map={
                 signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY:
                     signature,
-            },
-        )
+            },)
         builder.save(as_text=True)
 
   @test_util.run_v1_only("b/120545219")
@@ -221,14 +218,11 @@ class FreezeGraphTest(test_util.TensorFlowTestCase, parameterized.TestCase):
         output = sess.run(output_node)
         self.assertNear(2.0, output, 0.00001)
 
-  @parameterized.named_parameters(
-      ("empty_tags_set", "", []),
-      ("default_tags_set", tag_constants.SERVING, [tag_constants.SERVING]))
-  def testFreezeSavedModel(self, tags_string, tags_list):
+  def testFreezeSavedModel(self):
     tmp_dir = self.get_temp_dir()
     saved_model_dir = os.path.join(tmp_dir, "saved_model_dir")
     feature_name = "feature"
-    self._writeDummySavedModel(saved_model_dir, feature_name, tags_list)
+    self._writeDummySavedModel(saved_model_dir, feature_name)
     output_graph_filename = os.path.join(tmp_dir, "output_graph.pb")
 
     input_saved_model_dir = saved_model_dir
@@ -241,7 +235,7 @@ class FreezeGraphTest(test_util.TensorFlowTestCase, parameterized.TestCase):
     input_meta_graph = False
     checkpoint_path = None
     input_graph_filename = None
-    saved_model_tags = tags_string
+    saved_model_tags = tag_constants.SERVING
 
     freeze_graph.freeze_graph(input_graph_filename, input_saver_def_path,
                               input_binary, checkpoint_path, output_node_names,

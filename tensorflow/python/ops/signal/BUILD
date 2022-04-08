@@ -19,7 +19,7 @@ py_library(
         "util_ops.py",
         "window_ops.py",
     ],
-    srcs_version = "PY3",
+    srcs_version = "PY2AND3",
     deps = [
         "//tensorflow/python:array_ops",
         "//tensorflow/python:constant_op",

@@ -32,11 +32,8 @@ constexpr std::array<const char*, 3> kSloppyAttrOps = {
     "ParseExampleDataset",
 };
 
-constexpr std::array<const char*, 4> kDeterministicAttrOps = {
-    "LegacyParallelInterleaveDatasetV2",
+constexpr std::array<const char*, 1> kDeterministicAttrOps = {
     "ParallelInterleaveDatasetV3",
-    "ParallelInterleaveDatasetV4",
-    "ParallelMapDatasetV2",
 };
 }  // anonymous namespace
 

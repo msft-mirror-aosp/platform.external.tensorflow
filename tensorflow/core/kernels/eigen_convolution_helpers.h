@@ -16,8 +16,6 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_KERNELS_EIGEN_CONVOLUTION_HELPERS_H_
 #define TENSORFLOW_CORE_KERNELS_EIGEN_CONVOLUTION_HELPERS_H_
 
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
-
 namespace Eigen {
 namespace internal {
 
@@ -63,7 +61,7 @@ class TensorEvaluatorHasPartialPacket {
       functionExistsSfinae<TensorEvaluatorType, PacketType, IndexType>(
           nullptr)) status;
 
-  static constexpr bool value = status::value;
+  static const bool value = status::value;
 };
 
 // Compute a mask for loading/storing coefficients in/from a packet in a

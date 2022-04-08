@@ -50,7 +50,7 @@ class RegistryTest(test.TestCase, parameterized.TestCase):
   def testDuplicate(self):
     myreg = registry.Registry('testbar')
     myreg.register(bar, 'Bar')
-    with self.assertRaisesRegex(
+    with self.assertRaisesRegexp(
         KeyError, r'Registering two testbar with name \'Bar\'! '
         r'\(Previous registration was in [^ ]+ .*.py:[0-9]+\)'):
       myreg.register(bar, 'Bar')

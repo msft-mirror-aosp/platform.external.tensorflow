@@ -82,14 +82,14 @@ class KLTest(test.TestCase):
     class MyDist(normal.Normal):
       pass
 
-    with self.assertRaisesRegex(TypeError, "must be callable"):
+    with self.assertRaisesRegexp(TypeError, "must be callable"):
       kullback_leibler.RegisterKL(MyDist, MyDist)("blah")
 
     # First registration is OK
     kullback_leibler.RegisterKL(MyDist, MyDist)(lambda a, b: None)
 
     # Second registration fails
-    with self.assertRaisesRegex(ValueError, "has already been registered"):
+    with self.assertRaisesRegexp(ValueError, "has already been registered"):
       kullback_leibler.RegisterKL(MyDist, MyDist)(lambda a, b: None)
 
   def testExactRegistrationsAllMatch(self):

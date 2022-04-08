@@ -27,10 +27,14 @@ namespace {
 
 class DummyDevice : public DeviceBase {
  public:
-  explicit DummyDevice(Env* env) : DeviceBase(env) {}
+  DummyDevice(Env* env, bool save) : DeviceBase(env), save_(save) {}
+  bool RequiresRecordingAccessedTensors() const override { return save_; }
   Allocator* GetAllocator(AllocatorAttributes /*attr*/) override {
     return cpu_allocator();
   }
+
+ private:
+  bool save_;
 };
 
 void TestBitcastOp(Tensor* input_tensor, DataType out_type,
@@ -57,7 +61,7 @@ void TestBitcastOp(Tensor* input_tensor, DataType out_type,
   ASSERT_TRUE(status.ok()) << status.ToString();
 
   OpKernelContext::Params params;
-  DummyDevice dummy_device(nullptr);
+  DummyDevice dummy_device(nullptr, false);
   params.device = &dummy_device;
   params.op_kernel = kernel.get();
   gtl::InlinedVector<TensorValue, 4> inputs;

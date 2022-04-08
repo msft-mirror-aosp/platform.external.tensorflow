@@ -18,20 +18,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from absl.testing import parameterized
 import numpy as np
+
+from tensorflow.python import keras
+from tensorflow.python.framework import test_util
 from tensorflow.python.keras import backend as K
-from tensorflow.python.keras import combinations
-from tensorflow.python.keras import testing_utils
-from tensorflow.python.keras.engine import input_layer
-from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.layers.convolutional import Conv2D
 from tensorflow.python.platform import test
 
 
-class TrainingGPUTest(test.TestCase, parameterized.TestCase):
+class TrainingGPUTest(test.TestCase):
 
-  @combinations.generate(combinations.combine(mode=['graph', 'eager']))
+  @test_util.run_in_graph_and_eager_modes
   def test_model_with_crossentropy_losses_channels_first(self):
     """Tests use of all crossentropy losses with `channels_first`.
 
@@ -65,12 +63,13 @@ class TrainingGPUTest(test.TestCase, parameterized.TestCase):
                            activation=activation,
                            kernel_initializer='ones',
                            bias_initializer='ones')(input_tensor)
-      simple_model = training.Model(inputs=input_tensor, outputs=predictions)
+      simple_model = keras.models.Model(inputs=input_tensor,
+                                        outputs=predictions)
       simple_model.compile(optimizer='rmsprop', loss=loss)
       return simple_model
 
     if test.is_gpu_available(cuda_only=True):
-      with testing_utils.use_gpu():
+      with test_util.use_gpu():
         losses_to_test = ['sparse_categorical_crossentropy',
                           'categorical_crossentropy', 'binary_crossentropy']
 
@@ -97,7 +96,7 @@ class TrainingGPUTest(test.TestCase, parameterized.TestCase):
         data = np.moveaxis(data_channels_first, 1, -1)
         for index, loss_function in enumerate(losses_to_test):
           labels = np.moveaxis(labels_channels_first[index], 1, -1)
-          inputs = input_layer.Input(shape=(3, 3, 1))
+          inputs = keras.Input(shape=(3, 3, 1))
           model = prepare_simple_model(inputs, loss_function, labels)
           loss_channels_last[index] = model.evaluate(x=data, y=labels,
                                                      batch_size=1, verbose=0)
@@ -108,7 +107,7 @@ class TrainingGPUTest(test.TestCase, parameterized.TestCase):
         data = data_channels_first
         for index, loss_function in enumerate(losses_to_test):
           labels = labels_channels_first[index]
-          inputs = input_layer.Input(shape=(1, 3, 3))
+          inputs = keras.Input(shape=(1, 3, 3))
           model = prepare_simple_model(inputs, loss_function, labels)
           loss_channels_first[index] = model.evaluate(x=data, y=labels,
                                                       batch_size=1, verbose=0)

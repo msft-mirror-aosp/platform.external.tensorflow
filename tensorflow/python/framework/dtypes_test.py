@@ -21,7 +21,6 @@ from __future__ import print_function
 import numpy as np
 
 from tensorflow.core.framework import types_pb2
-from tensorflow.python import _dtypes
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import test_util
 from tensorflow.python.platform import googletest
@@ -64,13 +63,6 @@ class TypesTest(test_util.TensorFlowTestCase):
         self.assertEqual(
             dtypes.as_dtype(datatype_enum).base_dtype,
             dtypes.as_dtype(numpy_dtype))
-
-  def testAllPybind11DTypeConvertibleToDType(self):
-    for datatype_enum in types_pb2.DataType.values():
-      if datatype_enum == types_pb2.DT_INVALID:
-        continue
-      dtype = _dtypes.DType(datatype_enum)
-      self.assertEqual(dtypes.as_dtype(datatype_enum), dtype)
 
   def testInvalid(self):
     with self.assertRaises(TypeError):
@@ -261,42 +253,42 @@ class TypesTest(test_util.TensorFlowTestCase):
 
       # check some values that are known
       if numpy_dtype == np.bool_:
-        self.assertEqual(dtype.min, 0)
-        self.assertEqual(dtype.max, 1)
+        self.assertEquals(dtype.min, 0)
+        self.assertEquals(dtype.max, 1)
       if numpy_dtype == np.int8:
-        self.assertEqual(dtype.min, -128)
-        self.assertEqual(dtype.max, 127)
+        self.assertEquals(dtype.min, -128)
+        self.assertEquals(dtype.max, 127)
       if numpy_dtype == np.int16:
-        self.assertEqual(dtype.min, -32768)
-        self.assertEqual(dtype.max, 32767)
+        self.assertEquals(dtype.min, -32768)
+        self.assertEquals(dtype.max, 32767)
       if numpy_dtype == np.int32:
-        self.assertEqual(dtype.min, -2147483648)
-        self.assertEqual(dtype.max, 2147483647)
+        self.assertEquals(dtype.min, -2147483648)
+        self.assertEquals(dtype.max, 2147483647)
       if numpy_dtype == np.int64:
-        self.assertEqual(dtype.min, -9223372036854775808)
-        self.assertEqual(dtype.max, 9223372036854775807)
+        self.assertEquals(dtype.min, -9223372036854775808)
+        self.assertEquals(dtype.max, 9223372036854775807)
       if numpy_dtype == np.uint8:
-        self.assertEqual(dtype.min, 0)
-        self.assertEqual(dtype.max, 255)
+        self.assertEquals(dtype.min, 0)
+        self.assertEquals(dtype.max, 255)
       if numpy_dtype == np.uint16:
         if dtype == dtypes.uint16:
-          self.assertEqual(dtype.min, 0)
-          self.assertEqual(dtype.max, 65535)
+          self.assertEquals(dtype.min, 0)
+          self.assertEquals(dtype.max, 65535)
         elif dtype == dtypes.bfloat16:
-          self.assertEqual(dtype.min, 0)
-          self.assertEqual(dtype.max, 4294967295)
+          self.assertEquals(dtype.min, 0)
+          self.assertEquals(dtype.max, 4294967295)
       if numpy_dtype == np.uint32:
-        self.assertEqual(dtype.min, 0)
-        self.assertEqual(dtype.max, 4294967295)
+        self.assertEquals(dtype.min, 0)
+        self.assertEquals(dtype.max, 4294967295)
       if numpy_dtype == np.uint64:
-        self.assertEqual(dtype.min, 0)
-        self.assertEqual(dtype.max, 18446744073709551615)
+        self.assertEquals(dtype.min, 0)
+        self.assertEquals(dtype.max, 18446744073709551615)
       if numpy_dtype in (np.float16, np.float32, np.float64):
-        self.assertEqual(dtype.min, np.finfo(numpy_dtype).min)
-        self.assertEqual(dtype.max, np.finfo(numpy_dtype).max)
+        self.assertEquals(dtype.min, np.finfo(numpy_dtype).min)
+        self.assertEquals(dtype.max, np.finfo(numpy_dtype).max)
       if numpy_dtype == dtypes.bfloat16.as_numpy_dtype:
-        self.assertEqual(dtype.min, float.fromhex("-0x1.FEp127"))
-        self.assertEqual(dtype.max, float.fromhex("0x1.FEp127"))
+        self.assertEquals(dtype.min, float.fromhex("-0x1.FEp127"))
+        self.assertEquals(dtype.max, float.fromhex("0x1.FEp127"))
 
   def testRepr(self):
     self.skipTest("b/142725777")
@@ -304,11 +296,11 @@ class TypesTest(test_util.TensorFlowTestCase):
       if enum > 100:
         continue
       dtype = dtypes.DType(enum)
-      self.assertEqual(repr(dtype), "tf." + name)
+      self.assertEquals(repr(dtype), "tf." + name)
       import tensorflow as tf
       dtype2 = eval(repr(dtype))
-      self.assertEqual(type(dtype2), dtypes.DType)
-      self.assertEqual(dtype, dtype2)
+      self.assertEquals(type(dtype2), dtypes.DType)
+      self.assertEquals(dtype, dtype2)
 
   def testEqWithNonTFTypes(self):
     self.assertNotEqual(dtypes.int32, int)
@@ -325,18 +317,14 @@ class TypesTest(test_util.TensorFlowTestCase):
     for enum in dtypes._TYPE_TO_STRING:
       dtype = dtypes.DType(enum)
       ctor, args = dtype.__reduce__()
-      self.assertEqual(ctor, dtypes.as_dtype)
-      self.assertEqual(args, (dtype.name,))
+      self.assertEquals(ctor, dtypes.as_dtype)
+      self.assertEquals(args, (dtype.name,))
       reconstructed = ctor(*args)
-      self.assertEqual(reconstructed, dtype)
+      self.assertEquals(reconstructed, dtype)
 
   def testAsDtypeInvalidArgument(self):
     with self.assertRaises(TypeError):
       dtypes.as_dtype((dtypes.int32, dtypes.float32))
-
-  def testAsDtypeReturnsInternedVersion(self):
-    dt = dtypes.DType(types_pb2.DT_VARIANT)
-    self.assertIs(dtypes.as_dtype(dt), dtypes.variant)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,6 @@ limitations under the License.
 #include "flatbuffers/flexbuffers.h"
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-#include "tensorflow/lite/schema/schema_utils.h"
 #include "tensorflow/lite/toco/tflite/operator.h"
 #include "tensorflow/lite/toco/tflite/types.h"
 #include "tensorflow/lite/toco/tooling_util.h"
@@ -43,9 +42,9 @@ void LoadOperatorsTable(const ::tflite::Model& input_model,
   auto opcodes = input_model.operator_codes();
   if (!opcodes) return;
   for (const auto* opcode : *opcodes) {
-    auto builtin_code = GetBuiltinCode(opcode);
-    if (builtin_code != ::tflite::BuiltinOperator_CUSTOM) {
-      operators_table->push_back(EnumNameBuiltinOperator(builtin_code));
+    if (opcode->builtin_code() != ::tflite::BuiltinOperator_CUSTOM) {
+      operators_table->push_back(
+          EnumNameBuiltinOperator(opcode->builtin_code()));
     } else {
       operators_table->push_back(opcode->custom_code()->c_str());
     }
@@ -100,7 +99,7 @@ void ImportTensors(const ::tflite::Model& input_model, Model* model) {
 
 void ImportOperators(
     const ::tflite::Model& input_model,
-    const std::map<std::string, std::unique_ptr<BaseOperator>>& ops_by_name,
+    const std::map<string, std::unique_ptr<BaseOperator>>& ops_by_name,
     const details::TensorsTable& tensors_table,
     const details::OperatorsTable& operators_table, Model* model) {
   // TODO(aselle): add support for multiple subgraphs.
@@ -113,12 +112,12 @@ void ImportOperators(
       LOG(FATAL) << "Index " << index << " must be between zero and "
                  << operators_table.size();
     }
-    std::string opname = operators_table.at(index);
+    string opname = operators_table.at(index);
 
     // Find and use the appropriate operator deserialization factory.
     std::unique_ptr<Operator> new_op = nullptr;
     if (ops_by_name.count(opname) == 0) {
-      std::string effective_opname = "TENSORFLOW_UNSUPPORTED";
+      string effective_opname = "TENSORFLOW_UNSUPPORTED";
       if (ops_by_name.count(effective_opname) == 0) {
         LOG(FATAL) << "Internal logic error: TENSORFLOW_UNSUPPORTED not found.";
       }
@@ -148,19 +147,19 @@ void ImportOperators(
       auto input_index = inputs->Get(i);
       // input_index == -1 indicates optional tensor.
       if (input_index != -1) {
-        const std::string& input_name = tensors_table.at(input_index);
+        const string& input_name = tensors_table.at(input_index);
         op->inputs.push_back(input_name);
       } else {
-        const std::string& tensor_name =
+        const string& tensor_name =
             toco::AvailableArrayName(*model, "OptionalTensor");
         model->CreateOptionalArray(tensor_name);
         op->inputs.push_back(tensor_name);
       }
     }
     auto outputs = input_op->outputs();
-    for (int i = 0, end = outputs->Length(); i < end; i++) {
+    for (int i = 0; i < outputs->Length(); i++) {
       auto output_index = outputs->Get(i);
-      const std::string& output_name = tensors_table.at(output_index);
+      const string& output_name = tensors_table.at(output_index);
       op->outputs.push_back(output_name);
     }
   }
@@ -174,7 +173,7 @@ void ImportIOTensors(const ModelFlags& model_flags,
     auto inputs = (*input_model.subgraphs())[0]->inputs();
     if (inputs) {
       for (int input : *inputs) {
-        const std::string& input_name = tensors_table.at(input);
+        const string& input_name = tensors_table.at(input);
         model->flags.add_input_arrays()->set_name(input_name);
       }
     }
@@ -185,7 +184,7 @@ void ImportIOTensors(const ModelFlags& model_flags,
     auto outputs = (*input_model.subgraphs())[0]->outputs();
     if (outputs) {
       for (int output : *outputs) {
-        const std::string& output_name = tensors_table.at(output);
+        const string& output_name = tensors_table.at(output);
         model->flags.add_output_arrays(output_name);
       }
     }
@@ -200,7 +199,7 @@ bool Verify(const void* buf, size_t len) {
 }  // namespace
 
 std::unique_ptr<Model> Import(const ModelFlags& model_flags,
-                              const std::string& input_file_contents) {
+                              const string& input_file_contents) {
   ::tflite::AlwaysTrueResolver r;
   if (!::tflite::Verify(input_file_contents.data(), input_file_contents.size(),
                         r, ::tflite::DefaultErrorReporter())) {

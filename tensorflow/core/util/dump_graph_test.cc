@@ -14,10 +14,8 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/util/dump_graph.h"
-
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/graph/node_builder.h"
-#include "tensorflow/core/lib/core/status_test_util.h"
 #include "tensorflow/core/lib/io/path.h"
 #include "tensorflow/core/lib/strings/proto_serialization.h"
 #include "tensorflow/core/platform/env.h"
@@ -38,7 +36,7 @@ TEST(DumpGraph, DumpGraphToFileSuccess) {
   EXPECT_EQ(ret, io::JoinPath(testing::TmpDir(), "graph_1.pbtxt"));
 
   GraphDef gdef;
-  TF_ASSERT_OK(ReadTextProto(
+  TF_CHECK_OK(ReadTextProto(
       Env::Default(), io::JoinPath(testing::TmpDir(), "graph.pbtxt"), &gdef));
   string read, written;
   gdef.AppendToString(&read);
@@ -50,7 +48,7 @@ TEST(DumpGraph, DumpGraphToFileNoEnvPrefix) {
   Graph graph(OpRegistry::Global());
   unsetenv("TF_DUMP_GRAPH_PREFIX");
   string ret = DumpGraphToFile("graph", graph);
-  EXPECT_TRUE(str_util::StrContains(ret, "TF_DUMP_GRAPH_PREFIX not specified"));
+  EXPECT_EQ(ret, "(TF_DUMP_GRAPH_PREFIX not specified)");
 }
 
 TEST(DumpGraph, DumpFunctionDefToFileSuccess) {

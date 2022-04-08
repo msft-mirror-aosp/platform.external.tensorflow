@@ -5,18 +5,6 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "DistributedDataset"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "DistributedIterator"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "DistributedValues"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "HierarchicalCopyAllReduce"
     mtype: "<type \'type\'>"
   }
@@ -25,19 +13,11 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "InputOptions"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "InputReplicationMode"
     mtype: "<class \'enum.EnumMeta\'>"
   }
   member {
     name: "MirroredStrategy"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "MultiWorkerMirroredStrategy"
     mtype: "<type \'type\'>"
   }
   member {
@@ -61,10 +41,6 @@ tf_module {
     mtype: "<type \'type\'>"
   }
   member {
-    name: "RunOptions"
-    mtype: "<type \'type\'>"
-  }
-  member {
     name: "Server"
     mtype: "<type \'type\'>"
   }
@@ -74,10 +50,6 @@ tf_module {
   }
   member {
     name: "StrategyExtended"
-    mtype: "<type \'type\'>"
-  }
-  member {
-    name: "TPUStrategy"
     mtype: "<type \'type\'>"
   }
   member {

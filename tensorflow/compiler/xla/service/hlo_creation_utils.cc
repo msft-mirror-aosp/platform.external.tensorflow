@@ -21,7 +21,6 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/lib/comparators.h"
 #include "tensorflow/compiler/xla/client/xla_builder.h"
 #include "tensorflow/compiler/xla/client/xla_computation.h"
-#include "tensorflow/compiler/xla/comparison_util.h"
 #include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/literal_util.h"
 #include "tensorflow/compiler/xla/service/hlo_clone_context.h"
@@ -33,15 +32,6 @@ limitations under the License.
 
 namespace xla {
 using absl::StrCat;
-
-StatusOr<HloInstruction*> MakeUnaryHlo(HloOpcode opcode,
-                                       HloInstruction* operand) {
-  HloComputation* computation = operand->parent();
-  TF_ASSIGN_OR_RETURN(Shape unary_op_shape,
-                      ShapeInference::InferUnaryOpShape(opcode, operand));
-  return computation->AddInstruction(
-      HloInstruction::CreateUnary(unary_op_shape, opcode, operand));
-}
 
 StatusOr<HloInstruction*> MakeBinaryHlo(HloOpcode opcode, HloInstruction* lhs,
                                         HloInstruction* rhs) {
@@ -92,19 +82,16 @@ StatusOr<HloInstruction*> MakeSliceHlo(HloInstruction* operand,
 
 StatusOr<HloInstruction*> MakeConvolveHlo(
     HloInstruction* lhs, HloInstruction* rhs, int64 feature_group_count,
-    int64 batch_group_count, const Window& window,
-    const ConvolutionDimensionNumbers& dimension_numbers,
-    const PrecisionConfig& precision_config,
-    absl::optional<PrimitiveType> preferred_element_type) {
+    const Window& window, const ConvolutionDimensionNumbers& dimension_numbers,
+    const PrecisionConfig& precision_config) {
   HloComputation* computation = lhs->parent();
   CHECK_EQ(computation, rhs->parent());
-  TF_ASSIGN_OR_RETURN(
-      Shape convolve_shape,
-      ShapeInference::InferConvolveShape(
-          lhs->shape(), rhs->shape(), feature_group_count, batch_group_count,
-          window, dimension_numbers, preferred_element_type));
+  TF_ASSIGN_OR_RETURN(Shape convolve_shape,
+                      ShapeInference::InferConvolveShape(
+                          lhs->shape(), rhs->shape(), feature_group_count, 1,
+                          window, dimension_numbers));
   return computation->AddInstruction(HloInstruction::CreateConvolve(
-      convolve_shape, lhs, rhs, feature_group_count, batch_group_count, window,
+      convolve_shape, lhs, rhs, feature_group_count, 1, window,
       dimension_numbers, precision_config));
 }
 
@@ -250,9 +237,7 @@ StatusOr<HloInstruction*> MakeConcatHlo(
 }
 
 HloInstruction* MakeConvertToHlo(HloInstruction* hlo, PrimitiveType type) {
-  if (hlo->shape().element_type() == type) {
-    return hlo;
-  }
+  CHECK_NE(hlo->shape().element_type(), type);
   Shape shape = ShapeUtil::ChangeElementType(hlo->shape(), type);
   hlo =
       hlo->parent()->AddInstruction(HloInstruction::CreateConvert(shape, hlo));
@@ -262,15 +247,8 @@ HloInstruction* MakeConvertToHlo(HloInstruction* hlo, PrimitiveType type) {
 
 HloInstruction* MakeBitcastConvertToHlo(HloInstruction* hlo,
                                         PrimitiveType type) {
-  if (hlo->shape().element_type() == type) {
-    return hlo;
-  }
+  CHECK_NE(hlo->shape().element_type(), type);
   Shape shape = ShapeUtil::ChangeElementType(hlo->shape(), type);
-  // PRED are stored as one byte, PRED have a BitWidth of 1, avoid this problem
-  // by using a convert instead of bitcast convert.
-  if (type == PRED || hlo->shape().element_type() == PRED) {
-    return MakeConvertToHlo(hlo, type);
-  }
   hlo = hlo->parent()->AddInstruction(
       HloInstruction::CreateBitcastConvert(shape, hlo));
   CHECK_EQ(hlo->shape().element_type(), type);
@@ -283,17 +261,14 @@ HloInstruction* MakeIotaHlo(HloComputation* computation, const Shape& shape,
       HloInstruction::CreateIota(shape, iota_dimension));
 }
 
-StatusOr<HloInstruction*> MakeDotHlo(
-    HloInstruction* lhs, HloInstruction* rhs,
-    const DotDimensionNumbers& dim_numbers,
-    const PrecisionConfig& precision_config,
-    absl::optional<PrimitiveType> preferred_element_type) {
+StatusOr<HloInstruction*> MakeDotHlo(HloInstruction* lhs, HloInstruction* rhs,
+                                     const DotDimensionNumbers& dim_numbers,
+                                     const PrecisionConfig& precision_config) {
   HloComputation* computation = lhs->parent();
   CHECK_EQ(computation, rhs->parent());
   TF_ASSIGN_OR_RETURN(
       Shape dot_shape,
-      ShapeInference::InferDotOpShape(lhs->shape(), rhs->shape(), dim_numbers,
-                                      preferred_element_type));
+      ShapeInference::InferDotOpShape(lhs->shape(), rhs->shape(), dim_numbers));
   return computation->AddInstruction(HloInstruction::CreateDot(
       dot_shape, lhs, rhs, dim_numbers, precision_config));
 }
@@ -321,31 +296,6 @@ StatusOr<HloInstruction*> MakeMapHlo(absl::Span<HloInstruction* const> operands,
 
 StatusOr<HloInstruction*> MakeReduceHlo(HloInstruction* operand,
                                         HloInstruction* init_value,
-                                        absl::Span<const int64> dimensions,
-                                        HloOpcode binary_opcode) {
-  auto scalar_shape = ShapeUtil::MakeShape(operand->shape().element_type(), {});
-  auto result_shape = ShapeUtil::FilterDimensions(
-      [&](const int64 dim) { return !absl::c_linear_search(dimensions, dim); },
-      operand->shape());
-  HloComputation* reduce_computation;
-  {
-    HloComputation::Builder b(operand->name() + ".reduce_sub_computation");
-    auto lhs = b.AddInstruction(
-        HloInstruction::CreateParameter(0, scalar_shape, "lhs"));
-    auto rhs = b.AddInstruction(
-        HloInstruction::CreateParameter(1, scalar_shape, "rhs"));
-    b.AddInstruction(
-        HloInstruction::CreateBinary(scalar_shape, binary_opcode, lhs, rhs));
-    reduce_computation =
-        operand->parent()->parent()->AddEmbeddedComputation(b.Build());
-  }
-
-  return operand->parent()->AddInstruction(HloInstruction::CreateReduce(
-      result_shape, operand, init_value, dimensions, reduce_computation));
-}
-
-StatusOr<HloInstruction*> MakeReduceHlo(HloInstruction* operand,
-                                        HloInstruction* init_value,
                                         HloOpcode binary_opcode,
                                         HloModule* module) {
   DCHECK_NE(nullptr, module);
@@ -367,15 +317,6 @@ StatusOr<HloInstruction*> MakeReduceHlo(HloInstruction* operand,
 
   return operand->parent()->AddInstruction(HloInstruction::CreateReduce(
       scalar_shape, operand, init_value, all_dims, reduce_computation));
-}
-
-StatusOr<HloInstruction*> MakeReverseHlo(HloInstruction* operand,
-                                         absl::Span<const int64> dimensions) {
-  HloComputation* computation = operand->parent();
-  TF_ASSIGN_OR_RETURN(Shape reverse_shape, ShapeInference::InferReverseShape(
-                                               operand->shape(), dimensions));
-  return computation->AddInstruction(
-      HloInstruction::CreateReverse(reverse_shape, operand, dimensions));
 }
 
 StatusOr<HloInstruction*> MakeSelectHlo(HloInstruction* pred,
@@ -552,15 +493,6 @@ HloInstruction* BroadcastZeros(HloComputation* computation,
   HloInstruction* zero = computation->AddInstruction(
       HloInstruction::CreateConstant(LiteralUtil::Zero(element_type)));
   return MakeBroadcastHlo(zero, /*broadcast_dimensions=*/{},
-                          /*result_shape_bounds=*/broadcast_dimensions);
-}
-
-HloInstruction* BroadcastOnes(HloComputation* computation,
-                              PrimitiveType element_type,
-                              absl::Span<const int64> broadcast_dimensions) {
-  HloInstruction* one = computation->AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::One(element_type)));
-  return MakeBroadcastHlo(one, /*broadcast_dimensions=*/{},
                           /*result_shape_bounds=*/broadcast_dimensions);
 }
 

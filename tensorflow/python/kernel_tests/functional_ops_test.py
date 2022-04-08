@@ -257,7 +257,7 @@ class FunctionalOpsTest(test.TestCase):
     elems = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
     initializer = np.array(1.0)
     # Multiply a * 1 each time
-    with self.assertRaisesRegex(
+    with self.assertRaisesRegexp(
         ValueError, "two structures don't have the same nested structure"):
       functional_ops.scan(lambda a, x: (a, -a), elems, initializer)
 
@@ -340,7 +340,7 @@ class FunctionalOpsTest(test.TestCase):
         lambda elem_, input_: (a, b), elems, initializer=(0., 0.))
     loss = l0 + array_ops.stop_gradient(l1)
     grad = gradients_impl.gradients(ys=[loss], xs=[a, b])
-    with self.test_session():
+    with self.test_session(use_gpu=True) as sess:
       self.evaluate(variables.global_variables_initializer())
       self.evaluate(grad)
 
@@ -609,31 +609,6 @@ class FunctionalOpsTest(test.TestCase):
           self.assertAllEqual(Run(sess, 20.), 210.)
           self.assertAllEqual(Run(sess, 100.), 5050.)
 
-  def testToBool(self):
-    # For 0D tensors, the truthiness depends on whether the value is "zero".
-    self.assertAllEqual(gen_functional_ops.to_bool(0), False)
-    self.assertAllEqual(gen_functional_ops.to_bool(1), True)
-    self.assertAllEqual(gen_functional_ops.to_bool(42), True)
-    self.assertAllEqual(gen_functional_ops.to_bool(0.), False)
-    self.assertAllEqual(gen_functional_ops.to_bool(1.), True)
-    self.assertAllEqual(gen_functional_ops.to_bool(42.), True)
-    self.assertAllEqual(gen_functional_ops.to_bool(False), False)
-    self.assertAllEqual(gen_functional_ops.to_bool(True), True)
-    # For strings, "zero" is the empty string.
-    self.assertAllEqual(gen_functional_ops.to_bool(""), False)
-    self.assertAllEqual(gen_functional_ops.to_bool("a"), True)
-
-    # For >0D tensors, the truthiness only depends on whether there are
-    # elements or not.
-    self.assertAllEqual(gen_functional_ops.to_bool([]), False)
-    self.assertAllEqual(gen_functional_ops.to_bool([[]]), False)
-    self.assertAllEqual(gen_functional_ops.to_bool([[[]]]), False)
-    self.assertAllEqual(gen_functional_ops.to_bool([0]), True)
-    self.assertAllEqual(gen_functional_ops.to_bool([1]), True)
-    self.assertAllEqual(gen_functional_ops.to_bool([[0]]), True)
-    self.assertAllEqual(gen_functional_ops.to_bool([False]), True)
-    self.assertAllEqual(gen_functional_ops.to_bool([True]), True)
-
   # Like above, but using int32 in order to ensure that int32 tensors don't get
   # copied to the GPU during the application of the while.
   def testWhileInt32(self):
@@ -712,12 +687,12 @@ class FunctionalOpsTest(test.TestCase):
           return n - 1, x + n, x
 
         with self.session(graph=g, use_gpu=use_gpu):
-          with self.assertRaisesRegex(
+          with self.assertRaisesRegexp(
               errors.InvalidArgumentError,
               "Expected a single scalar.*got 2 tensors."):
             functional_ops.While([5., 0.], CondReturnsTooManyArgs,
                                  Body)[0].eval()
-          with self.assertRaisesRegex(
+          with self.assertRaisesRegexp(
               errors.InvalidArgumentError,
               "While loop body returned 3 arguments. Expected: 2"):
             functional_ops.While([5., 0.], Cond,
@@ -933,14 +908,14 @@ class FunctionalOpsTest(test.TestCase):
     def ReturnsTooManyArgs(unused_i, v):
       return v, v
 
-    with self.test_session():
-      with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                  "must be a scalar"):
+    with self.test_session(use_gpu=True):
+      with self.assertRaisesRegexp(errors.InvalidArgumentError,
+                                   "must be a scalar"):
         functional_ops.For([0], 10, 1, [0.0], Foo)[0].eval()
-      with self.assertRaisesRegex(errors.InvalidArgumentError,
-                                  "Invalid start/limit/delta"):
+      with self.assertRaisesRegexp(errors.InvalidArgumentError,
+                                   "Invalid start/limit/delta"):
         functional_ops.For(0, 10, -1, [0.0], Foo)[0].eval()
-      with self.assertRaisesRegex(
+      with self.assertRaisesRegexp(
           errors.InvalidArgumentError,
           "For loop body returned 2 arguments. Expected: 1"):
         functional_ops.For(0, 10, 1, [0.0], ReturnsTooManyArgs)[0].eval()
@@ -993,7 +968,7 @@ class PartitionedCallTest(test.TestCase):
       sess.run(variables.global_variables_initializer())
 
     config = config_pb2.ConfigProto()
-    config.share_cluster_devices_in_session = True
+    config.experimental.share_cluster_devices_in_session = True
 
     with session.Session(workers[0].target, config=config) as sess:
       res = sess.run(f(a, b))
@@ -1039,7 +1014,7 @@ class PartitionedCallTest(test.TestCase):
       output, = functional_ops.partitioned_call(
           args=[constant_op.constant(1.),
                 constant_op.constant(2.)], f=Body)
-      self.assertEqual(self.evaluate(output), 12.)
+      self.assertEqual(output.eval(), 12.)
 
   @test_util.run_deprecated_v1
   def testBasicMultiDeviceGPU(self):
@@ -1169,7 +1144,8 @@ class PartitionedCallTest(test.TestCase):
         args=[constant_op.constant([1, 2, 3], dtype=dtypes.int32)],
         f=AddFive,
         executor_type="NON_EXISTENT_EXECUTOR")
-    with self.assertRaisesRegex(errors.NotFoundError, "NON_EXISTENT_EXECUTOR"):
+    with self.assertRaisesRegexp(errors.NotFoundError,
+                                 "NON_EXISTENT_EXECUTOR"):
       self.evaluate(op)
 
 

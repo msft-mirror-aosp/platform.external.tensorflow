@@ -164,13 +164,13 @@ static void CalculateKeys(uint64 num, std::vector<uint64> *dst) {
   }
 }
 
-void BM_CuckooFill(::testing::benchmark::State &state) {
-  const int arg = state.range(0);
-
+static void BM_CuckooFill(int iters, int arg) {
   uint64 table_size = arg;
+  testing::StopTiming();
   std::vector<uint64> calculated_keys;
   CalculateKeys(table_size, &calculated_keys);
-  for (auto s : state) {
+  testing::StartTiming();
+  for (int iter = 0; iter < iters; iter++) {
     PresizedCuckooMap<int> pscm(table_size);
     for (uint64 i = 0; i < table_size; i++) {
       pscm.InsertUnique(calculated_keys[i], i);
@@ -180,27 +180,25 @@ void BM_CuckooFill(::testing::benchmark::State &state) {
 
 BENCHMARK(BM_CuckooFill)->Arg(1000)->Arg(10000000);
 
-void BM_CuckooRead(::testing::benchmark::State &state) {
-  const int arg = state.range(0);
-
+static void BM_CuckooRead(int iters, int arg) {
   uint64 table_size = arg;
+  testing::StopTiming();
   std::vector<uint64> calculated_keys;
   CalculateKeys(table_size, &calculated_keys);
   PresizedCuckooMap<int> pscm(table_size);
   for (uint64 i = 0; i < table_size; i++) {
     pscm.InsertUnique(calculated_keys[i], i);
   }
-
-  int i = 0;
-  for (auto s : state) {
-    // Avoid using '%', which is expensive.
-    uint64 key_index = i;
-    ++i;
-    if (i == table_size) i = 0;
-
+  testing::StartTiming();
+  uint64_t defeat_optimization = 0;
+  for (int i = 0; i < iters; i++) {
+    uint64 key_index = i % table_size;  // May slow down bench!
     int out = 0;
     pscm.Find(calculated_keys[key_index], &out);
-    tensorflow::testing::DoNotOptimize(out);
+    defeat_optimization += out;
+  }
+  if (defeat_optimization == 0) {
+    printf("Preventing the compiler from eliding the inner loop\n");
   }
 }
 

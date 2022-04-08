@@ -33,6 +33,14 @@ from tensorflow.python.platform import test
 class LRUCacheTest(trt_test.TfTrtIntegrationTestBase):
 
   def GraphFn(self, x):
+    conv_filter = constant_op.constant(
+        np.random.randn(3, 3, 2, 1), dtype=dtypes.float32)
+    x = nn.conv2d(
+        input=x,
+        filter=conv_filter,
+        strides=[1, 1, 1, 1],
+        padding="SAME",
+        name="conv")
     bias = constant_op.constant(
         np.random.randn(1, 10, 10, 1), dtype=dtypes.float32)
     x = math_ops.add(x, bias)
@@ -43,9 +51,9 @@ class LRUCacheTest(trt_test.TfTrtIntegrationTestBase):
     dtype = dtypes.float32
     input_dims = [[[1, 10, 10, 2]], [[2, 10, 10, 2]], [[4, 10, 10, 2]],
                   [[2, 10, 10, 2]]]
-    expected_output_dims = [[[1, 10, 10, 2]], [[2, 10, 10, 2]], [[4, 10, 10,
-                                                                  2]],
-                            [[2, 10, 10, 2]]]
+    expected_output_dims = [[[1, 10, 10, 1]], [[2, 10, 10, 1]], [[4, 10, 10,
+                                                                  1]],
+                            [[2, 10, 10, 1]]]
     return trt_test.TfTrtIntegrationTestParams(
         graph_fn=self.GraphFn,
         input_specs=[
@@ -62,8 +70,8 @@ class LRUCacheTest(trt_test.TfTrtIntegrationTestBase):
     return ["TRTEngineOp_0"]
 
   def ShouldRunTest(self, run_params):
-    return (run_params.dynamic_engine and not trt_test.IsQuantizationMode(
-        run_params.precision_mode)), "test dynamic engine and non-INT8"
+    return (run_params.dynamic_engine and
+            not trt_test.IsQuantizationMode(run_params.precision_mode))
 
 
 if __name__ == "__main__":

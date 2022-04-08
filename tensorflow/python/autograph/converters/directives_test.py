@@ -22,6 +22,7 @@ from tensorflow.python.autograph.converters import directives as directives_conv
 from tensorflow.python.autograph.core import converter_testing
 from tensorflow.python.autograph.lang import directives
 from tensorflow.python.autograph.pyct import anno
+from tensorflow.python.autograph.pyct import parser
 from tensorflow.python.platform import test
 
 
@@ -29,12 +30,13 @@ class DirectivesTest(converter_testing.TestCase):
 
   def test_local_target(self):
 
-    def f():
+    def test_fn():
       l = []
       string_var = 0
       directives.set_element_type(l, 'a', string_var)
 
-    _, node, _ = self.transform(f, directives_converter, include_ast=True)
+    node, ctx = self.prepare(test_fn, {'directives': directives})
+    node = directives_converter.transform(node, ctx)
 
     def_, = anno.getanno(node.body[0].targets[0],
                          anno.Static.DEFINITIONS)
@@ -44,11 +46,11 @@ class DirectivesTest(converter_testing.TestCase):
 
   def test_argument_target(self):
 
-    def f(a):
+    def test_fn(a):
       directives.set_element_type(a, 1, shape=2)
-      pass
 
-    _, node, _ = self.transform(f, directives_converter, include_ast=True)
+    node, ctx = self.prepare(test_fn, {'directives': directives})
+    node = directives_converter.transform(node, ctx)
 
     def_, = anno.getanno(node.args.args[0], anno.Static.DEFINITIONS)
     d = def_.directives[directives.set_element_type]
@@ -57,13 +59,13 @@ class DirectivesTest(converter_testing.TestCase):
 
   def test_loop_target(self):
 
-    def f():
+    def test_fn():
       a = True
       while True:
         directives.set_loop_options(parallel_iterations=10, back_prop=a)
-        pass
 
-    _, node, _ = self.transform(f, directives_converter, include_ast=True)
+    node, ctx = self.prepare(test_fn, {'directives': directives})
+    node = directives_converter.transform(node, ctx)
 
     d = anno.getanno(node.body[1], anno.Basic.DIRECTIVES)
     d = d[directives.set_loop_options]
@@ -73,23 +75,40 @@ class DirectivesTest(converter_testing.TestCase):
 
   def test_loop_target_no_loop(self):
 
-    def f():
+    def test_fn():
       directives.set_loop_options()
-      pass
 
-    with self.assertRaisesRegex(ValueError, 'must be used inside a statement'):
-      self.transform(f, directives_converter, include_ast=True)
+    node, ctx = self.prepare(test_fn, {'directives': directives})
+    with self.assertRaisesRegexp(ValueError, 'must be used inside a statement'):
+      node = directives_converter.transform(node, ctx)
 
   def test_loop_target_not_first(self):
 
-    def f():
+    def test_fn():
       a = 1
       while True:
         a = 2
         directives.set_loop_options(parallel_iterations=10, back_prop=a)
 
-    with self.assertRaisesRegex(ValueError, 'must be the first statement'):
-      self.transform(f, directives_converter, include_ast=True)
+    node, ctx = self.prepare(test_fn, {'directives': directives})
+    with self.assertRaisesRegexp(ValueError, 'must be the first statement'):
+      node = directives_converter.transform(node, ctx)
+
+  def test_invalid_default(self):
+
+    def invalid_directive(valid_arg, invalid_default=object()):
+      del valid_arg
+      del invalid_default
+      return
+
+    def call_invalid_directive():
+      invalid_directive(1)
+
+    node, _ = parser.parse_entity(call_invalid_directive, ())
+    # Find the call to the invalid directive
+    node = node.body[0].value
+    with self.assertRaisesRegexp(ValueError, 'Unexpected keyword.*'):
+      directives_converter._map_args(node, invalid_directive)
 
   def test_value_verification_does_not_trigger_properties(self):
 
@@ -103,11 +122,11 @@ class DirectivesTest(converter_testing.TestCase):
 
     tc = TestClass()
 
-    def f():
+    def test_fn():
       return tc.b + 1
 
-    _, node, _ = self.transform(f, directives_converter, include_ast=True)
-
+    node, ctx = self.prepare(test_fn, {'tc': tc})
+    node = directives_converter.transform(node, ctx)
     self.assertIsNotNone(node)
 
   def test_value_verification_does_not_trigger_getattr(self):
@@ -124,11 +143,11 @@ class DirectivesTest(converter_testing.TestCase):
 
     tc = TestClass()
 
-    def f():
+    def test_fn():
       return tc.b + 1
 
-    _, node, _ = self.transform(f, directives_converter, include_ast=True)
-
+    node, ctx = self.prepare(test_fn, {'tc': tc})
+    node = directives_converter.transform(node, ctx)
     self.assertIsNotNone(node)
     self.assertFalse(tc.getattr_called)
 

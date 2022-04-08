@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "tensorflow/lite/minimal_logging.h"
 
+#include <string>
+
 #include <gtest/gtest.h>
 
 namespace tflite {

@@ -28,10 +28,6 @@ limitations under the License.
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/strcat.h"
 
-// https://en.wikipedia.org/wiki/Ephemeral_port
-#define MAX_EPHEMERAL_PORT 60999
-#define MIN_EPHEMERAL_PORT 32768
-
 namespace tensorflow {
 namespace internal {
 
@@ -45,7 +41,7 @@ bool IsPortAvailable(int* port, bool is_tcp) {
   int actual_port;
 
   CHECK_GE(*port, 0);
-  CHECK_LE(*port, MAX_EPHEMERAL_PORT);
+  CHECK_LE(*port, 65535);
   if (fd < 0) {
     LOG(ERROR) << "socket() failed: " << strerror(errno);
     return false;
@@ -55,9 +51,7 @@ bool IsPortAvailable(int* port, bool is_tcp) {
   int one = 1;
   if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one)) < 0) {
     LOG(ERROR) << "setsockopt() failed: " << strerror(errno);
-    if (close(fd) < 0) {
-      LOG(ERROR) << "close() failed: " << strerror(errno);
-    };
+    close(fd);
     return false;
   }
 
@@ -67,9 +61,7 @@ bool IsPortAvailable(int* port, bool is_tcp) {
   addr.sin_port = htons(static_cast<uint16_t>(*port));
   if (bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
     LOG(WARNING) << "bind(port=" << *port << ") failed: " << strerror(errno);
-    if (close(fd) < 0) {
-      LOG(ERROR) << "close() failed: " << strerror(errno);
-    };
+    close(fd);
     return false;
   }
 
@@ -77,9 +69,7 @@ bool IsPortAvailable(int* port, bool is_tcp) {
   if (getsockname(fd, reinterpret_cast<struct sockaddr*>(&addr), &addr_len) <
       0) {
     LOG(WARNING) << "getsockname() failed: " << strerror(errno);
-    if (close(fd) < 0) {
-      LOG(ERROR) << "close() failed: " << strerror(errno);
-    };
+    close(fd);
     return false;
   }
   CHECK_LE(addr_len, sizeof(addr));
@@ -90,9 +80,7 @@ bool IsPortAvailable(int* port, bool is_tcp) {
   } else {
     CHECK_EQ(*port, actual_port);
   }
-  if (close(fd) < 0) {
-    LOG(ERROR) << "close() failed: " << strerror(errno);
-  };
+  close(fd);
   return true;
 }
 
@@ -113,11 +101,9 @@ int PickUnusedPortOrDie() {
     CHECK_LE(trial, kMaximumTrials)
         << "Failed to pick an unused port for testing.";
     if (trial == 1) {
-      port = getpid() % (MAX_EPHEMERAL_PORT - MIN_EPHEMERAL_PORT) +
-             MIN_EPHEMERAL_PORT;
+      port = getpid() % (65536 - 30000) + 30000;
     } else if (trial <= kNumRandomPortsToPick) {
-      port = rand() % (MAX_EPHEMERAL_PORT - MIN_EPHEMERAL_PORT) +
-             MIN_EPHEMERAL_PORT;
+      port = rand() % (65536 - 30000) + 30000;
     } else {
       port = 0;
     }

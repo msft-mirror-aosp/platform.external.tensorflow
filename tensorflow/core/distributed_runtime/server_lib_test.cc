@@ -26,7 +26,7 @@ class TestServerFactory : public ServerFactory {
     return server_def.protocol() == "test_protocol";
   }
 
-  Status NewServer(const ServerDef& server_def, const Options& options,
+  Status NewServer(const ServerDef& server_def,
                    std::unique_ptr<ServerInterface>* out_server) override {
     return Status::OK();
   }

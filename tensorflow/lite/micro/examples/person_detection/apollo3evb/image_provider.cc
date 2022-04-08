@@ -87,38 +87,32 @@ void boost_mode_enable(tflite::ErrorReporter* error_reporter, bool bEnable) {
   if (AM_HAL_STATUS_SUCCESS ==
       am_hal_burst_mode_initialize(&eBurstModeAvailable)) {
     if (AM_HAL_BURST_AVAIL == eBurstModeAvailable) {
-      TF_LITE_REPORT_ERROR(error_reporter, "Apollo3 Burst Mode is Available\n");
+      error_reporter->Report("Apollo3 Burst Mode is Available\n");
     } else {
-      TF_LITE_REPORT_ERROR(error_reporter,
-                           "Apollo3 Burst Mode is Not Available\n");
+      error_reporter->Report("Apollo3 Burst Mode is Not Available\n");
       return;
     }
   } else {
-    TF_LITE_REPORT_ERROR(error_reporter,
-                         "Failed to Initialize for Burst Mode operation\n");
+    error_reporter->Report("Failed to Initialize for Burst Mode operation\n");
   }
 
   // Make sure we are in "Normal" mode.
   if (AM_HAL_STATUS_SUCCESS == am_hal_burst_mode_disable(&eBurstMode)) {
     if (AM_HAL_NORMAL_MODE == eBurstMode) {
-      TF_LITE_REPORT_ERROR(error_reporter,
-                           "Apollo3 operating in Normal Mode (48MHz)\n");
+      error_reporter->Report("Apollo3 operating in Normal Mode (48MHz)\n");
     }
   } else {
-    TF_LITE_REPORT_ERROR(error_reporter,
-                         "Failed to Disable Burst Mode operation\n");
+    error_reporter->Report("Failed to Disable Burst Mode operation\n");
   }
 
   // Put the MCU into "Burst" mode.
   if (bEnable) {
     if (AM_HAL_STATUS_SUCCESS == am_hal_burst_mode_enable(&eBurstMode)) {
       if (AM_HAL_BURST_MODE == eBurstMode) {
-        TF_LITE_REPORT_ERROR(error_reporter,
-                             "Apollo3 operating in Burst Mode (96MHz)\n");
+        error_reporter->Report("Apollo3 operating in Burst Mode (96MHz)\n");
       }
     } else {
-      TF_LITE_REPORT_ERROR(error_reporter,
-                           "Failed to Enable Burst Mode operation\n");
+      error_reporter->Report("Failed to Enable Burst Mode operation\n");
     }
   }
 }
@@ -126,7 +120,7 @@ void boost_mode_enable(tflite::ErrorReporter* error_reporter, bool bEnable) {
 }  // namespace
 
 TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
-  TF_LITE_REPORT_ERROR(error_reporter, "Initializing HM01B0...\n");
+  error_reporter->Report("Initializing HM01B0...\n");
 
   am_hal_clkgen_control(AM_HAL_CLKGEN_CONTROL_SYSCLK_MAX, 0);
 
@@ -147,10 +141,12 @@ TfLiteStatus InitCamera(tflite::ErrorReporter* error_reporter) {
 
   hm01b0_power_up(&s_HM01B0Cfg);
 
+  // TODO(njeff): check the delay time to just fit the spec.
   am_util_delay_ms(1);
 
   hm01b0_mclk_enable(&s_HM01B0Cfg);
 
+  // TODO(njeff): check the delay time to just fit the spec.
   am_util_delay_ms(1);
 
   hm01b0_init_if(&s_HM01B0Cfg);

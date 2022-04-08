@@ -24,10 +24,9 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 from tensorflow.compiler.tests import xla_test
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
-from tensorflow.python.framework import errors
-from tensorflow.python.framework import test_util
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import linalg_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.platform import test
 
 
@@ -60,7 +59,7 @@ class CholeskyOpTest(xla_test.XLATestCase):
           dtypes.as_dtype(x.dtype), shape=x.shape)
       with self.test_scope():
         chol = linalg_ops.cholesky(placeholder)
-      verification = test_util.matmul_without_tf32(chol, chol, adjoint_b=True)
+      verification = math_ops.matmul(chol, chol, adjoint_b=True)
       self._verifyCholeskyBase(sess, placeholder, x, chol, verification, atol)
 
   def testBasic(self):
@@ -84,19 +83,7 @@ class CholeskyOpTest(xla_test.XLATestCase):
         matrices[i] = np.dot(matrices[i].T, matrices[i])
       self._verifyCholesky(matrices, atol=1e-4)
 
-  @test_util.run_v2_only
-  def testNonSquareMatrixV2(self):
-    for dtype in self.float_types:
-      with self.assertRaises(errors.InvalidArgumentError):
-        linalg_ops.cholesky(np.array([[1., 2., 3.], [3., 4., 5.]], dtype=dtype))
-      with self.assertRaises(errors.InvalidArgumentError):
-        linalg_ops.cholesky(
-            np.array(
-                [[[1., 2., 3.], [3., 4., 5.]], [[1., 2., 3.], [3., 4., 5.]]],
-                dtype=dtype))
-
-  @test_util.run_v1_only("Different error types")
-  def testNonSquareMatrixV1(self):
+  def testNonSquareMatrix(self):
     for dtype in self.float_types:
       with self.assertRaises(ValueError):
         linalg_ops.cholesky(np.array([[1., 2., 3.], [3., 4., 5.]], dtype=dtype))
@@ -106,17 +93,7 @@ class CholeskyOpTest(xla_test.XLATestCase):
                 [[[1., 2., 3.], [3., 4., 5.]], [[1., 2., 3.], [3., 4., 5.]]],
                 dtype=dtype))
 
-  @test_util.run_v2_only
-  def testWrongDimensionsV2(self):
-    for dtype in self.float_types:
-      tensor3 = constant_op.constant([1., 2.], dtype=dtype)
-      with self.assertRaises(errors.InvalidArgumentError):
-        linalg_ops.cholesky(tensor3)
-      with self.assertRaises(errors.InvalidArgumentError):
-        linalg_ops.cholesky(tensor3)
-
-  @test_util.run_v1_only("Different error types")
-  def testWrongDimensionsV1(self):
+  def testWrongDimensions(self):
     for dtype in self.float_types:
       tensor3 = constant_op.constant([1., 2.], dtype=dtype)
       with self.assertRaises(ValueError):

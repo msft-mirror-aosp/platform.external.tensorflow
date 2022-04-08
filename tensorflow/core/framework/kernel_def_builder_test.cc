@@ -74,10 +74,8 @@ TEST(KernelDefBuilderTest, TypeConstraint) {
 }
 
 TEST(KernelDefBuilderTest, Int64Constraint) {
-  const KernelDef* def = KernelDefBuilder("B")
-                             .Device(DEVICE_GPU)
-                             .AttrConstraint("T", int64{5})
-                             .Build();
+  const KernelDef* def =
+      KernelDefBuilder("B").Device(DEVICE_GPU).AttrConstraint("T", 5ll).Build();
   KernelDef expected;
   protobuf::TextFormat::ParseFromString(R"proto(
                                           op: 'B'
@@ -93,7 +91,7 @@ TEST(KernelDefBuilderTest, Int64Constraint) {
 
   def = KernelDefBuilder("C")
             .Device(DEVICE_GPU)
-            .AttrConstraint("U", gtl::ArraySlice<int64>{int64{5}, int64{17}})
+            .AttrConstraint("U", gtl::ArraySlice<int64>{5ll, 17ll})
             .AttrConstraint("V", string("proto"))
             .Build();
 

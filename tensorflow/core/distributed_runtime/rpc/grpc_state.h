@@ -45,47 +45,25 @@ class RPCState : public GrpcClientCQTag {
            const ::grpc::string& method, const protobuf::Message& request,
            Response* response, StatusCallback done, CallOptions* call_opts,
            thread::ThreadPool* threadpool, int32 max_retries = 0,
-           bool fail_fast = true, const string* target = nullptr)
+           bool fail_fast = true)
       : RPCState(
             stub, cq, method, request, response, std::move(done), call_opts,
             threadpool,
-            // 1) If GRPC_FAIL_FAST is set to 'true' or 'false',
-            // fail_fast=$GRPC_FAIL_FAST. See b/141948186.
-            // 2) Otherwise if GRPC_FAIL_FAST is set to 'use_caller', use the
-            // fail_fast from the caller. See b/140260119.
-            //
-            // Current default for PLATFORM_GOOGLE: use caller fail_fast;
-            // Current default for open source: fail_fast=false.
-            //
-            // NOTE: Callers mostly set fail_fast=true to prevent job hanging
-            // on worker task failures, except a few cases such as GetStatus
-            // in cluster initialization and collective param resolution.
-            [fail_fast, &done]() -> bool {
-              string fail_fast_env;
+            // 1) If GRPC_FAIL_FAST is specified, fail_fast=$GRPC_FAIL_FAST.
+            // See b/141948186.
+            // 2) Otherwise, if the platform is Google, use the fail_fast from
+            // the caller. See b/140260119.
+            // 3) Otherwise, use fail_fast=false.
+            [fail_fast]() -> bool {
+              bool x;
 #if defined(PLATFORM_GOOGLE)
-              TF_CHECK_OK(ReadStringFromEnvVar("GRPC_FAIL_FAST", "use_caller",
-                                               &fail_fast_env));
+              TF_CHECK_OK(ReadBoolFromEnvVar("GRPC_FAIL_FAST", fail_fast, &x));
 #else
-              TF_CHECK_OK(ReadStringFromEnvVar("GRPC_FAIL_FAST", "false",
-                                               &fail_fast_env));
+              TF_CHECK_OK(ReadBoolFromEnvVar("GRPC_FAIL_FAST", false, &x));
 #endif  // PLATFORM_GOOGLE
-              string fail_fast_env_lower = absl::AsciiStrToLower(fail_fast_env);
-              if (fail_fast_env_lower == "true") {
-                return true;
-              } else if (fail_fast_env_lower == "use_caller") {
-                return fail_fast;
-              } else if (fail_fast_env_lower == "false") {
-                return false;
-              } else {
-                string error_message = strings::StrCat(
-                    "Invalid GRPC_FAIL_FAST config: ", fail_fast_env);
-                LOG(WARNING) << error_message;
-                done(errors::InvalidArgument(error_message));
-                return false;
-              }
+              return x;
             }(),
-            (call_opts != nullptr ? call_opts->GetTimeout() : 0), max_retries,
-            target) {
+            /*timeout_in_ms=*/0, max_retries) {
   }
 
   template <typename Request>
@@ -93,7 +71,7 @@ class RPCState : public GrpcClientCQTag {
            const ::grpc::string& method, const Request& request,
            Response* response, StatusCallback done, CallOptions* call_opts,
            thread::ThreadPool* threadpool, bool fail_fast, int64 timeout_in_ms,
-           int32 max_retries, const string* target)
+           int32 max_retries)
       : call_opts_(call_opts),
         threadpool_(threadpool),
         done_(std::move(done)),
@@ -102,8 +80,7 @@ class RPCState : public GrpcClientCQTag {
         cq_(cq),
         stub_(stub),
         method_(method),
-        fail_fast_(fail_fast),
-        target_(target) {
+        fail_fast_(fail_fast) {
     response_ = response;
     ::grpc::Status s = GrpcMaybeUnparseProto(request, &request_buf_);
     if (!s.ok()) {
@@ -175,13 +152,10 @@ class RPCState : public GrpcClientCQTag {
       StartCall();
     } else {
       // Attach additional GRPC error information if any to the final status
-      string error_msg = s.error_message();
-      strings::StrAppend(&error_msg, "\nAdditional GRPC error information");
-      if (target_) {
-        strings::StrAppend(&error_msg, " from remote target ", *target_);
-      }
-      strings::StrAppend(&error_msg, ":\n:", context_->debug_error_string());
-      s = Status(s.code(), error_msg);
+      s = Status(s.code(),
+                 strings::StrCat(s.error_message(),
+                                 "\nAdditional GRPC error information:\n",
+                                 context_->debug_error_string()));
       // Always treat gRPC cancellation as a derived error. This ensures that
       // other error types are preferred during status aggregation. (gRPC
       // cancellation messages do not contain the original status message).
@@ -222,7 +196,6 @@ class RPCState : public GrpcClientCQTag {
   ::grpc::GenericStub* stub_;
   ::grpc::string method_;
   bool fail_fast_;
-  const string* target_;
 };
 
 // Represents state associated with one streaming RPC call.
@@ -248,7 +221,7 @@ class UntypedStreamingRPCState : public core::RefCounted {
     enum class TagType {
       kCallStarted,
       kRequestWriteCompleted,
-      kResponseReadCompleted,
+      kResponseReadCommpleted,
       kCallFinished,
     };
 
@@ -364,7 +337,7 @@ class ExchangeQueue {
 
   // Changes the state of the exchange that is current in kRequestWriteIssued
   // state to kRequestWriteCompleted state.
-  // REQUIRES: There is an exchange in kRequestWriteIssued state.
+  // REQUIRES: There is an exhange in kRequestWriteIssued state.
   void MarkRequestWriteCompleted();
 
   // Returns the exchange at the front of the queue.
@@ -479,17 +452,19 @@ class StreamingRPCState : public UntypedStreamingRPCState {
       mu_.unlock();
       return;
     }
-    exchanges_.MarkRequestWriteCompleted();
-    // Issue ResponseRead regardless of OK status on completing RequestWrite.
-    // If the underlying completion queue is in Not-OK status due to previous
-    // request failuress (i.e., `ok` from `Next` call on completion queue is
-    // False), delay the error in ResponseRead so we can get the remote error
-    // message from response buffer.
-    MaybeIssueResponseReadLocked();
-
-    if (ok) {
-      MaybeIssueRequestWriteLocked();
+    if (!ok) {
+      // unlocks mu_
+      MarkDoneAndCompleteExchanges(errors::Internal(
+          "Not ok value returned by CompletionQueue when attempting streaming "
+          "rpc write. Probably because the completion queue has been shut "
+          "down or the connection went down. ",
+          context_->debug_error_string()));
+      return;
     }
+
+    exchanges_.MarkRequestWriteCompleted();
+    MaybeIssueResponseReadLocked();
+    MaybeIssueRequestWriteLocked();
     mu_.unlock();
   }
 
@@ -558,10 +533,10 @@ class StreamingRPCState : public UntypedStreamingRPCState {
     kDone,
   };
 
-  void MarkDoneAndCompleteExchanges(Status status)
-      TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) TF_UNLOCK_FUNCTION(mu_) {
+  void MarkDoneAndCompleteExchanges(Status status) EXCLUSIVE_LOCKS_REQUIRED(mu_)
+      UNLOCK_FUNCTION(mu_) {
     call_state_ = State::kDone;
-    VLOG(2) << "Ending gRPC streaming call on the client side due to "
+    VLOG(2) << "Ending gRPC stremaing call on the client side due to "
             << status.ToString();
     // Swap the exchanges_ into a temporary ExchangeQueue so that we can
     // complete all exchanges without holding mu_ in case user callback
@@ -573,7 +548,7 @@ class StreamingRPCState : public UntypedStreamingRPCState {
     queue.CompleteAll(status);
   }
 
-  void MaybeIssueRequestWriteLocked() TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  void MaybeIssueRequestWriteLocked() EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     Exchange* exchange = exchanges_.GetReadyForRequestWriting();
     if (exchange == nullptr) {
       // There are no queued exchanges, there is already an outstanding write,
@@ -586,7 +561,7 @@ class StreamingRPCState : public UntypedStreamingRPCState {
     call_->Write(exchange->request_buf(), &request_write_completed_tag_);
   }
 
-  void MaybeIssueResponseReadLocked() TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  void MaybeIssueResponseReadLocked() EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     Exchange* exchange = exchanges_.GetReadyForResponseReading();
     if (exchange == nullptr) {
       return;
@@ -597,7 +572,7 @@ class StreamingRPCState : public UntypedStreamingRPCState {
     call_->Read(exchange->response_buf(), &response_read_completed_tag_);
   }
 
-  void IssueCallFinishLocked() TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  void IssueCallFinishLocked() EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     call_state_ = State::kFinishing;
     Ref();
     VLOG(3) << "StreamingRPCState(" << this << ") calling grpc::Finish";
@@ -618,9 +593,9 @@ class StreamingRPCState : public UntypedStreamingRPCState {
   std::unique_ptr<grpc::GenericClientAsyncReaderWriter> call_;
 
   mutable mutex mu_;
-  ExchangeQueue exchanges_ TF_GUARDED_BY(mu_);
-  State call_state_ TF_GUARDED_BY(mu_);
-  ::grpc::Status call_status_ TF_GUARDED_BY(mu_);
+  ExchangeQueue exchanges_ GUARDED_BY(mu_);
+  State call_state_ GUARDED_BY(mu_);
+  ::grpc::Status call_status_ GUARDED_BY(mu_);
 
   // We can get away with having single instances of these tags per
   // StreamingRPCState because we make sure (as gRPC requires) that
@@ -629,7 +604,7 @@ class StreamingRPCState : public UntypedStreamingRPCState {
   // Tags are immutable. No need to guard them.
   Tag call_started_tag_{this, Tag::TagType::kCallStarted};
   Tag request_write_completed_tag_{this, Tag::TagType::kRequestWriteCompleted};
-  Tag response_read_completed_tag_{this, Tag::TagType::kResponseReadCompleted};
+  Tag response_read_completed_tag_{this, Tag::TagType::kResponseReadCommpleted};
   Tag finished_tag_{this, Tag::TagType::kCallFinished};
 };
 
@@ -694,7 +669,7 @@ class StreamingRPCDispatcher {
   }
 
  private:
-  void CreateStreamingState() TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+  void CreateStreamingState() EXCLUSIVE_LOCKS_REQUIRED(mu_) {
     // ClientContext cannot be reused across calls.
     context_ = std::make_shared<::grpc::ClientContext>();
     // Don't immediately fail StartCall if the channel is not ready. Wait for
@@ -716,8 +691,8 @@ class StreamingRPCDispatcher {
   // Does not need synchronization since it is constant.
   const ::grpc::string method_;
 
-  std::shared_ptr<::grpc::ClientContext> context_ TF_GUARDED_BY(mu_);
-  core::RefCountPtr<StreamingRPCState<Response>> state_ TF_GUARDED_BY(mu_);
+  std::shared_ptr<::grpc::ClientContext> context_ GUARDED_BY(mu_);
+  core::RefCountPtr<StreamingRPCState<Response>> state_ GUARDED_BY(mu_);
 };
 
 }  // namespace tensorflow

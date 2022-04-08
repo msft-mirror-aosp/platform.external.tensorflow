@@ -6,9 +6,8 @@ func @main(tensor<4xf32>) -> tensor<4xf32> {
 // CHECK: {
 // CHECK-NEXT:   version: 3,
 // CHECK-NEXT:     operator_codes: [ {
-// CHECK-NEXT:       deprecated_builtin_code: 80,
-// CHECK-NEXT:       version: 1,
-// CHECK-NEXT:       builtin_code: FAKE_QUANT
+// CHECK-NEXT:       builtin_code: FAKE_QUANT,
+// CHECK-NEXT:       version: 1
 // CHECK-NEXT:     } ],
 // CHECK-NEXT:     subgraphs: [ {
 // CHECK-NEXT:       tensors: [ {
@@ -47,14 +46,7 @@ func @main(tensor<4xf32>) -> tensor<4xf32> {
 // CHECK-EMPTY:
 // CHECK-NEXT:     }, {
 // CHECK-EMPTY:
-// CHECK-NEXT:     }, {
-// CHECK-NEXT:       data: [ 49, 46, 53, 46, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 ]
-// CHECK-NEXT:     } ],
-// CHECK-NEXT:     metadata: [ {
-// CHECK-NEXT:     name: "min_runtime_version",
-// CHECK-NEXT:     buffer: 3
 // CHECK-NEXT:     } ]
-// CHECK-NEXT:     signature_defs: [ ]
 // CHECK-NEXT:   }
 
 // IMPORT: "tfl.fake_quant"(%arg0) {max = 1.400000e+00 : f32, min = 3.000000e-01 : f32, narrow_range = false, num_bits = 6 : i32}

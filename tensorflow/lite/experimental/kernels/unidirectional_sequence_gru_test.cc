@@ -37,7 +37,7 @@ class GRUOpModel : public SingleOpModel {
       : n_batch_(n_batch), n_input_(n_input), n_output_(n_output) {
     input_ = AddInput(TensorType_FLOAT32);
     input_state_ =
-        AddVariableInput(TensorData{TensorType_FLOAT32, {n_batch, n_output}});
+        AddInput(TensorData{TensorType_FLOAT32, {n_batch, n_output}}, true);
     gate_weight_ = AddInput(TensorType_FLOAT32);
     gate_bias_ = AddInput(TensorType_FLOAT32);
     candidate_weight_ = AddInput(TensorType_FLOAT32);

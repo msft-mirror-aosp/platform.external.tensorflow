@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,15 +19,15 @@ from __future__ import division
 from __future__ import print_function
 
 import importlib
-import inspect
+import types
 
 from tensorflow.python.platform import tf_logging as logging
-from tensorflow.python.util import fast_module_type
 from tensorflow.python.util import tf_decorator
 from tensorflow.python.util import tf_inspect
+from tensorflow.python.util import tf_stack
 from tensorflow.tools.compatibility import all_renames_v2
 
-FastModuleType = fast_module_type.get_fast_module_type_class()
+
 _PER_MODULE_WARNING_LIMIT = 1
 
 
@@ -41,16 +41,16 @@ def _call_location():
   # We want to get stack frame 3 frames up from current frame,
   # i.e. above __getattr__, _tfmw_add_deprecation_warning,
   # and _call_location calls.
-  frame = inspect.currentframe()
-  for _ in range(4):
-    parent = frame.f_back
-    if parent is None:
-      break
-  return '{}:{}'.format(frame.f_code.co_filename, frame.f_lineno)
+  stack = tf_stack.extract_stack(limit=4)
+  if not stack:  # should never happen as we're in a function
+    return 'UNKNOWN'
+  frame = stack[0]
+  return '{}:{}'.format(frame.filename, frame.lineno)
 
 
 def contains_deprecation_decorator(decorators):
-  return any(d.decorator_name == 'deprecated' for d in decorators)
+  return any(
+      d.decorator_name == 'deprecated' for d in decorators)
 
 
 def has_deprecation_decorator(symbol):
@@ -78,7 +78,7 @@ def has_deprecation_decorator(symbol):
   return contains_deprecation_decorator(init_decorators)
 
 
-class TFModuleWrapper(FastModuleType):
+class TFModuleWrapper(types.ModuleType):
   """Wrapper for TF modules to support deprecation messages and lazyloading."""
 
   def __init__(  # pylint: disable=super-on-old-class
@@ -89,9 +89,8 @@ class TFModuleWrapper(FastModuleType):
       deprecation=True,
       has_lite=False):  # pylint: enable=super-on-old-class
     super(TFModuleWrapper, self).__init__(wrapped.__name__)
-    FastModuleType.set_getattr_callback(self, TFModuleWrapper._getattr)
-    FastModuleType.set_getattribute_callback(self,
-                                             TFModuleWrapper._getattribute)
+    # A cache for all members which do not print deprecations (any more).
+    self._tfmw_attr_map = {}
     self.__dict__.update(wrapped.__dict__)
     # Prefix all local attributes with _tfmw_ so that we can
     # handle them differently in attribute access methods.
@@ -142,7 +141,6 @@ class TFModuleWrapper(FastModuleType):
     return False
 
   def _tfmw_import_module(self, name):
-    """Lazily loading the modules."""
     symbol_loc_info = self._tfmw_public_apis[name]
     if symbol_loc_info[0]:
       module = importlib.import_module(symbol_loc_info[0])
@@ -151,67 +149,51 @@ class TFModuleWrapper(FastModuleType):
       attr = importlib.import_module(symbol_loc_info[1])
     setattr(self._tfmw_wrapped_module, name, attr)
     self.__dict__[name] = attr
-    # Cache the pair
-    self._fastdict_insert(name, attr)
     return attr
 
-  def _getattribute(self, name):
-    # pylint: disable=g-doc-return-or-yield,g-doc-args
-    """Imports and caches pre-defined API.
+  def __getattribute__(self, name):  # pylint: disable=super-on-old-class
+    # Handle edge case where we unpickle and the object is not initialized yet
+    # and does not have _tfmw_attr_map attribute. Otherwise, calling
+    # __getattribute__ on __setstate__ will result in infinite recursion where
+    # we keep trying to get _tfmw_wrapped_module in __getattr__.
+    try:
+      attr_map = object.__getattribute__(self, '_tfmw_attr_map')
+    except AttributeError:
+      self._tfmw_attr_map = attr_map = {}
 
-    Warns if necessary.
+    try:
+      # Use cached attrs if available
+      return attr_map[name]
+    except KeyError:
+      # Make sure we do not import from tensorflow/lite/__init__.py
+      if name == 'lite':
+        if self._tfmw_has_lite:
+          attr = self._tfmw_import_module(name)
+          setattr(self._tfmw_wrapped_module, 'lite', attr)
+          attr_map[name] = attr
+          return attr
 
-    This method is a replacement for __getattribute__(). It will be added into
-    the extended python module as a callback to reduce API overhead.
-    """
-    # Avoid infinite recursions
-    func__fastdict_insert = object.__getattribute__(self, '_fastdict_insert')
+      # Placeholder for Google-internal contrib error
 
-    # Make sure we do not import from tensorflow/lite/__init__.py
-    if name == 'lite':
-      if self._tfmw_has_lite:
-        attr = self._tfmw_import_module(name)
-        setattr(self._tfmw_wrapped_module, 'lite', attr)
-        func__fastdict_insert(name, attr)
+      attr = super(TFModuleWrapper, self).__getattribute__(name)
+
+      # Return and cache dunders and our own members.
+      if name.startswith('__') or name.startswith('_tfmw_'):
+        attr_map[name] = attr
         return attr
-  # Placeholder for Google-internal contrib error
 
-    attr = object.__getattribute__(self, name)
-
-    # Return and cache dunders and our own members.
-    # This is necessary to guarantee successful construction.
-    # In addition, all the accessed attributes used during the construction must
-    # begin with "__" or "_tfmw" or "_fastdict_".
-    if name.startswith('__') or name.startswith('_tfmw_') or name.startswith(
-        '_fastdict_'):
-      func__fastdict_insert(name, attr)
+      # Print deprecations, only cache functions after deprecation warnings have
+      # stopped.
+      if not (self._tfmw_print_deprecation_warnings and
+              self._tfmw_add_deprecation_warning(name, attr)):
+        attr_map[name] = attr
       return attr
 
-    # Print deprecations, only cache functions after deprecation warnings have
-    # stopped.
-    if not (self._tfmw_print_deprecation_warnings and
-            self._tfmw_add_deprecation_warning(name, attr)):
-      func__fastdict_insert(name, attr)
-
-    return attr
-
-  def _getattr(self, name):
-    # pylint: disable=g-doc-return-or-yield,g-doc-args
-    """Imports and caches pre-defined API.
-
-    Warns if necessary.
-
-    This method is a replacement for __getattr__(). It will be added into the
-    extended python module as a callback to reduce API overhead. Instead of
-    relying on implicit AttributeError handling, this added callback function
-    will
-    be called explicitly from the extended C API if the default attribute lookup
-    fails.
-    """
+  def __getattr__(self, name):
     try:
       attr = getattr(self._tfmw_wrapped_module, name)
     except AttributeError:
-    # Placeholder for Google-internal contrib error
+      # Placeholder for Google-internal contrib error
 
       if not self._tfmw_public_apis:
         raise
@@ -229,9 +211,8 @@ class TFModuleWrapper(FastModuleType):
       self.__dict__[arg] = val
       if arg not in self.__all__ and arg != '__all__':
         self.__all__.append(arg)
-      # Update the cache
-      if self._fastdict_key_in(arg):
-        self._fastdict_insert(arg, val)
+      if arg in self._tfmw_attr_map:
+        self._tfmw_attr_map[arg] = val
     super(TFModuleWrapper, self).__setattr__(arg, val)
 
   def __dir__(self):
@@ -255,4 +236,4 @@ class TFModuleWrapper(FastModuleType):
     return self._tfmw_wrapped_module.__repr__()
 
   def __reduce__(self):
-    return importlib.import_module, (self.__name__,)
+    return __import__, (self.__name__,)
