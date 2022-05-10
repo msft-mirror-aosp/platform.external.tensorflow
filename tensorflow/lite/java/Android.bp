@@ -24,20 +24,27 @@ package {
 java_library_static {
     name: "tensorflowlite_java",
     sdk_version: "current",
+    min_sdk_version: "30",
     libs: [
         "android-support-annotations",
+        "guava-android-annotation-stubs",
     ],
     srcs: [
         ":tflite_nnapi_delegate_java",
-        "src/main/java/org/tensorflow/lite/*.java",
+        "src/main/java/org/tensorflow/lite/**/*.java",
     ],
     static_libs: [
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adservices",
     ],
 }
 
 cc_library_shared {
     name: "libtensorflowlite_jni",
     sdk_version: "current",
+    min_sdk_version: "30",
     export_include_dirs: [
         "src/main/native/",
     ],
@@ -61,4 +68,8 @@ cc_library_shared {
         "-Wno-unused-parameter",
     ],
     stl: "libc++_static",
+    apex_available: [
+        "//apex_available:platform",
+        "com.android.adservices",
+    ],
 }

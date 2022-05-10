@@ -65,6 +65,7 @@ cc_library_headers {
         "com.android.extservices",
         "com.android.neuralnetworks",
         "test_com.android.neuralnetworks",
+        "com.android.adservices",
     ],
 }
 
@@ -77,3 +78,64 @@ genrule {
 }
 
 subdirs = ["tensorflow/lite"]
+
+cc_library_static {
+    name: "TfliteNnapiDelegateTests_static",
+    srcs: [
+        "tensorflow/lite/delegates/nnapi/nnapi_delegate_test.cc",
+        "tensorflow/lite/kernels/test_util.cc",
+        "tensorflow/core/platform/default/logging.cc",
+        "tensorflow/core/platform/default/env_time.cc",
+        "tensorflow/lite/kernels/acceleration_test_util.cc",
+        "tensorflow/lite/kernels/acceleration_test_util_internal.cc",
+        "tensorflow/lite/delegates/nnapi/acceleration_test_list.cc",
+        "tensorflow/lite/delegates/nnapi/acceleration_test_util.cc",
+    ],
+    include_dirs: [
+        "external/flatbuffers/include",
+        "external/tensorflow",
+        "external/ruy",
+    ],
+    cflags: [
+        "-DPLATFORM_POSIX_ANDROID",
+        "-Wextra",
+        "-Wno-extern-c-compat",
+        "-Wno-sign-compare",
+        "-Wno-unused-parameter",
+        "-Wno-unused-private-field",
+    ],
+    shared_libs: [
+        "libandroid",
+        "liblog",
+        "libneuralnetworks",
+    ],
+    static_libs: [
+        "libgtest_ndk_c++",
+        "libgmock_ndk",
+        "libtflite_static",
+    ],
+    header_libs: [
+        "libeigen",
+        "gemmlowp_headers",
+        "libtflite_schema_headers",
+    ],
+    sdk_version: "current",
+    stl: "c++_static",
+}
+
+
+cc_library_static {
+    name: "tflite_configuration_proto",
+    proto: {
+        type: "lite",
+        canonical_path_from_root: false,
+        export_proto_headers: true,
+    },
+    stl: "libc++",
+    srcs: ["tensorflow/lite/experimental/acceleration/configuration/**/*.proto"],
+    sdk_version: "current",
+    min_sdk_version: "Tiramisu",
+    apex_available: [
+        "com.android.adservices",
+    ],
+}
