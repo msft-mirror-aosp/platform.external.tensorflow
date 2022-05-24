@@ -26,6 +26,7 @@ java_library_static {
     sdk_version: "current",
     libs: [
         "android-support-annotations",
+        "guava-android-annotation-stubs",
     ],
     srcs: [
         ":tflite_nnapi_delegate_java",
