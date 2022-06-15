@@ -54,6 +54,7 @@ cc_library_static {
 cc_library_static {
     name: "libtflite_framework",
     defaults: ["tflite_defaults"],
+    rtti: true,
     srcs: [
         "allocation.cc",
         "arena_planner.cc",
@@ -150,23 +151,6 @@ cc_library_shared {
         "libtflite_kernels",
     ],
     stl: "libc++_static",
-}
-
-cc_library_static {
-    name: "tflite_mutable_op_resolver",
-    defaults: ["tflite_defaults"],
-    srcs: [
-        "mutable_op_resolver.cc"
-    ],
-    header_libs: [
-        "flatbuffer_headers",
-    ],
-    stl: "libc++",
-    sdk_version: "current",
-    min_sdk_version: "30",
-    apex_available: [
-        "com.android.adservices",
-    ],
 }
 
 build = [
