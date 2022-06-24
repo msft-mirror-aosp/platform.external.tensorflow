@@ -25,6 +25,7 @@ cc_library_static {
     name: "libtflite_kernel_utils",
     defaults: ["tflite_defaults"],
     vendor_available: true,
+    min_sdk_version: "apex_inherit",
     apex_available: [
         "//apex_available:platform",
         "com.android.neuralnetworks",
