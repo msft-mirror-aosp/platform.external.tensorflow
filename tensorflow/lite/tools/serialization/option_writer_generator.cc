@@ -41,6 +41,7 @@ static const char* param_structs[] = {"TfLiteAddParams",
                                       "TfLiteFakeQuantParams",
                                       "TfLiteFullyConnectedParams",
                                       "TfLiteGatherParams",
+                                      "TfLiteGeluParams",
                                       "TfLiteIfParams",
                                       "TfLiteL2NormParams",
                                       "TfLiteLeakyReluParams",
@@ -205,6 +206,7 @@ class OpOptionData {
     op_to_option_["IMAG"] = "";
     op_to_option_["COMPLEX_ABS"] = "";
     op_to_option_["BROADCAST_ARGS"] = "";
+    op_to_option_["GELU"] = "";
 
     // TODO(aselle): These are undesirable hacks. Consider changing C structs
     option_to_struct_["Pool2DOptions"] = "TfLitePoolParams";
