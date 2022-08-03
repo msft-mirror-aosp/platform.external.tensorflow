@@ -502,6 +502,10 @@ typedef struct {
   const char* shared_name;
 } TfLiteVarHandleParams;
 
+typedef struct {
+  bool approximate;
+} TfLiteGeluParams;
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
