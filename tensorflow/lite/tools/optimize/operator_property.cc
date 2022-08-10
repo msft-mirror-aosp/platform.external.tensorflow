@@ -1041,6 +1041,11 @@ OperatorProperty GetOperatorProperty(OpVariant op_variant) {
       property.outputs = {{0, {}}};
       property.version = 1;
       break;
+    case BuiltinOperator_GELU:
+      property.inputs = {{0, {}}};
+      property.outputs = {{0, {}}};
+      property.version = 2;
+      break;
     default:
       // No quantized implementation exists for this operation.
       property.quantizable = false;
