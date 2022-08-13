@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/binary_function.h"
+#include "tensorflow/lite/kernels/internal/reference/gelu.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/log_softmax.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/logistic.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/tanh.h"
@@ -1501,6 +1502,53 @@ TfLiteStatus EluEval(TfLiteContext* context, TfLiteNode* node) {
   }
 }
 
+TfLiteStatus GeluPrepare(TfLiteContext* context, TfLiteNode* node) {
+  const TfLiteTensor* input;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &input));
+  TfLiteTensor* output;
+  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output));
+  OpData* data = reinterpret_cast<OpData*>(node->user_data);
+  auto* params = reinterpret_cast<TfLiteGeluParams*>(node->builtin_data);
+
+  if (input->type == kTfLiteInt8) {
+    PopulateLookupTable<int8_t>(
+        data, input, output, reference_ops::GeluTransform(params->approximate));
+  } else if (input->type == kTfLiteUInt8) {
+    PopulateLookupTable<uint8_t>(
+        data, input, output, reference_ops::GeluTransform(params->approximate));
+  }
+  return GenericPrepare(context, node);
+}
+
+TfLiteStatus GeluEval(TfLiteContext* context, TfLiteNode* node) {
+  auto* params = reinterpret_cast<TfLiteGeluParams*>(node->builtin_data);
+  const TfLiteTensor* input;
+  TF_LITE_ENSURE_OK(context, GetInputSafe(context, node, 0, &input));
+  TfLiteTensor* output;
+  TF_LITE_ENSURE_OK(context, GetOutputSafe(context, node, 0, &output));
+
+  switch (input->type) {
+    case kTfLiteFloat32: {
+      reference_ops::Gelu(GetTensorShape(input), GetTensorData<float>(input),
+                          params->approximate, GetTensorShape(output),
+                          GetTensorData<float>(output));
+      return kTfLiteOk;
+    }
+    case kTfLiteInt8:
+    case kTfLiteUInt8: {
+      OpData* data = reinterpret_cast<OpData*>(node->user_data);
+      EvalUsingLookupTable(data, input, output);
+      return kTfLiteOk;
+    }
+    default:
+      TF_LITE_KERNEL_LOG(
+          context, "Only float32, int8 and uint8 supported currently, got %s.",
+          TfLiteTypeGetName(input->type));
+      return kTfLiteError;
+  }
+  return kTfLiteOk;
+}
+
 }  // namespace activations
 
 TfLiteRegistration* Register_ELU() {
@@ -1658,6 +1706,13 @@ TfLiteRegistration* Register_HARD_SWISH_REF() {
       activations::HardSwishInit, activations::HardSwishFree,
       activations::HardSwishPrepare,
       activations::HardSwishEval<activations::kReference>};
+  return &r;
+}
+
+TfLiteRegistration* Register_GELU() {
+  static TfLiteRegistration r = {activations::Init, activations::Free,
+                                 activations::GeluPrepare,
+                                 activations::GeluEval};
   return &r;
 }
 
