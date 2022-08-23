@@ -795,6 +795,21 @@ TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
       *builtin_data = params.release();
       return kTfLiteOk;
     }
+    case BuiltinOperator_GELU: {
+      auto params = safe_allocator.Allocate<TfLiteGeluParams>();
+      TF_LITE_ENSURE(error_reporter, params != nullptr);
+      if (const auto* gelu_params = op->builtin_options_as_GeluOptions()) {
+        params->approximate = gelu_params->approximate();
+      }
+      *builtin_data = params.release();
+      return kTfLiteOk;
+    }
+    // Unsupported builtins.
+    case BuiltinOperator_RANDOM_STANDARD_NORMAL:
+    case BuiltinOperator_BUCKETIZE:
+    case BuiltinOperator_RANDOM_UNIFORM:
+    case BuiltinOperator_MULTINOMIAL:
+      return kTfLiteError;
     // Below are the ops with no builtin_data structure.
     // TODO(aselle): Implement call in BuiltinOptions, but nullptrs are
     // ok for now, since there is no call implementation either.
