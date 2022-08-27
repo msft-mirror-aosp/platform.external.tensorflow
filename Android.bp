@@ -85,8 +85,8 @@ cc_library_static {
     srcs: [
         "tensorflow/lite/delegates/nnapi/nnapi_delegate_test.cc",
         "tensorflow/lite/kernels/test_util.cc",
-        "tensorflow/core/platform/default/logging.cc",
-        "tensorflow/core/platform/default/env_time.cc",
+        "tensorflow/tsl/platform/default/logging.cc",
+        "tensorflow/tsl/platform/default/env_time.cc",
         "tensorflow/lite/kernels/acceleration_test_util.cc",
         "tensorflow/lite/kernels/acceleration_test_util_internal.cc",
         "tensorflow/lite/delegates/nnapi/acceleration_test_list.cc",
@@ -164,6 +164,7 @@ cc_library {
     srcs: [
         "tensorflow/core/protobuf/bfc_memory_map.proto",
         "tensorflow/core/protobuf/config.proto",
+        "tensorflow/core/protobuf/coordination_config.proto",
         "tensorflow/core/protobuf/cluster.proto",
         "tensorflow/core/protobuf/debug.proto",
         "tensorflow/core/protobuf/device_filters.proto",
