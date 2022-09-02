@@ -60,6 +60,7 @@ cc_library_headers {
     vendor_available: true,
     host_supported: true,
     sdk_version: "current",
+    min_sdk_version: "apex_inherit",
     apex_available: [
         "//apex_available:platform",
         "com.android.extservices",
@@ -83,8 +84,8 @@ cc_library_static {
     srcs: [
         "tensorflow/lite/delegates/nnapi/nnapi_delegate_test.cc",
         "tensorflow/lite/kernels/test_util.cc",
-        "tensorflow/core/platform/default/logging.cc",
-        "tensorflow/core/platform/default/env_time.cc",
+        "tensorflow/tsl/platform/default/logging.cc",
+        "tensorflow/tsl/platform/default/env_time.cc",
         "tensorflow/lite/kernels/acceleration_test_util.cc",
         "tensorflow/lite/kernels/acceleration_test_util_internal.cc",
         "tensorflow/lite/delegates/nnapi/acceleration_test_list.cc",
@@ -120,4 +121,75 @@ cc_library_static {
     ],
     sdk_version: "current",
     stl: "c++_static",
+}
+
+
+cc_library_static {
+    name: "tflite_configuration_proto",
+    proto: {
+        type: "lite",
+        canonical_path_from_root: false,
+        export_proto_headers: true,
+    },
+    stl: "libc++",
+    srcs: ["tensorflow/lite/experimental/acceleration/configuration/**/*.proto"],
+    sdk_version: "current",
+    min_sdk_version: "Tiramisu",
+    apex_available: [
+        "com.android.adservices",
+    ],
+}
+
+cc_library {
+    name: "tensorflow_core_framework_proto",
+    proto: {
+        type: "lite",
+        canonical_path_from_root: false,
+        export_proto_headers: true,
+    },
+    srcs: [
+        "tensorflow/core/framework/**/*.proto",
+    ],
+}
+
+cc_library {
+    name: "tensorflow_core_protobuf_proto",
+    proto: {
+        type: "lite",
+        canonical_path_from_root: false,
+        export_proto_headers: true,
+        include_dirs: ["external/protobuf/src"],
+    },
+    srcs: [
+        "tensorflow/core/protobuf/bfc_memory_map.proto",
+        "tensorflow/core/protobuf/config.proto",
+        "tensorflow/core/protobuf/coordination_config.proto",
+        "tensorflow/core/protobuf/cluster.proto",
+        "tensorflow/core/protobuf/debug.proto",
+        "tensorflow/core/protobuf/device_filters.proto",
+        "tensorflow/core/protobuf/device_properties.proto",
+        "tensorflow/core/protobuf/graph_debug_info.proto",
+        "tensorflow/core/protobuf/queue_runner.proto",
+        "tensorflow/core/protobuf/rewriter_config.proto",
+        "tensorflow/core/protobuf/tensor_bundle.proto",
+        "tensorflow/core/protobuf/saver.proto",
+        "tensorflow/core/protobuf/verifier_config.proto",
+        "tensorflow/core/protobuf/error_codes.proto",
+        "tensorflow/core/protobuf/data_service.proto",
+        "tensorflow/core/protobuf/debug_event.proto",
+        "tensorflow/core/protobuf/composite_tensor_variant.proto",
+        "tensorflow/core/protobuf/meta_graph.proto",
+        "tensorflow/core/protobuf/named_tensor.proto",
+        "tensorflow/core/protobuf/remote_tensor_handle.proto",
+        "tensorflow/core/protobuf/saved_model.proto",
+        "tensorflow/core/protobuf/saved_object_graph.proto",
+        "tensorflow/core/protobuf/struct.proto",
+        "tensorflow/core/protobuf/tensorflow_server.proto",
+        "tensorflow/core/protobuf/trackable_object_graph.proto",
+        "tensorflow/core/protobuf/transport_options.proto",
+    ],
+    shared_libs: [
+        "libprotobuf-cpp-full",
+        "tensorflow_core_framework_proto",
+    ],
 }

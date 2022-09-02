@@ -31,7 +31,7 @@ java_library_static {
     ],
     srcs: [
         ":tflite_nnapi_delegate_java",
-        "src/main/java/org/tensorflow/lite/*.java",
+        "src/main/java/org/tensorflow/lite/**/*.java",
     ],
     static_libs: [
     ],

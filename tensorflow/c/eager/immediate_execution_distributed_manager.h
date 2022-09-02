@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_C_EAGER_immediate_execution_distributed_manager_H_
 #define TENSORFLOW_C_EAGER_immediate_execution_distributed_manager_H_
 
+#include <string>
+
 #include "tensorflow/core/platform/status.h"
 
 namespace tensorflow {
