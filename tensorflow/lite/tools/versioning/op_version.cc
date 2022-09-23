@@ -785,6 +785,12 @@ int GetBuiltinOperatorVersion(const OpSignature& op_sig) {
         return 3;
       }
       return 2;
+    case BuiltinOperator_GELU:
+      if (op_sig.inputs.at(0).type == kTfLiteInt8 ||
+          op_sig.inputs.at(0).type == kTfLiteUInt8) {
+        return 2;
+      }
+      return 1;
     default:
       return 1;
   }
