@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/stream_executor/platform/port.h"
 
 namespace Eigen {
+struct bfloat16;
 struct half;
 }  // namespace Eigen
 
