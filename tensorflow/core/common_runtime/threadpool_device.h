@@ -49,10 +49,6 @@ class ThreadPoolDevice : public LocalDevice {
   void ComputeAsync(AsyncOpKernel* op_kernel, OpKernelContext* context,
                     AsyncOpKernel::DoneCallback done) override;
 
-  void Compute(OpKernel* op_kernel, OpKernelContext* context) override;
-  void ComputeAsync(AsyncOpKernel* op_kernel, OpKernelContext* context,
-                    AsyncOpKernel::DoneCallback done) override;
-
  private:
   void LogInputs(OpKernel* op_kernel, OpKernelContext* context);
   void LogOutputs(OpKernel* op_kernel, OpKernelContext* context);
