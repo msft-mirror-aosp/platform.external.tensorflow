@@ -305,8 +305,8 @@ static bool IsNegativeZero(Eigen::QInt32 value) { return false; }
 static bool IsNegativeZero(Eigen::half value) {
   return IsNegativeZero<float>(value);
 }
-static bool IsNegativeZero(Eigen::bfloat16 value) {
-  return IsNegativeZero<float>(value);
+static bool IsNegativeZero(tensorflow::bfloat16 value) {
+  return IsNegativeZero<float>(float(value));
 }
 
 template <typename T>

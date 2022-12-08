@@ -48,7 +48,7 @@ namespace traceme_internal {
 // REQUIRED: The address range [out, out + str.size()] must have been allocated.
 TF_ATTRIBUTE_ALWAYS_INLINE inline char* Append(char* out,
                                                absl::string_view str) {
-  DCHECK(!absl::StrContains(str, '#'))
+  DCHECK(!absl::StrContains(str, "#"))
       << "'#' is not a valid character in TraceMeEncode";
   const size_t str_size = str.size();
   if (TF_PREDICT_TRUE(str_size > 0)) {
