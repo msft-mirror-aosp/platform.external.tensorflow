@@ -80,13 +80,20 @@ genrule {
 
 subdirs = ["tensorflow/lite"]
 
+filegroup {
+    name: "tensorflow_tsl_logging_srcs",
+    srcs: [
+        "tensorflow/tsl/platform/default/logging.cc",
+        "tensorflow/tsl/platform/default/env_time.cc",
+    ],
+}
+
 cc_library_static {
     name: "TfliteNnapiDelegateTests_static",
     srcs: [
         "tensorflow/lite/delegates/nnapi/nnapi_delegate_test.cc",
+        "tensorflow/lite/kernels/test_delegate_providers.cc",
         "tensorflow/lite/kernels/test_util.cc",
-        "tensorflow/tsl/platform/default/logging.cc",
-        "tensorflow/tsl/platform/default/env_time.cc",
         "tensorflow/lite/kernels/acceleration_test_util.cc",
         "tensorflow/lite/kernels/acceleration_test_util_internal.cc",
         "tensorflow/lite/delegates/nnapi/acceleration_test_list.cc",
