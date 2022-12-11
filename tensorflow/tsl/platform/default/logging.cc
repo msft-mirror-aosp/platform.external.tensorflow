@@ -24,7 +24,9 @@ limitations under the License.
 #endif
 #include "tensorflow/core/platform/env_time.h"
 #include "tensorflow/core/platform/macros.h"
+#ifdef TF_ANDROID_ENABLE_LOGSINK
 #include "tensorflow/core/platform/mutex.h"
+#endif
 
 #if defined(PLATFORM_POSIX_ANDROID)
 #include <android/log.h>
@@ -363,9 +365,11 @@ void LogMessage::GenerateLogMessage() {
            localtime(&now_seconds));
   const size_t tid_buffer_size = 10;
   char tid_buffer[tid_buffer_size] = "";
+#ifdef __ANDROID__
   if (log_thread_id) {
     snprintf(tid_buffer, sizeof(tid_buffer), " %7u", gettid());
   }
+#endif
   // TODO(jeff,sanjay): Replace this with something that logs through the env.
   fprintf(stderr, "%s.%06d: %c%s %s:%d] %s\n", time_buffer, micros_remainder,
           "IWEF"[severity_], tid_buffer, fname_, line_, str().c_str());
