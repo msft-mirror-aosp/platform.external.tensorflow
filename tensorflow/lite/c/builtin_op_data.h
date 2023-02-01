@@ -503,6 +503,18 @@ typedef struct {
 } TfLiteVarHandleParams;
 
 typedef struct {
+  int seed;
+  int seed2;
+} TfLiteRandomParams;
+
+typedef struct {
+  int num_boundaries;
+  // This points to the memory stored in the model (flatbuffer),
+  // and is not owned.
+  const float* boundaries;
+} TfLiteBucketizeParams;
+
+typedef struct {
   bool approximate;
 } TfLiteGeluParams;
 
