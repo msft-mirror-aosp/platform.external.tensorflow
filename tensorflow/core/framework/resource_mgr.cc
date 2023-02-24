@@ -403,12 +403,6 @@ Status LookupResource(OpKernelContext* ctx, const ResourceHandle& p,
   return ctx->resource_manager()->Lookup(p, value);
 }
 
-Status LookupResource(OpKernelContext* ctx, const ResourceHandle& p,
-                      ResourceBase** value) {
-  TF_RETURN_IF_ERROR(internal::ValidateDevice(ctx, p));
-  return ctx->resource_manager()->Lookup(p, value);
-}
-
 Status DeleteResource(OpKernelContext* ctx, const ResourceHandle& p) {
   TF_RETURN_IF_ERROR(internal::ValidateDevice(ctx, p));
   if (p.IsRefCounting()) {

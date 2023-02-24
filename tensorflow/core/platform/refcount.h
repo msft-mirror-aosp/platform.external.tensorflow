@@ -295,10 +295,6 @@ inline int_fast32_t RefCounted::RefCount() const {
   return ref_.load(std::memory_order_acquire);
 }
 
-inline int_fast32_t RefCounted::RefCount() const {
-  return ref_.load(std::memory_order_acquire);
-}
-
 inline bool RefCounted::RefCountIsOne() const {
   return (ref_.load(std::memory_order_acquire) == 1);
 }

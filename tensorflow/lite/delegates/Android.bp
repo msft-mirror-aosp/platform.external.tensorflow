@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Android Open Source Project
+// Copyright (C) 2017 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,55 +21,37 @@ package {
     default_applicable_licenses: ["external_tensorflow_license"],
 }
 
-java_library_static {
-    name: "tensorflowlite_java",
-    sdk_version: "current",
-    min_sdk_version: "30",
-    libs: [
-        "android-support-annotations",
-        "guava-android-annotation-stubs",
-    ],
+cc_library_static {
+    name: "libtflite_flex_delegate_only_runtime",
+    //defaults: ["tflite_defaults"],
     srcs: [
-        ":tflite_nnapi_delegate_java",
-        "src/main/java/org/tensorflow/lite/**/*.java",
+        "flex/buffer_map.cc",
+        "flex/buffer_map_util.cc",
+        "flex/delegate.cc",
+        "flex/delegate_data.cc",
+        "flex/kernel.cc",
+        "flex/util.cc",
+        "utils/simple_delegate.cc",
     ],
     static_libs: [
-    ],
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.adservices",
-    ],
-}
-
-cc_library_shared {
-    name: "libtensorflowlite_jni",
-    sdk_version: "current",
-    min_sdk_version: "30",
-    export_include_dirs: [
-        "src/main/native/",
-    ],
-    srcs: [
-        "src/main/native/*.cc",
+        "tensorflow_abseil",
+        "tensorflow_core_proto_all",
+        "libtensorflow_core_mobile_srcs_only_runtime",
     ],
     header_libs: [
         "flatbuffer_headers",
-        "jni_headers",
+        "libeigen",
+        "libtextclassifier_hash_headers",
         "tensorflow_headers",
     ],
-    static_libs: [
-        "libruy_static",
-        "libtflite_static",
-    ],
-    shared_libs: [
-        "liblog",
-    ],
     cflags: [
-        "-Wno-unused-function",
+        "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
+        "-Wno-defaulted-function-deleted",
+        "-Wno-unused-const-variable",
+        "-Wno-unused-but-set-variable",
         "-Wno-unused-parameter",
-    ],
-    stl: "libc++_static",
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.adservices",
+        "-Wno-missing-field-initializers",
+        "-Wno-ignored-qualifiers",
+        "-Wno-mismatched-tags",
     ],
 }

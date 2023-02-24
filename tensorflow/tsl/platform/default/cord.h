@@ -19,8 +19,10 @@ limitations under the License.
 // It seems CORD doesn't work well with CUDA <= 10.2
 #if !defined(__CUDACC__) || ((defined(__CUDACC__) && CUDA_VERSION > 10020))
 
-// #include "absl/strings/cord.h"
-// #define TF_CORD_SUPPORT 1
+#ifdef ENABLE_ABSL_IN_TENSORFLOW
+#include "absl/strings/cord.h"
+#define TF_CORD_SUPPORT 1
+#endif
 
 #endif  // __CUDACC__
 

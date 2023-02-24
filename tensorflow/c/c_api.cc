@@ -1862,7 +1862,7 @@ bool CreateInput(const TF_Output& parent_input, TF_Graph* g, const char* name,
 // `dst_graph` that the copied `src_graph` nodes will have control dependencies
 // on. `return_nodes` are nodes in `src_graph`, and the new corresponding nodes
 // in `dst_graph` will be returned. `return_nodes` must be non-null.
-Status CopyGraph(Graph* src_graph, Graph* dst_graph,
+tensorflow::Status CopyGraph(Graph* src_graph, Graph* dst_graph,
                  tensorflow::ShapeRefiner* dst_refiner,
                  const TF_Output* src_inputs,
                  const std::vector<tensorflow::Output>& dst_inputs,

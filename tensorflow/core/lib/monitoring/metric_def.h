@@ -67,11 +67,6 @@ inline ValueType GetValueType<std::function<int64_t()>>() {
 }
 
 template <>
-inline ValueType GetValueType<std::function<int64()>>() {
-  return ValueType::kInt64;
-}
-
-template <>
 inline ValueType GetValueType<HistogramProto>() {
   return ValueType::kHistogram;
 }
