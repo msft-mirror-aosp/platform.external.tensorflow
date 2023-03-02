@@ -134,8 +134,9 @@ cc_library_static {
     stl: "libc++",
     srcs: ["tensorflow/lite/experimental/acceleration/configuration/**/*.proto"],
     sdk_version: "current",
-    min_sdk_version: "Tiramisu",
+    min_sdk_version: "30",
     apex_available: [
         "com.android.adservices",
+        "com.android.extservices",
     ],
 }
