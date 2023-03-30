@@ -299,5 +299,7 @@ java_library_static {
         type: "lite",
     },
     static_libs: ["libprotobuf-java-lite"],
+    sdk_version: "current",
+    min_sdk_version: "33",
     apex_available: ["com.android.ondevicepersonalization"],
 }
