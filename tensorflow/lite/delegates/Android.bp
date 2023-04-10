@@ -35,7 +35,7 @@ cc_library_static {
     ],
     static_libs: [
         "tensorflow_abseil",
-        "tensorflow_core_proto_all",
+        "tensorflow_core_proto_cpp_lite",
         "libtensorflow_core_mobile_srcs_only_runtime",
     ],
     header_libs: [
