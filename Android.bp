@@ -67,6 +67,7 @@ cc_library_headers {
         "com.android.neuralnetworks",
         "test_com.android.neuralnetworks",
         "com.android.adservices",
+        "com.android.ondevicepersonalization",
     ],
 }
 
@@ -133,8 +134,10 @@ cc_library_static {
 }
 
 cc_library_static {
-    name: "libtensorflow_core_mobile_srcs_only_runtime",
+    name: "libtflite_flex_delegate",
     srcs: [
+        ":tflite_src",
+        ":tflite_flex_delegate",
         ":tensorflow_c_srcs",
         ":tensorflow_c_eager_srcs",
         ":tensorflow_core_common_runtime_mobile_srcs_only_runtime",
@@ -158,20 +161,31 @@ cc_library_static {
         "tensorflow/compiler/jit/defs.cc",
     ],
     export_include_dirs: ["."],
-    static_libs: [
-        "tensorflow_abseil",
-    ],
     whole_static_libs: [
         "libdoubleconversion",
+        "tensorflow_abseil",
+        "libfft2d",
+        "libruy_static",
+        "libtextclassifier_hash_static",
         "tensorflow_core_proto_cpp_lite",
     ],
+    header_libs: [
+        "fp16_headers",
+        "jni_headers",
+        "liblog_headers",
+    ],
+    generated_headers: ["libtflite_mutable_schema"],
     shared_libs: [
         "libz",
     ],
-    header_libs: [
-        "libtextclassifier_hash_headers",
-        "libeigen",
-        "tensorflow_headers",
+    include_dirs: [
+        "external/FP16",
+        "external/eigen",
+        "external/flatbuffers/include",
+        "external/gemmlowp",
+        "external/libtextclassifier/native/",
+        "external/tensorflow",
+        "external/neon_2_sse",
     ],
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
@@ -180,6 +194,7 @@ cc_library_static {
         "-DENABLE_ABSL_IN_TENSORFLOW",
         "-DIS_MOBILE_PLATFORM",
         "-DTF_ANDROID_ENABLE_LOG_EVERY_N_SECONDS",
+        "-Wno-defaulted-function-deleted",
         "-Wno-deprecated-builtins",
         "-Wno-deprecated-declarations",
         "-Wno-expansion-to-defined",
@@ -189,8 +204,13 @@ cc_library_static {
         "-Wno-unused-const-variable",
         "-Wno-unused-but-set-variable",
         "-Wno-unused-parameter",
+        "-Wno-user-defined-warnings",
+        "-Wno-gnu-inline-cpp-without-extern",
     ],
     stl: "libc++_static",
+    min_sdk_version: "33",
+    sdk_version: "current",
+    apex_available: ["com.android.ondevicepersonalization"],
 }
 
 cc_library_static {
@@ -250,7 +270,7 @@ filegroup(
     ],
 )
 
-cc_library {
+cc_library_static {
     name: "tensorflow_core_proto_cpp_lite",
     proto: {
         export_proto_headers: true,
@@ -271,9 +291,16 @@ cc_library {
         ":libprotobuf-internal-protos",
     ],
     shared_libs: [
-        "libprotobuf-cpp-lite",
+        "liblog",
     ],
+    static_libs: [
+        "libprotobuf-cpp-lite-ndk",
+    ],
+    sdk_version: "current",
     export_include_dirs: ["."],
+    stl: "libc++_static",
+    min_sdk_version: "33",
+    apex_available: ["com.android.ondevicepersonalization"],
 }
 
 java_library_static {
