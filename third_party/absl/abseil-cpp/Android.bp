@@ -35,6 +35,10 @@ cc_library_static {
     export_include_dirs: ["."],
     visibility: [
         "//external/tensorflow:__subpackages__",
+        "//packages/modules/OnDevicePersonalization:__subpackages__",
+    ],
+    apex_available: [
+        "com.android.ondevicepersonalization",
     ],
     srcs: [
         "absl/**/*.cc",
