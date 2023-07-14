@@ -1,4 +1,5 @@
-// Copyright (C) 2017 The Android Open Source Project
+
+// Copyright (C) 2023 The Android Open Source Project
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,27 +23,18 @@ package {
 }
 
 filegroup(
-    name = "tensorflow_core_kernels_mobile_srcs",
+    name = "tensorflow_core_data_mobile_srcs_no_runtime",
     srcs = [
-        "initializable_lookup_table.cc",
-        "checkpoint_callback_manager.cc",
-        "constant_op.cc",
-        "lookup_util.cc",
-        "function_ops.cc",
-        "fill_functor.cc",
-        "example_parsing_ops.cc",
-        "no_op.cc",
-        "pooling_ops_common.cc",
-        "save_restore_v2_ops.cc",
-        "save_restore_tensor.cc",
-        "save_op.cc",
-        "data/take_dataset_op.cc",
-        "data/map_dataset_op.cc",
-        "data/reduce_dataset_op.cc",
-        "data/iterator_ops.cc",
-        "data/prefetch_dataset_op.cc",
-        "data/prefetch_autotuner.cc",
-        "data/optional_ops.cc",
-        "data/optional_ops_util.cc",
+        "name_utils.cc",
+        "captured_function.cc",
+        "dataset_utils.cc",
+        "stats_utils.cc",
+        "metric_utils.cc",
+        "finalization_utils.cc",
+        "serialization_utils.cc",
+        "unbounded_thread_pool.cc",
+        "root_dataset.cc",
+        "rewrite_utils.cc",
+        "utils.cc",
     ],
 )
