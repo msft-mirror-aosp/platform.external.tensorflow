@@ -30,6 +30,7 @@ filegroup(
         "flex/delegate_data.cc",
         "flex/kernel.cc",
         "flex/util.cc",
+        "flex/tflite_subgraph_execute.cc",
         "utils/simple_delegate.cc",
     ],
 )
