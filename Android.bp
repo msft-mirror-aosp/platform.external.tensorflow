@@ -165,6 +165,8 @@ cc_library_static {
         "tensorflow/core/ops/dataset_ops.cc",
         "tensorflow/core/ops/function_ops.cc",
         "tensorflow/core/ops/io_ops.cc",
+        "tensorflow/core/ops/nn_ops.cc",
+        "tensorflow/core/ops/string_ops.cc",
         "tensorflow/core/lib/wav/wav_io.cc",
         "tensorflow/compiler/jit/defs.cc",
     ],
