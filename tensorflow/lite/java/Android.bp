@@ -38,6 +38,7 @@ java_library_static {
     apex_available: [
         "//apex_available:platform",
         "com.android.adservices",
+        "com.android.extservices",
     ],
 }
 
@@ -71,5 +72,6 @@ cc_library_shared {
     apex_available: [
         "//apex_available:platform",
         "com.android.adservices",
+        "com.android.extservices",
     ],
 }
