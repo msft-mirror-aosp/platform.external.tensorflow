@@ -66,6 +66,7 @@ cc_library_headers {
         "com.android.extservices",
         "com.android.neuralnetworks",
         "test_com.android.neuralnetworks",
+        "com.android.adservices",
     ],
 }
 
@@ -202,9 +203,10 @@ cc_library_static {
     stl: "libc++",
     srcs: ["tensorflow/lite/experimental/acceleration/configuration/**/*.proto"],
     sdk_version: "current",
-    min_sdk_version: "Tiramisu",
+    min_sdk_version: "30",
     apex_available: [
         "com.android.adservices",
+        "com.android.extservices",
     ],
 }
 
@@ -297,5 +299,7 @@ java_library_static {
         type: "lite",
     },
     static_libs: ["libprotobuf-java-lite"],
+    sdk_version: "current",
+    min_sdk_version: "33",
     apex_available: ["com.android.ondevicepersonalization"],
 }
