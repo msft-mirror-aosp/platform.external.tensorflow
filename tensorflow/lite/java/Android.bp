@@ -68,6 +68,11 @@ cc_library_shared {
         "-Wno-unused-function",
         "-Wno-unused-parameter",
     ],
+    ldflags: [
+        // Allow (benign) missing symbols referenced in the version script.
+        "-Wl,--undefined-version",
+    ],
+    version_script: "tflite_version_script.lds",
     stl: "libc++_static",
     apex_available: [
         "//apex_available:platform",
