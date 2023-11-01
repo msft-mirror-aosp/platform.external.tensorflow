@@ -37,6 +37,8 @@ namespace {
 
 using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
+using ::testing::FloatNear;
+using ::testing::Matcher;
 
 // TODO(b/110368244): figure out how to share the existing tests in kernels/ but
 // with the delegation on. Also, add more unit tests to improve code coverage.
@@ -49,6 +51,21 @@ MATCHER(QuantizedNear, "") {
     return false;
   }
   return true;
+}
+
+auto NnapiArrayFloatNear(const std::vector<float>& values,
+                         bool relaxed = false) {
+  // Uses the same tolerance as NNAPI generated tests.
+  const float atol = relaxed ? 5 * 0.0009765625f : 1e-5f;
+  const float rtol = relaxed ? 5 * 0.0009765625f : 5 * 1.1920928955078125e-7f;
+
+  std::vector<Matcher<float>> matchers;
+  matchers.reserve(values.size());
+  for (const float& v : values) {
+    const float tolerance = atol + rtol * std::abs(v);
+    matchers.emplace_back(FloatNear(v, tolerance));
+  }
+  return ElementsAreArray(matchers);
 }
 
 class SingleOpModelWithNNAPI : public SingleOpModel {
@@ -196,7 +213,7 @@ TEST(NNAPIDelegate, AddWithNoActivation) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Do a test with scalar input using no activation.
@@ -207,7 +224,7 @@ TEST(NNAPIDelegate, AddScalarWithNoActivation) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.7});
   m.PopulateTensor<float>(m.input2(), {0.1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.3, 0.8, 0.8}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.3, 0.8, 0.8}));
 }
 
 // Do a test with the NN API using no activation.
@@ -220,7 +237,8 @@ TEST(NNAPIDelegate, AddWithNoActivationRelaxed) {
   m.PopulateTensor<float>(m.input1(), {-2.0, -1.0, 1.0, 2.0});
   m.PopulateTensor<float>(m.input2(), {1.0, 2.0, 3.0, 4.0});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.0, 1.0, 4.0, 6.0}));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-1.0, 1.0, 4.0, 6.0}, /*relaxed=*/true));
 }
 
 // Do a test with the NN api with relu.
@@ -231,7 +249,7 @@ TEST(NNAPIDelegate, AddWithRelu) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({0.0, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({0.0, 0.4, 1.0, 1.3}));
 }
 
 // Verify that resize attempts succeed.
@@ -246,7 +264,8 @@ TEST(NNAPIDelegate, ResizeInputTensorsWorks) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8, 0.9, 0.7});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5, 0.2, 0.8});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3, 1.1, 1.5}));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3, 1.1, 1.5}));
 
   EXPECT_EQ(m.ResizeInputTensor(m.input1(), {1, 2, 2, 1}), kTfLiteOk);
   EXPECT_EQ(m.ResizeInputTensor(m.input2(), {1, 2, 2, 1}), kTfLiteOk);
@@ -254,7 +273,7 @@ TEST(NNAPIDelegate, ResizeInputTensorsWorks) {
   m.PopulateTensor<float>(m.input1(), {0.7, 0.8, 0.9, 0.7});
   m.PopulateTensor<float>(m.input2(), {0.3, 0.5, 0.2, 0.8});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1.0, 1.3, 1.1, 1.5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1.0, 1.3, 1.1, 1.5}));
 }
 
 TEST(NNAPIDelegate, ResizeDynamicBatchInputTensorsWorks) {
@@ -337,7 +356,7 @@ TEST(NNAPIDelegate, StatefulDelegate) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Sanity check for the state-ful NNAPI delegate with accelerator_name
@@ -354,7 +373,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithAcceleratorName) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Sanity check for the state-ful NNAPI delegate with invalid accelerator_name
@@ -380,7 +399,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithInvalidAcceleratorName) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Sanity check for the state-ful NNAPI delegate with compilation caching
@@ -398,7 +417,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithCompilationCaching) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Sanity check for the state-ful NNAPI delegate with QoS hints.
@@ -416,7 +435,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithQoS) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 }
 
 // Sanity check for the state-ful NNAPI delegate using TfLiteBufferHandle.
@@ -480,7 +499,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithBufferHandles) {
   m.MarkInputTensorDataStale(m.input1());
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9, 0.4, 1.0, 1.3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9, 0.4, 1.0, 1.3}));
 
   // Run the inference multiple times with the same buffer so that the execution
   // can be reused.
@@ -490,7 +509,7 @@ TEST(NNAPIDelegate, StatefulDelegateWithBufferHandles) {
     memcpy(input1_memory_data, input1_data, kInput1ByteSize);
     m.MarkInputTensorDataStale(m.input1());
     ASSERT_EQ(m.Invoke(), kTfLiteOk);
-    EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9 + i, 0.4, 1.0, 1.3}));
+    EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-1.9f + i, 0.4f, 1.0f, 1.3f}));
   }
 
   // Run the inference multiple times and each time register a buffer.
@@ -505,7 +524,8 @@ TEST(NNAPIDelegate, StatefulDelegateWithBufferHandles) {
     m.MarkInputTensorDataStale(m.input1());
     m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
     ASSERT_EQ(m.Invoke(), kTfLiteOk);
-    EXPECT_THAT(m.GetOutput(), ElementsAreArray({-1.9 + i, 0.4, 1.0, 1.3}));
+    EXPECT_THAT(m.GetOutput(),
+                NnapiArrayFloatNear({-1.9f + i, 0.4f, 1.0f, 1.3f}));
   }
 }
 
@@ -540,8 +560,7 @@ TEST(NNAPIDelegate, MulWithNoActivation) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray(ArrayFloatNear({-0.2, 0.04, 0.21, 0.4})));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-0.2, 0.04, 0.21, 0.4}));
 }
 
 class FloatPoolingOpModel : public SingleOpModelWithNNAPI {
@@ -582,7 +601,7 @@ TEST(NNAPIDelegate, AveragePoolWithNoActivation) {
       3, 2, 10, 7,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({2.75, 5.75}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({2.75, 5.75}));
 }
 
 TEST(NNAPIDelegate, MaxPoolWithNoActivation) {
@@ -595,7 +614,7 @@ TEST(NNAPIDelegate, MaxPoolWithNoActivation) {
       3, 2, 10, 7,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({6, 10}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({6, 10}));
 }
 
 TEST(NNAPIDelegate, L2PoolWithNoActivation) {
@@ -608,7 +627,7 @@ TEST(NNAPIDelegate, L2PoolWithNoActivation) {
       3, 2, 10, 7,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({3.5, 6.5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({3.5, 6.5}));
 }
 
 class ConvolutionOpModel : public SingleOpModelWithNNAPI {
@@ -814,7 +833,7 @@ TEST(ConvolutionOpTest, NoActivation) {
 
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  18, 2, 5,  // first batch, left
                                  18, 2, 5,  // first batch, right
                                  17, 4, 3,  // second batch, left
@@ -914,7 +933,7 @@ TEST(ConvolutionOpTest, SimpleTestFloatWithDilation) {
   // | 5 | 5 | 5 |
   // | 5 | 5 | 5 |
   // | 5 | 5 | 5 |
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({5, 5, 5, 5, 5, 5, 5, 5, 5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({5, 5, 5, 5, 5, 5, 5, 5, 5}));
 }
 
 class QuantizedConvolutionOpModel : public ConvolutionOpModel {
@@ -1200,7 +1219,7 @@ TEST(NNAPIDelegate, DepthwiseConv2DWithNoActivation) {
 
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  71, -34, 99, -20,  //
                                  91, -26, 127, -4,  //
                              }));
@@ -1412,10 +1431,9 @@ TEST(SoftmaxOpTest, SimpleTest) {
 
   EXPECT_THAT(
       m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear(
-          {0.011656231, 0.031684921, 0.086128544, 0.234121657, 0.636408647,
-           0.636408647, 0.234121657, 0.086128544, 0.031684921, 0.011656231},
-          1e-6)));
+      NnapiArrayFloatNear({0.011656231, 0.031684921, 0.086128544, 0.234121657,
+                           0.636408647, 0.636408647, 0.234121657, 0.086128544,
+                           0.031684921, 0.011656231}));
 }
 
 TEST(SoftmaxOpTest, Beta2) {
@@ -1426,11 +1444,9 @@ TEST(SoftmaxOpTest, Beta2) {
 
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
-  EXPECT_THAT(
-      m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear(
-          {0.000290076, 0.002143387, 0.015837606, 0.117024957, 0.864703974},
-          1e-6)));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({0.000290076, 0.002143387, 0.015837606,
+                                   0.117024957, 0.864703974}));
 }
 
 TEST(SoftmaxOpTest, 3dInput) {
@@ -1446,12 +1462,11 @@ TEST(SoftmaxOpTest, 3dInput) {
 
   EXPECT_THAT(
       m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear(
+      NnapiArrayFloatNear(
           {0.011656231, 0.031684921, 0.086128544, 0.234121657, 0.636408647,
            0.636408647, 0.234121657, 0.086128544, 0.031684921, 0.011656231,
            0.636408647, 0.011656231, 0.031684921, 0.086128544, 0.234121657,
-           0.011656231, 0.636408647, 0.234121657, 0.086128544, 0.031684921},
-          1e-6)));
+           0.011656231, 0.636408647, 0.234121657, 0.086128544, 0.031684921}));
 }
 
 TEST(SoftmaxOpTest, 4dInput) {
@@ -1467,12 +1482,11 @@ TEST(SoftmaxOpTest, 4dInput) {
 
   EXPECT_THAT(
       m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear(
+      NnapiArrayFloatNear(
           {0.011656231, 0.031684921, 0.086128544, 0.234121657, 0.636408647,
            0.636408647, 0.234121657, 0.086128544, 0.031684921, 0.011656231,
            0.636408647, 0.011656231, 0.031684921, 0.086128544, 0.234121657,
-           0.011656231, 0.636408647, 0.234121657, 0.086128544, 0.031684921},
-          1e-6)));
+           0.011656231, 0.636408647, 0.234121657, 0.086128544, 0.031684921}));
 }
 
 class ReshapeOpModel : public SingleOpModelWithNNAPI {
@@ -1507,7 +1521,7 @@ TEST(NNAPIDelegate, ReshapeSimpleTest) {
   ReshapeOpModel m({1, 2, 4, 1}, {2, 2, 2});
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 2, 3, 4, 5, 6, 7, 8}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 2, 3, 4, 5, 6, 7, 8}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({2, 2, 2}));
 }
 
@@ -1548,9 +1562,9 @@ TEST(NNAPIDelegate, DISABLED_SqueezeSimpleTest) {
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({24}));
   EXPECT_THAT(
       m.GetOutput(),
-      ElementsAreArray({1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0,  8.0,
-                        9.0,  10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-                        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0}));
+      NnapiArrayFloatNear({1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0,  8.0,
+                           9.0,  10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+                           17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0}));
 }
 
 TEST(NNAPIDelegate, SqueezeWithAxisTest) {
@@ -1564,9 +1578,9 @@ TEST(NNAPIDelegate, SqueezeWithAxisTest) {
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 24}));
   EXPECT_THAT(
       m.GetOutput(),
-      ElementsAreArray({1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0,  8.0,
-                        9.0,  10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-                        17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0}));
+      NnapiArrayFloatNear({1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0,  8.0,
+                           9.0,  10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
+                           17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0}));
 }
 
 class L2NormOpModel : public SingleOpModelWithNNAPI {
@@ -1601,7 +1615,7 @@ TEST(NNAPIDelegate, L2NormSimpleTest) {
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 1, 1, 6}));
   EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray({-0.55, 0.3, 0.35, 0.6, -0.35, 0.05}));
+              NnapiArrayFloatNear({-0.55, 0.3, 0.35, 0.6, -0.35, 0.05}));
 }
 
 class TransposeSimpleModel : public SingleOpModelWithNNAPI {
@@ -1636,9 +1650,9 @@ TEST(NNAPIDelegate, TransposeSimpleTest) {
               12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({4, 2, 3}));
-  EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray({0, 4, 8,  12, 16, 20, 1, 5, 9,  13, 17, 21,
-                                2, 6, 10, 14, 18, 22, 3, 7, 11, 15, 19, 23}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear(
+                                 {0, 4, 8,  12, 16, 20, 1, 5, 9,  13, 17, 21,
+                                  2, 6, 10, 14, 18, 22, 3, 7, 11, 15, 19, 23}));
 }
 
 class ElementwiseOpBaseModel : public SingleOpModelWithNNAPI {
@@ -1669,7 +1683,7 @@ TEST(Elementwise, Abs) {
                                          3.f, -2.f, 10.f, 1.f,  //
                                      });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.ExtractVector<float>(m.output()), ElementsAreArray({
+  EXPECT_THAT(m.ExtractVector<float>(m.output()), NnapiArrayFloatNear({
                                                       0.f, 6.2f, 2.f, 4.f,  //
                                                       3.f, 2.f, 10.f, 1.f,  //
                                                   }));
@@ -1680,9 +1694,9 @@ TEST(Elementwise, Exp) {
   ElementwiseOpFloatModel m(BuiltinOperator_EXP, {3, 1, 2});
   m.PopulateTensor<float>(m.input(), {1.0, 0.0, -1.0, 1.0, 1.0, -1.0});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.ExtractVector<float>(m.output()),
-              ElementsAreArray(ArrayFloatNear(
-                  {2.71828, 1, 0.367879, 2.71828, 2.71828, 0.367879})));
+  EXPECT_THAT(
+      m.ExtractVector<float>(m.output()),
+      NnapiArrayFloatNear({2.71828, 1, 0.367879, 2.71828, 2.71828, 0.367879}));
   EXPECT_THAT(m.GetTensorShape(m.output()), ElementsAreArray({3, 1, 2}));
 }
 
@@ -1691,7 +1705,7 @@ TEST(Elementwise, Log) {
   m.PopulateTensor<float>(m.input(), {1, 3.1415926, 1, 1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.ExtractVector<float>(m.output()),
-              ElementsAreArray(ArrayFloatNear({0, 1.14473, 0, 0})));
+              NnapiArrayFloatNear({0, 1.14473, 0, 0}));
   EXPECT_THAT(m.GetTensorShape(m.output()), ElementsAreArray({1, 1, 4, 1}));
 }
 
@@ -1700,7 +1714,7 @@ TEST(Elementwise, Rsqrt) {
   m.PopulateTensor<float>(m.input(), {1, 2, 4, 9});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.ExtractVector<float>(m.output()),
-              ElementsAreArray(ArrayFloatNear({1, 0.7071, 0.5, 0.33333})));
+              NnapiArrayFloatNear({1, 0.7071, 0.5, 0.33333}));
   EXPECT_THAT(m.GetTensorShape(m.output()), ElementsAreArray({1, 1, 4, 1}));
 }
 
@@ -1709,7 +1723,7 @@ TEST(Elementwise, Sin) {
   m.PopulateTensor<float>(m.input(), {0, 3.1415926, -3.1415926, 1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.ExtractVector<float>(m.output()),
-              ElementsAreArray(ArrayFloatNear({0, 0, 0, 0.84147})));
+              NnapiArrayFloatNear({0, 0, 0, 0.84147}));
   EXPECT_THAT(m.GetTensorShape(m.output()), ElementsAreArray({1, 1, 4, 1}));
 }
 
@@ -1718,7 +1732,7 @@ TEST(Elementwise, Sqrt) {
   m.PopulateTensor<float>(m.input(), {0, 1, 2, 4});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.ExtractVector<float>(m.output()),
-              ElementsAreArray(ArrayFloatNear({0, 1, 1.41421, 2})));
+              NnapiArrayFloatNear({0, 1, 1.41421, 2}));
   EXPECT_THAT(m.GetTensorShape(m.output()), ElementsAreArray({1, 1, 4, 1}));
 }
 
@@ -1753,8 +1767,7 @@ TEST(NNAPIDelegate, SubWithNoActivation) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.7, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.3, 0.5});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray(ArrayFloatNear({-2.1, 0.0, 0.4, 0.3})));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-2.1, 0.0, 0.4, 0.3}));
 }
 
 class FloatDivOpModel : public SingleOpModelWithNNAPI {
@@ -1788,7 +1801,7 @@ TEST(NNAPIDelegate, DivWithNoActivation) {
   m.PopulateTensor<float>(m.input1(), {-2.0, 0.2, 0.8, 0.8});
   m.PopulateTensor<float>(m.input2(), {0.1, 0.2, 0.4, 0.2});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray(ArrayFloatNear({-20, 1, 2, 4})));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({-20, 1, 2, 4}));
 }
 
 class BaseConcatenationOpModel : public SingleOpModelWithNNAPI {
@@ -1828,7 +1841,7 @@ TEST(NNAPIDelegate, ConcatenationThreeDimensionalOneInput) {
                           /*num_inputs=*/1);
   m0.SetInput(0, {1.0f, 3.0f, 4.0f, 7.0f});
   ASSERT_EQ(m0.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m0.GetOutput(), ElementsAreArray({1, 3, 4, 7}));
+  EXPECT_THAT(m0.GetOutput(), NnapiArrayFloatNear({1, 3, 4, 7}));
 }
 
 TEST(NNAPIDelegate, ConcatenationFourInputs) {
@@ -1840,7 +1853,7 @@ TEST(NNAPIDelegate, ConcatenationFourInputs) {
   m0.SetInput(3, {1.3f, 3.3f, 4.3f, 7.3f});
   ASSERT_EQ(m0.Invoke(), kTfLiteOk);
   EXPECT_THAT(m0.GetOutput(),
-              ElementsAreArray({
+              NnapiArrayFloatNear({
                   1.0f, 3.0f, 1.1f, 3.1f, 1.2f, 3.2f, 1.3f, 3.3f,  //
                   4.0f, 7.0f, 4.1f, 7.1f, 4.2f, 7.2f, 4.3f, 7.3f,  //
               }));
@@ -1991,7 +2004,7 @@ TEST(NNAPIDelegate, FloorSingleDim) {
   FloorOpModel model({2}, TensorType_FLOAT32);
   model.PopulateTensor<float>(model.input(), {8.5, 0.0});
   ASSERT_EQ(model.Invoke(), kTfLiteOk);
-  EXPECT_THAT(model.GetOutput(), ElementsAreArray({8, 0}));
+  EXPECT_THAT(model.GetOutput(), NnapiArrayFloatNear({8, 0}));
   EXPECT_THAT(model.GetOutputShape(), ElementsAreArray({2}));
 }
 
@@ -2011,7 +2024,7 @@ TEST(NNAPIDelegate, FloorMultiDims) {
                                              });
   ASSERT_EQ(model.Invoke(), kTfLiteOk);
   EXPECT_THAT(model.GetOutput(),
-              ElementsAreArray({0, 8, 0, 9, 0, -1, -9, -1, -10, -1}));
+              NnapiArrayFloatNear({0, 8, 0, 9, 0, -1, -9, -1, -10, -1}));
   EXPECT_THAT(model.GetOutputShape(), ElementsAreArray({2, 1, 1, 5}));
 }
 
@@ -2046,9 +2059,8 @@ TEST(NNAPIDelegate, LocalResponseNormSameAsL2Norm) {
   m.SetInput({-1.1, 0.6, 0.7, 1.2, -0.7, 0.1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   // The result is every input divided by 2.
-  EXPECT_THAT(
-      m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear({-0.55, 0.3, 0.35, 0.6, -0.35, 0.05})));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-0.55, 0.3, 0.35, 0.6, -0.35, 0.05}));
 }
 
 TEST(NNAPIDelegate, LocalResponseNormWithAlpha) {
@@ -2057,8 +2069,8 @@ TEST(NNAPIDelegate, LocalResponseNormWithAlpha) {
   m.SetInput({-1.1, 0.6, 0.7, 1.2, -0.7, 0.1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   // The result is every input divided by 3.
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray(ArrayFloatNear(
-                                 {-0.275, 0.15, 0.175, 0.3, -0.175, 0.025})));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-0.275, 0.15, 0.175, 0.3, -0.175, 0.025}));
 }
 
 TEST(NNAPIDelegate, LocalResponseNormWithBias) {
@@ -2067,9 +2079,8 @@ TEST(NNAPIDelegate, LocalResponseNormWithBias) {
   m.SetInput({-1.1, 0.6, 0.7, 1.2, -0.7, 0.1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   // The result is every input divided by 5.
-  EXPECT_THAT(
-      m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear({-0.22, 0.12, 0.14, 0.24, -0.14, 0.02})));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-0.22, 0.12, 0.14, 0.24, -0.14, 0.02}));
 }
 
 TEST(NNAPIDelegate, LocalResponseNormSmallRadius) {
@@ -2077,10 +2088,9 @@ TEST(NNAPIDelegate, LocalResponseNormSmallRadius) {
                              /*alpha=*/4.0, /*beta=*/0.5);
   m.SetInput({-1.1, 0.6, 0.7, 1.2, -0.7, 0.1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(
-      m.GetOutput(),
-      ElementsAreArray(ArrayFloatNear(
-          {-0.264926, 0.125109, 0.140112, 0.267261, -0.161788, 0.0244266})));
+  EXPECT_THAT(m.GetOutput(),
+              NnapiArrayFloatNear({-0.264926, 0.125109, 0.140112, 0.267261,
+                                   -0.161788, 0.0244266}));
 }
 
 class LSHProjectionOpModel : public SingleOpModelWithNNAPI {
@@ -2256,7 +2266,7 @@ TEST(NNAPIDelegate, Relu) {
       3, -2, 10, 1,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0, 0, 2, 4,   //
                                  3, 0, 10, 1,  //
                              }));
@@ -2270,7 +2280,7 @@ TEST(NNAPIDelegate, Relu1) {
       0.3, -2.0, 1.1, -0.1,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0.0, -0.6, 0.2, -0.4,  //
                                  0.3, -1.0, 1.0, -0.1,  //
                              }));
@@ -2284,7 +2294,7 @@ TEST(NNAPIDelegate, Relu6) {
       3, -2, 10, 1,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0, 0, 2, 4,  //
                                  3, 0, 6, 1,  //
                              }));
@@ -2298,10 +2308,10 @@ TEST(NNAPIDelegate, LogisticFloat) {
       3, -2, 10, 1,  //
   });
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray(ArrayFloatNear({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0.5, 0.002473, 0.880797, 0.982014,       //
                                  0.952574, 0.119203, 0.999955, 0.731059,  //
-                             })));
+                             }));
 }
 
 TEST(NNAPIDelegate, LogisticQuantized) {
@@ -2369,16 +2379,14 @@ TEST(ResizeBilinear, Horizontal) {
   m.SetInput<float>({3, 6});
   m.SetSize({1, 3});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput<float>(),
-              ElementsAreArray(ArrayFloatNear({3, 5, 6})));
+  EXPECT_THAT(m.GetOutput<float>(), NnapiArrayFloatNear({3, 5, 6}));
 }
 
 TEST(ResizeBilinear, HorizontalConstant) {
   ResizeBilinearOpModel const_m({TensorType_FLOAT32, {1, 1, 2, 1}}, {1, 3});
   const_m.SetInput<float>({3, 6});
   ASSERT_EQ(const_m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(const_m.GetOutput<float>(),
-              ElementsAreArray(ArrayFloatNear({3, 5, 6})));
+  EXPECT_THAT(const_m.GetOutput<float>(), NnapiArrayFloatNear({3, 5, 6}));
 }
 
 TEST(ResizeBilinear, Vertical) {
@@ -2386,16 +2394,14 @@ TEST(ResizeBilinear, Vertical) {
   m.SetInput<float>({3, 9});
   m.SetSize({3, 1});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput<float>(),
-              ElementsAreArray(ArrayFloatNear({3, 7, 9})));
+  EXPECT_THAT(m.GetOutput<float>(), NnapiArrayFloatNear({3, 7, 9}));
 }
 
 TEST(ResizeBilinear, VerticalConstant) {
   ResizeBilinearOpModel const_m({TensorType_FLOAT32, {1, 2, 1, 1}}, {3, 1});
   const_m.SetInput<float>({3, 9});
   ASSERT_EQ(const_m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(const_m.GetOutput<float>(),
-              ElementsAreArray(ArrayFloatNear({3, 7, 9})));
+  EXPECT_THAT(const_m.GetOutput<float>(), NnapiArrayFloatNear({3, 7, 9}));
 }
 
 TEST(ResizeBilinear, TwoDimensional) {
@@ -2406,11 +2412,11 @@ TEST(ResizeBilinear, TwoDimensional) {
   });
   m.SetSize({3, 3});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput<float>(), ElementsAreArray(ArrayFloatNear({
+  EXPECT_THAT(m.GetOutput<float>(), NnapiArrayFloatNear({
                                         3, 5, 6,    //
                                         7, 9, 10,   //
                                         9, 11, 12,  //
-                                    })));
+                                    }));
 }
 
 TEST(ResizeBilinear, TwoDimensionalConstant) {
@@ -2420,11 +2426,11 @@ TEST(ResizeBilinear, TwoDimensionalConstant) {
       9, 12  //
   });
   ASSERT_EQ(const_m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(const_m.GetOutput<float>(), ElementsAreArray(ArrayFloatNear({
+  EXPECT_THAT(const_m.GetOutput<float>(), NnapiArrayFloatNear({
                                               3, 5, 6,    //
                                               7, 9, 10,   //
                                               9, 11, 12,  //
-                                          })));
+                                          }));
 }
 
 template <typename T>
@@ -2487,8 +2493,8 @@ TEST(NNAPIDelegate, PadAdvancedConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
+              NnapiArrayFloatNear({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
+                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 7, 1}));
 }
 
@@ -2538,8 +2544,8 @@ TEST(NNAPIDelegate, SpaceToBatchNDSimpleConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({4, 2, 2, 1}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 3, 9, 11, 2, 4, 10, 12, 5, 7,
-                                               13, 15, 6, 8, 14, 16}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 3, 9, 11, 2, 4, 10, 12, 5,
+                                                  7, 13, 15, 6, 8, 14, 16}));
 }
 
 TEST(NNAPIDelegate, SpaceToBatchNDMultipleInputBatchesConstTest) {
@@ -2547,8 +2553,8 @@ TEST(NNAPIDelegate, SpaceToBatchNDMultipleInputBatchesConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({8, 1, 2, 1}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 3, 9, 11, 2, 4, 10, 12, 5, 7,
-                                               13, 15, 6, 8, 14, 16}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 3, 9, 11, 2, 4, 10, 12, 5,
+                                                  7, 13, 15, 6, 8, 14, 16}));
 }
 
 TEST(NNAPIDelegate, SpaceToBatchNDSimplePaddingConstTest) {
@@ -2556,7 +2562,7 @@ TEST(NNAPIDelegate, SpaceToBatchNDSimplePaddingConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({6, 2, 2, 1}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0, 0, 0, 5, 0, 0, 0, 6, 0, 1, 0, 7,
                                  0, 2, 0, 8, 0, 3, 0, 9, 0, 4, 0, 10,
                              }));
@@ -2567,7 +2573,7 @@ TEST(NNAPIDelegate, SpaceToBatchNDComplexPaddingConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({6, 2, 4, 1}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0,
                                  0, 1, 0, 0, 0, 7, 0, 0, 0, 2, 0, 0, 0, 8, 0, 0,
                                  0, 3, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
@@ -2623,7 +2629,7 @@ TEST(StridedSliceOpTest, In1D) {
   m.SetInput({1, 2, 3, 4});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({2}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({2, 3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({2, 3}));
 }
 
 TEST(StridedSliceOpTest, In1D_BeginMask) {
@@ -2631,7 +2637,7 @@ TEST(StridedSliceOpTest, In1D_BeginMask) {
   m.SetInput({1, 2, 3, 4});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({3}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 2, 3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 2, 3}));
 }
 
 TEST(StridedSliceOpTest, In2D_Stride2) {
@@ -2640,7 +2646,7 @@ TEST(StridedSliceOpTest, In2D_Stride2) {
   m.SetInput({1, 2, 3, 4, 5, 6});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 2}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 3}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 3}));
 }
 
 TEST(StridedSliceOpTest, In2D_EndMask) {
@@ -2649,7 +2655,7 @@ TEST(StridedSliceOpTest, In2D_EndMask) {
   m.SetInput({1, 2, 3, 4, 5, 6});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 3}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({4, 5, 6}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({4, 5, 6}));
 }
 
 TEST(StridedSliceOpTest, In3D_IdentityShrinkAxis4) {
@@ -2658,7 +2664,7 @@ TEST(StridedSliceOpTest, In3D_IdentityShrinkAxis4) {
   m.SetInput({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({2, 3}));
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({1, 3, 5, 7, 9, 11}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({1, 3, 5, 7, 9, 11}));
 }
 
 static float rnn_input[] = {
@@ -2885,7 +2891,7 @@ TEST(NNAPIDelegate, RnnBlackBoxTest) {
     expected.insert(expected.end(), golden_start, golden_end);
     expected.insert(expected.end(), golden_start, golden_end);
 
-    EXPECT_THAT(rnn.GetOutput(), ElementsAreArray(ArrayFloatNear(expected)));
+    EXPECT_THAT(rnn.GetOutput(), NnapiArrayFloatNear(expected));
   }
 }
 
@@ -4803,7 +4809,7 @@ TEST(NNAPIDelegate, MeanFloatNotKeepDims) {
   m.SetInput(data);
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({2}));
-  EXPECT_THAT(m.GetOutput<float>(), ElementsAreArray(ArrayFloatNear({12, 13})));
+  EXPECT_THAT(m.GetOutput<float>(), NnapiArrayFloatNear({12, 13}));
 }
 
 TEST(NNAPIDelegate, MeanFloatKeepDims) {
@@ -4815,8 +4821,7 @@ TEST(NNAPIDelegate, MeanFloatKeepDims) {
   m.SetInput(data);
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 3, 1}));
-  EXPECT_THAT(m.GetOutput<float>(),
-              ElementsAreArray(ArrayFloatNear({10.5, 12.5, 14.5})));
+  EXPECT_THAT(m.GetOutput<float>(), NnapiArrayFloatNear({10.5, 12.5, 14.5}));
 }
 
 class BaseEmbeddingLookupOpModel : public SingleOpModelWithNNAPI {
@@ -4871,11 +4876,11 @@ TEST(NNAPIDelegate, EmbeddingLookupSimpleTest) {
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
   EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray(ArrayFloatNear({
+              NnapiArrayFloatNear({
                   1.00, 1.01, 1.02, 1.03, 1.10, 1.11, 1.12, 1.13,  // Row 1
                   0.00, 0.01, 0.02, 0.03, 0.10, 0.11, 0.12, 0.13,  // Row 0
                   2.00, 2.01, 2.02, 2.03, 2.10, 2.11, 2.12, 2.13,  // Row 2
-              })));
+              }));
 }
 
 class HashtableLookupOpModel : public SingleOpModelWithNNAPI {
@@ -4955,12 +4960,12 @@ TEST(NNAPIDelegate, HashtableLookupTest2DInput) {
 
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray(ArrayFloatNear({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  2.0, 2.1,  // 2-nd item
                                  0, 0,      // Not found
                                  0.0, 0.1,  // 0-th item
                                  1.0, 1.1,  // 1-st item
-                             })));
+                             }));
   EXPECT_THAT(m.GetHit(), ElementsAreArray({
                               1,
                               0,
@@ -4978,12 +4983,12 @@ TEST(NNAPIDelegate, HashtableLookupTest1DInput) {
 
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
 
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray(ArrayFloatNear({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0.4,  // 2-nd item
                                  0,    // Not found
                                  0.0,  // 0-th item
                                  0.1,  // 1-st item
-                             })));
+                             }));
   EXPECT_THAT(m.GetHit(), ElementsAreArray({
                               1,
                               0,
@@ -5039,7 +5044,7 @@ TEST(NNAPIDelegate, PReluFloat) {
   });
   m.SetAlpha({0.0f, 1.0f, 2.0f});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({
                                  0.0f, 0.0f, 0.0f,    // Row 1, Column 1
                                  1.0f, 1.0f, 1.0f,    // Row 1, Column 2
                                  0.0f, -1.0f, -2.0f,  // Row 2, Column 1
@@ -5150,8 +5155,8 @@ TEST(PadV2OpTest, SimpleConstTest) {
                              {TensorType_FLOAT32});
   m.SetInput({1, 2, 3, 4});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({0, 0, 0, 0, 0, 1, 2, 0, 0, 3, 4,
-                                               0, 0, 0, 0, 0}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({0, 0, 0, 0, 0, 1, 2, 0, 0, 3,
+                                                  4, 0, 0, 0, 0, 0}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 4, 1}));
 }
 
@@ -5162,8 +5167,8 @@ TEST(PadV2OpTest, SimpleConstFloat32ValuedTestUint8) {
                              {0, 0, 1, 1, 1, 1, 0, 0}, 5, {TensorType_FLOAT32});
   m.SetInput({1, 2, 3, 4});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({5, 5, 5, 5, 5, 1, 2, 5, 5, 3, 4,
-                                               5, 5, 5, 5, 5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({5, 5, 5, 5, 5, 1, 2, 5, 5, 3,
+                                                  4, 5, 5, 5, 5, 5}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 4, 1}));
 }
 
@@ -5174,7 +5179,7 @@ TEST(PadV2OpTest, Simple4DConstFloat32ValuedTest) {
                              {0, 1, 0, 0, 0, 0, 0, 1}, 5, {TensorType_FLOAT32});
   m.SetInput({3, 3});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({3, 5, 3, 5, 5, 5, 5, 5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({3, 5, 3, 5, 5, 5, 5, 5}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({2, 1, 2, 2}));
 }
 
@@ -5184,8 +5189,8 @@ TEST(PadV2OpTest, SimpleDynamicTest) {
   m.SetInput({1, 2, 3, 4});
   m.SetPaddings({0, 0, 1, 1, 1, 1, 0, 0});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({0, 0, 0, 0, 0, 1, 2, 0, 0, 3, 4,
-                                               0, 0, 0, 0, 0}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({0, 0, 0, 0, 0, 1, 2, 0, 0, 3,
+                                                  4, 0, 0, 0, 0, 0}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 4, 1}));
 }
 
@@ -5195,8 +5200,8 @@ TEST(PadV2OpTest, SimpleDynamicValuedTest) {
   m.SetInput({1, 2, 3, 4});
   m.SetPaddings({0, 0, 1, 1, 1, 1, 0, 0});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
-  EXPECT_THAT(m.GetOutput(), ElementsAreArray({5, 5, 5, 5, 5, 1, 2, 5, 5, 3, 4,
-                                               5, 5, 5, 5, 5}));
+  EXPECT_THAT(m.GetOutput(), NnapiArrayFloatNear({5, 5, 5, 5, 5, 1, 2, 5, 5, 3,
+                                                  4, 5, 5, 5, 5, 5}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 4, 1}));
 }
 
@@ -5206,8 +5211,8 @@ TEST(PadV2OpTest, AdvancedConstTest) {
   m.SetInput({1, 2, 3, 4, 5, 6});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
+              NnapiArrayFloatNear({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
+                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 7, 1}));
 }
 
@@ -5218,8 +5223,8 @@ TEST(PadV2OpTest, AdvancedDynamicTest) {
   m.SetPaddings({0, 0, 0, 2, 1, 3, 0, 0});
   ASSERT_EQ(m.Invoke(), kTfLiteOk);
   EXPECT_THAT(m.GetOutput(),
-              ElementsAreArray({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
+              NnapiArrayFloatNear({0, 1, 2, 3, 0, 0, 0, 0, 4, 5, 6, 0, 0, 0,
+                                   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
   EXPECT_THAT(m.GetOutputShape(), ElementsAreArray({1, 4, 7, 1}));
 }
 
