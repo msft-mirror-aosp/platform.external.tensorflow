@@ -190,6 +190,7 @@ cc_library_static {
         "-Wno-unused-but-set-variable",
         "-Wno-unused-parameter",
     ],
+    cpp_std: "gnu++17",
     stl: "libc++_static",
 }
 
