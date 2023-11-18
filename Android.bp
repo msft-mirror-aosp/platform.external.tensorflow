@@ -219,6 +219,7 @@ cc_library_static {
         "-Wno-user-defined-warnings",
         "-Wno-gnu-inline-cpp-without-extern",
     ],
+    cpp_std: "gnu++17",
     stl: "libc++_static",
     min_sdk_version: "33",
     sdk_version: "current",
