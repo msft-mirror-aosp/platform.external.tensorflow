@@ -41,8 +41,6 @@ public final class TensorFlowLite {
           // Regular TF Lite.
           "tensorflowlite_jni", // Full library, including experimental features.
           "tensorflowlite_jni_stable", // Subset excluding experimental features.
-          "fcp_cpp_dep_jni", // TFLite library including flex delegate and a thin layer of
-                             // //external/federated-compute
         },
         new String[] {
           // TF Lite from system.
