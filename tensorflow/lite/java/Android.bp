@@ -74,6 +74,5 @@ cc_library_shared {
         "//apex_available:platform",
         "com.android.adservices",
         "com.android.extservices",
-        "com.android.ondevicepersonalization",
     ],
 }
