@@ -550,15 +550,16 @@ AnonymousIteratorHandleOp::AnonymousIteratorHandleOp(
     OpKernelConstruction* context)
     : AnonymousResourceOp<IteratorResource>(
           context,
-          /* ref_counting */
-          // Only enable this for V2 (via Python's iter protocol),
-          // AnonymousIteratorV1 requires IteratorToStringHandle, which is
-          // undefined on Refcounting ResourceHandle.
-          context->def().op() == kAnonymousIteratorV2 ||
-              context->def().op() == kAnonymousIteratorV3,
-          // V1 does not return a deleter.
+	   /* ref_counting */
+	  // Always disable it for TfLite environment and let ResourceMgr
+	  // release it at the end of execution because the TfLite
+	  // kernel will hold this resource tensor till the end.
+	  false,
           /* return_deleter */
-          context->def().op() == kAnonymousIteratorV2),
+	  // Alwasy disable it for TfLite environment and let ResourceMgr
+	  // release it at the end of exectuion because the TfLite
+	  // kernel will hold this resource tensor till the end.
+          false),
       graph_def_version_(context->graph_def_version()) {
   OP_REQUIRES_OK(context, context->GetAttr(kOutputTypes, &output_dtypes_));
   OP_REQUIRES_OK(context, context->GetAttr(kOutputShapes, &output_shapes_));
