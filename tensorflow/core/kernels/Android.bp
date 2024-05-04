@@ -36,6 +36,7 @@ filegroup(
         "initializable_lookup_table.cc",
         "inplace_ops.cc",
         "lookup_util.cc",
+        "l2loss_op.cc",
         "no_op.cc",
         "pooling_ops_common.cc",
         "relu_op.cc",
