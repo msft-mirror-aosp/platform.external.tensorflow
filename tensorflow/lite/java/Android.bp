@@ -39,44 +39,6 @@ java_library_static {
         "//apex_available:platform",
         "com.android.adservices",
         "com.android.extservices",
-    ],
-}
-
-cc_library_shared {
-    name: "libtensorflowlite_jni",
-    sdk_version: "current",
-    min_sdk_version: "30",
-    export_include_dirs: [
-        "src/main/native/",
-    ],
-    srcs: [
-        "src/main/native/*.cc",
-    ],
-    header_libs: [
-        "flatbuffer_headers",
-        "jni_headers",
-        "tensorflow_headers",
-    ],
-    static_libs: [
-        "libruy_static",
-        "libtflite_static",
-    ],
-    shared_libs: [
-        "liblog",
-    ],
-    cflags: [
-        "-Wno-unused-function",
-        "-Wno-unused-parameter",
-    ],
-    ldflags: [
-        // Allow (benign) missing symbols referenced in the version script.
-        "-Wl,--undefined-version",
-    ],
-    version_script: "tflite_version_script.lds",
-    stl: "libc++_static",
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.adservices",
-        "com.android.extservices",
+        "com.android.ondevicepersonalization",
     ],
 }
