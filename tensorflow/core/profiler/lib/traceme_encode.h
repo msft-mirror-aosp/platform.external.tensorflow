@@ -29,6 +29,9 @@ limitations under the License.
 namespace tensorflow {
 namespace profiler {
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdangling-field"
+
 // An argument passed to TraceMeEncode.
 struct TraceMeArg {
   // This constructor is required because absl::AlphaNum is non-copyable.
@@ -40,6 +43,8 @@ struct TraceMeArg {
   absl::string_view key;
   absl::AlphaNum value;
 };
+
+#pragma clang diagnostic pop
 
 namespace traceme_internal {
 
