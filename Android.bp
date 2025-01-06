@@ -65,7 +65,6 @@ cc_library_headers {
         "//apex_available:platform",
         "com.android.extservices",
         "com.android.neuralnetworks",
-        "test_com.android.neuralnetworks",
         "com.android.adservices",
         "com.android.ondevicepersonalization",
     ],
@@ -75,8 +74,8 @@ genrule {
     name: "libtflite_mutable_schema",
     tools: ["flatc"],
     cmd: "$(location flatc) --cpp --no-union-value-namespacing --gen-object-api --gen-mutable --keep-prefix -o $$(dirname $(out)) $(in)",
-    srcs: [ "tensorflow/lite/schema/schema.fbs" ],
-    out: [ "tensorflow/lite/schema/mutable/schema_generated.h" ],
+    srcs: ["tensorflow/lite/schema/schema.fbs"],
+    out: ["tensorflow/lite/schema/mutable/schema_generated.h"],
 }
 
 subdirs = ["tensorflow/lite"]
@@ -119,10 +118,10 @@ cc_library_static {
         "libneuralnetworks",
     ],
     static_libs: [
+        "libabsl",
         "libgtest_ndk_c++",
         "libgmock_ndk",
         "libtflite_static",
-        "tensorflow_abseil",
     ],
     header_libs: [
         "libeigen",
@@ -172,8 +171,8 @@ cc_library_static {
     ],
     export_include_dirs: ["."],
     whole_static_libs: [
+        "libabsl",
         "libdoubleconversion",
-        "tensorflow_abseil",
         "libfft2d",
         "libruy_static",
         "libtextclassifier_hash_static",
@@ -243,9 +242,9 @@ cc_library_static {
     ],
 }
 
-filegroup(
-    name = "tensorflow_core_protobuf_src",
-    srcs = [
+filegroup {
+    name: "tensorflow_core_protobuf_src",
+    srcs: [
         "tensorflow/core/protobuf/bfc_memory_map.proto",
         "tensorflow/core/protobuf/config.proto",
         "tensorflow/core/protobuf/coordination_config.proto",
@@ -281,7 +280,7 @@ filegroup(
         "tensorflow/compiler/xla/pjrt/distributed/protocol.proto",
         "tensorflow/compiler/xla/stream_executor/dnn.proto",
     ],
-)
+}
 
 cc_library_static {
     name: "tensorflow_core_proto_cpp_lite",
