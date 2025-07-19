@@ -13,9 +13,9 @@
 // limitations under the License.
 
 // Create a static version for apps to use.
-filegroup(
-    name = "tflite_src",
-    srcs = [
+filegroup {
+    name: "tflite_src",
+    srcs: [
         ":tensorflow_tsl_logging_srcs",
         "allocation.cc",
         "arena_planner.cc",
@@ -124,8 +124,8 @@ filegroup(
         "kernels/pooling.cc",
         "kernels/pow.cc",
         "kernels/quantize.cc",
-        "kernels/random_uniform.cc",
         "kernels/random_ops.cc",
+        "kernels/random_uniform_custom.cc",
         "kernels/range.cc",
         "kernels/rank.cc",
         "kernels/read_variable.cc",
@@ -196,7 +196,7 @@ filegroup(
         "tools/versioning/op_version.cc",
         "util.cc",
     ],
-)
+}
 
 cc_library_static {
     name: "libtflite_static",

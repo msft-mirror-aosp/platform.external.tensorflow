@@ -250,7 +250,7 @@ cc_library_static {
     name: "tflite_mutable_op_resolver",
     defaults: ["tflite_defaults"],
     srcs: [
-        "mutable_op_resolver.cc"
+        "mutable_op_resolver.cc",
     ],
     header_libs: [
         "flatbuffer_headers",
