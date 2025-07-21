@@ -223,6 +223,7 @@ cc_library_static {
     ],
     whole_static_libs: [
         "libfft2d",
+        "libregex_re2",
         "libruy_static",
         "libtextclassifier_hash_static",
     ],
