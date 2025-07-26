@@ -185,16 +185,5 @@ cc_library_static {
     ],
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
-        "-Wno-array-bounds",
-        "-Wno-extern-c-compat",
-        "-Wno-ignored-attributes",
-        "-Wno-invalid-partial-specialization",
-        "-Wno-mismatched-tags",
-        "-Wno-missing-field-initializers",
-        "-Wno-sign-compare",
-        "-Wno-unused-function",
-        "-Wno-unused-local-typedef",
-        "-Wno-unused-private-field",
-        "-Wno-unused-variable",
     ],
 }

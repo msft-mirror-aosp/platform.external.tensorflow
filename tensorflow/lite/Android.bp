@@ -31,9 +31,7 @@ cc_defaults {
     ],
     cflags: [
         "-DTF_LITE_DISABLE_X86_NEON",
-        "-Wall",
         "-Werror",
-        "-Wextra",
         "-Wno-unused-parameter",
     ],
     shared_libs: [
@@ -45,10 +43,6 @@ cc_library_static {
     name: "libtflite_context",
     defaults: ["tflite_defaults"],
     srcs: ["c/common.cc"],
-    cflags: [
-        "-Wno-typedef-redefinition",
-        "-Wno-visibility",
-    ],
 }
 
 cc_library_static {
@@ -124,16 +118,6 @@ cc_library_static {
     ],
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
-        "-Wno-deprecated-declarations",
-        "-Wno-extern-c-compat",
-        "-Wno-ignored-attributes",
-        "-Wno-invalid-partial-specialization",
-        "-Wno-mismatched-tags",
-        "-Wno-missing-field-initializers",
-        "-Wno-sign-compare",
-        "-Wno-unused-const-variable",
-        "-Wno-unused-function",
-        "-Wno-unused-lambda-capture",
         "-Wno-user-defined-warnings",
     ],
 }
