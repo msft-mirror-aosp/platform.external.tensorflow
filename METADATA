@@ -10,7 +10,7 @@ third_party {
     type: GIT
     value: "https://github.com/tensorflow/tensorflow"
   }
-  version: "v2.9.1"
+  version: "cf37234d20dd5f3c763836c4c4abac8c52e59647"
   license_type: NOTICE
   security {
     tag: "NVD-CPE2.3:cpe:/a:google:tensorflow:2.9.1"

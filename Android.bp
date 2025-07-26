@@ -50,7 +50,6 @@ license {
     ],
     license_text: [
         "LICENSE",
-        "NOTICE",
     ],
 }
 
@@ -185,26 +184,25 @@ cc_library_static {
     whole_static_libs: [
         "libdoubleconversion",
         "libfft2d",
+        "libregex_re2",
         "libruy_static",
         "libtextclassifier_hash_static",
         "tensorflow_core_proto_cpp_lite",
     ] + TF_ABSL_LIBS,
     header_libs: [
+        "flatbuffer_headers",
         "fp16_headers",
         "jni_headers",
+        "libeigen",
         "liblog_headers",
+        "libtextclassifier_hash_headers",
     ],
     generated_headers: ["libtflite_mutable_schema"],
     shared_libs: [
         "libz",
     ],
     include_dirs: [
-        "external/FP16",
-        "external/eigen",
-        "external/flatbuffers/include",
         "external/gemmlowp",
-        "external/libtextclassifier/native/",
-        "external/tensorflow",
         "external/neon_2_sse",
     ],
     cflags: [
