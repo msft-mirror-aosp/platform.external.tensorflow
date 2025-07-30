@@ -230,6 +230,7 @@ cc_library_static {
     cflags: [
         "-DNAMESPACE_FOR_HASH_FUNCTIONS=farmhash",
         "-DTF_LITE_DISABLE_X86_NEON",
+        "-DTFLITE_WITH_RUY",
         "-Werror",
         "-Wno-user-defined-warnings",
     ],

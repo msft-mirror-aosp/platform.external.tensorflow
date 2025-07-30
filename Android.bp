@@ -210,6 +210,7 @@ cc_library_static {
         "-DENABLE_ABSL_IN_TENSORFLOW",
         "-DIS_MOBILE_PLATFORM",
         "-DTF_ANDROID_ENABLE_LOG_EVERY_N_SECONDS",
+        "-DTFLITE_WITH_RUY",
         // Used to support int64, string type in //tensorflow/core/framework/register_types.h.
         "-D__ANDROID_TYPES_FULL__",
         // This code uses malloc_usable_size(),
