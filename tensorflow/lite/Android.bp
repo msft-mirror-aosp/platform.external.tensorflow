@@ -31,7 +31,6 @@ cc_defaults {
     ],
     cflags: [
         "-DTF_LITE_DISABLE_X86_NEON",
-        "-DTFLITE_WITH_RUY",
         "-Werror",
         "-Wno-unused-parameter",
     ],
