@@ -222,6 +222,7 @@ cc_library_static {
         "-Wno-ignored-qualifiers",
         "-Wno-mismatched-tags",
         "-Wno-user-defined-warnings",
+	"-Wno-range-loop-construct",
     ],
     cpp_std: "gnu++17",
     stl: "libc++_static",
