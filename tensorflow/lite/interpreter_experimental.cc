@@ -32,8 +32,6 @@ limitations under the License.
 #include "tensorflow/lite/minimal_logging.h"
 #include "tensorflow/lite/stderr_reporter.h"
 #include "tensorflow/lite/util.h"
-#include "tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
-#include "tensorflow/lite/npu_feature.h"
 
 namespace tflite {
 
@@ -75,11 +73,6 @@ void Interpreter::SetCancellationFunction(void* data,
 bool Interpreter::IsCancelled() { return primary_subgraph().IsCancelled(); }
 
 TfLiteStatus Interpreter::ModifyGraphWithDelegate(TfLiteDelegate* delegate) {
-
-  if (StatefulNnApiDelegate::GetOptions(delegate).accelerator_name != nullptr
-      && !DoesProcessHaveNpuFeatureAccess()) {
-    return kTfLiteDelegateDataNotFound;
-  }
   return ModifyGraphWithDelegateImpl(delegate);
 }
 
