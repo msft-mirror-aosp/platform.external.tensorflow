@@ -22,6 +22,10 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* reserved) {
 }
 
 bool DoesProcessHaveNpuFeatureAccess() {
+  if (getuid() == 2000 || getuid() == 0) {
+    // Allow NPU access from the Shell or Root.
+    return true;
+  }
   if (g_jvm == nullptr) {
     __android_log_print(ANDROID_LOG_INFO, LOG_TAG, "g_jvm is null");
     return false;
